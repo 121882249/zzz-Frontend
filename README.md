@@ -1,6 +1,8 @@
-# TokenPro 原生客户端 v0.4.3
+# TokenPro 桌面客户端
 
-macOS 原生 SwiftUI 客户端，面向 Intel 与 Apple Silicon / macOS 14+。应用接入 TokenPro 账户后管理 Codex 与 Claude 桌面版模型连接。客户端不创建任务或聊天。
+TokenPro 桌面客户端现包含两套实现：成熟的 macOS SwiftUI 客户端，以及位于 `java-client/` 的 Java 21 跨平台客户端。Java 版使用同一套源码支持 Windows、macOS Intel、macOS Apple 芯片和 Linux，并通过 GitHub Actions 生成各平台安装包。
+
+跨平台版的构建、功能范围和平台说明见 [`java-client/README.md`](java-client/README.md)。
 
 ## 当前功能
 
@@ -98,4 +100,4 @@ Claude 桌面第三方推理参考：<https://claude.com/docs/third-party/claude
 
 ## Mac 通用版打包
 
-`./build.sh` 默认生成包含 arm64 与 x86_64 的 Universal 应用；也可用第二个参数单独指定架构。`release.sh` 输出一个通用 DMG，Intel 与 Apple 芯片的更新清单指向同一安装包。Windows 项目位于相邻的 `TokenProWindows`，独立打包，当前为未经过 Windows 实机验证的预览版。
+`./build.sh` 默认生成包含 arm64 与 x86_64 的 Swift Universal 应用；也可用第二个参数单独指定架构。`release.sh` 输出一个通用 DMG。跨平台 Java 版通过 `java-client/package.sh` 或 `java-client/package.ps1` 在目标系统生成原生安装包。

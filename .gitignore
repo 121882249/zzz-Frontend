@@ -5,6 +5,8 @@ build*/
 dist/
 out/
 target/
+java-client/build/
+java-client/dist/
 *.dmg
 *.pkg
 *.zip

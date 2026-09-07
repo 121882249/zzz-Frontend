@@ -1,0 +1,46 @@
+name: Build desktop clients
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS-Apple-Silicon
+            os: macos-15
+            script: ./java-client/package.sh
+          - name: macOS-Intel
+            os: macos-15-intel
+            script: ./java-client/package.sh
+          - name: Windows-x64
+            os: windows-latest
+            script: ./java-client/package.ps1
+          - name: Linux-x64
+            os: ubuntu-latest
+            script: ./java-client/package.sh
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - if: runner.os != 'Windows'
+        run: chmod +x java-client/build.sh java-client/package.sh
+      - if: runner.os != 'Windows'
+        run: ${{ matrix.script }}
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: ${{ matrix.script }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TokenPro-${{ matrix.name }}
+          path: java-client/dist/*
+          if-no-files-found: error
