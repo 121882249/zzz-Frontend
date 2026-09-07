@@ -3,8 +3,12 @@ name: Build desktop clients
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -44,3 +48,16 @@ jobs:
           name: TokenPro-${{ matrix.name }}
           path: java-client/dist/*
           if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          path: release-assets
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release-assets/*/* --title "TokenPro $GITHUB_REF_NAME" --generate-notes --repo "$GITHUB_REPOSITORY"

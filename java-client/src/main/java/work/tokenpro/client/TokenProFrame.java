@@ -101,7 +101,10 @@ final class TokenProFrame extends JFrame {
 
     private JComponent clientCard(String icon, String title, String subtitle, boolean installed, String setup, Runnable configure, Runnable open, JLabel state) {
         RoundedPanel card = card(); card.setLayout(new BorderLayout(16, 0));
-        JLabel badge = new JLabel(icon, SwingConstants.CENTER); badge.setFont(appFont(icon.equals("›_") ? 17 : 26, Font.BOLD)); badge.setForeground(PURPLE); badge.setPreferredSize(new Dimension(54, 54)); badge.setBorder(BorderFactory.createLineBorder(new Color(225, 222, 248), 1, true)); card.add(badge, BorderLayout.WEST);
+        JLabel badge = new JLabel(icon, SwingConstants.CENTER);
+        if (title.startsWith("Codex")) { badge.setText(""); badge.setIcon(OfficialIcons.client("Codex", 52)); }
+        else if (title.startsWith("Claude")) { badge.setText(""); badge.setIcon(OfficialIcons.client("Claude", 52)); }
+        badge.setFont(appFont(icon.equals("›_") ? 17 : 26, Font.BOLD)); badge.setForeground(PURPLE); badge.setPreferredSize(new Dimension(54, 54)); card.add(badge, BorderLayout.WEST);
         JPanel words = transparent(); words.setLayout(new BoxLayout(words, BoxLayout.Y_AXIS)); JLabel heading = new JLabel(title + "   " + (installed ? "已安装" : "未安装")); heading.setFont(appFont(19, Font.BOLD)); JLabel detail = new JLabel(subtitle); detail.setFont(appFont(12, Font.PLAIN)); detail.setForeground(MUTED); words.add(Box.createVerticalStrut(4)); words.add(heading); words.add(Box.createVerticalStrut(7)); words.add(detail); card.add(words, BorderLayout.CENTER);
         JPanel actions = transparent(); actions.setLayout(new BoxLayout(actions, BoxLayout.Y_AXIS)); JPanel buttons = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0)); JButton choose = soft(setup); choose.addActionListener(e -> configure.run()); JButton launch = primary("打开应用"); launch.addActionListener(e -> open.run()); buttons.add(choose); buttons.add(launch); actions.add(buttons); if (state != null) { state.setFont(appFont(11, Font.BOLD)); state.setForeground(PURPLE); state.setAlignmentX(Component.RIGHT_ALIGNMENT); actions.add(Box.createVerticalStrut(7)); actions.add(state); } card.add(actions, BorderLayout.EAST); return card;
     }
