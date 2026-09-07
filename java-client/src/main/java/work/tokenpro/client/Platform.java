@@ -6,6 +6,7 @@ import java.net.URI;
 import java.nio.file.*;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Locale;
+import java.util.stream.Stream;
 
 final class Platform {
     enum OS { WINDOWS, MAC, LINUX }
@@ -45,6 +46,22 @@ final class Platform {
         else if (OS_KIND == OS.WINDOWS) process = new ProcessBuilder("cmd", "/c", "start", "", name).start();
         else process = new ProcessBuilder(name.toLowerCase(Locale.ROOT)).start();
         return process.isAlive() || process.exitValue() == 0;
+    }
+
+    static boolean applicationInstalled(String name) {
+        String home = System.getProperty("user.home");
+        if (OS_KIND == OS.MAC) return Stream.of(Path.of("/Applications", name + ".app"), Path.of(home, "Applications", name + ".app")).anyMatch(Files::exists);
+        if (OS_KIND == OS.WINDOWS) {
+            String local = System.getenv().getOrDefault("LOCALAPPDATA", home);
+            return Stream.of(Path.of(local, "Programs", name, name + ".exe"), Path.of(System.getenv().getOrDefault("ProgramFiles", "C:\\Program Files"), name, name + ".exe")).anyMatch(Files::exists);
+        }
+        return commandInstalled(name.toLowerCase(Locale.ROOT));
+    }
+
+    static boolean commandInstalled(String command) {
+        String path = System.getenv().getOrDefault("PATH", "");
+        String executable = OS_KIND == OS.WINDOWS ? command + ".exe" : command;
+        return Stream.of(path.split(java.util.regex.Pattern.quote(System.getProperty("path.separator")))).map(Path::of).map(dir -> dir.resolve(executable)).anyMatch(Files::isExecutable);
     }
 
     static void privateFile(Path path) {
