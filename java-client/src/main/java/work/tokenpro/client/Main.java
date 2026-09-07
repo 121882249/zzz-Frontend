@@ -9,6 +9,15 @@ public final class Main {
 
     public static void main(String[] args) throws Exception {
         SecureStore store = new SecureStore();
+        if ((args.length == 1 && "--claude-token".equals(args[0])) || System.getenv("CLAUDE_HELPER_CONTEXT") != null) {
+            ClaudeBridgeManager.ensureRunning(store);
+            System.out.print(ClaudeBridgeConfig.load(store).localToken());
+            return;
+        }
+        if (args.length == 1 && "--claude-bridge".equals(args[0])) {
+            try (ClaudeBridgeServer ignored = new ClaudeBridgeServer(store)) { Thread.currentThread().join(); }
+            return;
+        }
         if (args.length == 2 && "--route-token".equals(args[0])) {
             System.out.print(store.credential(args[1]));
             return;

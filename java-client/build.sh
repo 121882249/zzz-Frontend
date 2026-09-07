@@ -13,7 +13,7 @@ if [ -z "$JAVA_HOME" ] || [ ! -x "$JAVA_HOME/bin/javac" ]; then
 fi
 rm -rf build/classes build/TokenPro.jar
 mkdir -p build/classes
-find src/main/java -name '*.java' -print0 | xargs -0 "$JAVA_HOME/bin/javac" --release 21 -encoding UTF-8 -d build/classes
+find src/main/java -name '*.java' -print0 | xargs -0 "$JAVA_HOME/bin/javac" --release 21 --add-modules jdk.httpserver -encoding UTF-8 -d build/classes
 cat > build/manifest.mf <<'EOF'
 Main-Class: work.tokenpro.client.Main
 Implementation-Title: TokenPro

@@ -9,10 +9,13 @@
 - 配置 TokenPro 接口地址和模型 ID。
 - 安全地保存 API Key，通过 Codex command-backed authentication 提供凭据。
 - 备份、接入和恢复 Codex 配置。
+- 读取模型广场，并将选择的模型接入 Claude Desktop。
+- 纯 Java 本地桥接仅监听 `127.0.0.1`，支持 Anthropic Messages、OpenAI Responses、工具调用和 SSE 流式响应。
+- 为 Claude 创建专用 API Key；每次请求会先验证账户和可用分组，再自动切换 Key 分组。
 - 打开 TokenPro 官网、充值页、Codex 和 Claude。
 - 配置目录自动适配 `%APPDATA%`、macOS Application Support 和 Linux XDG。
 
-当前版本暂不写 Claude 的第三方配置，因为 Windows 与 macOS 的 Claude 配置目录和版本格式需要分别实机验证。客户端可以直接打开已经安装的 Claude。
+Claude 桥接配置和上游凭据保存在当前用户的 TokenPro 配置目录。Claude Desktop 只获得随机生成的本机桥接令牌，不会读取上游 API Key。
 
 ## 构建
 

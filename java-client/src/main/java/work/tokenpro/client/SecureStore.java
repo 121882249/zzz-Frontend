@@ -6,9 +6,10 @@ import java.nio.file.*;
 import java.util.*;
 
 final class SecureStore {
-    private final Path root = Platform.dataDirectory();
+    private final Path root;
 
-    SecureStore() throws IOException { Files.createDirectories(root); }
+    SecureStore() throws IOException { this(Platform.dataDirectory()); }
+    SecureStore(Path root) throws IOException { this.root = root; Files.createDirectories(root); }
 
     Optional<String> read(String name) throws IOException {
         Path path = safe(name);

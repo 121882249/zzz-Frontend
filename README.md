@@ -8,6 +8,7 @@ TokenPro 现在只有一套 Java 21/Swing 客户端源码，支持 Windows、mac
 - 读取和导入账户中的 API Key。
 - 设置接口地址与模型 ID。
 - 将连接应用到 Codex，并恢复接入前的 Codex 配置。
+- 通过纯 Java 本地桥接把 TokenPro 模型接入 Claude Desktop，支持模型分组自动切换、工具调用和流式响应。
 - API Key 保存在当前系统用户的 TokenPro 私有配置目录，不写入 `config.toml`。
 - 打开 TokenPro 官网、充值页、Codex 和 Claude。
 

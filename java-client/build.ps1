@@ -4,7 +4,7 @@ if (-not $env:JAVA_HOME) { throw "JDK 21 is required. Set JAVA_HOME first." }
 Remove-Item -Recurse -Force build -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force build/classes | Out-Null
 $sources = Get-ChildItem -Recurse src/main/java -Filter *.java | ForEach-Object FullName
-& "$env:JAVA_HOME/bin/javac.exe" --release 21 -encoding UTF-8 -d build/classes $sources
+& "$env:JAVA_HOME/bin/javac.exe" --release 21 --add-modules jdk.httpserver -encoding UTF-8 -d build/classes $sources
 @"
 Main-Class: work.tokenpro.client.Main
 Implementation-Title: TokenPro

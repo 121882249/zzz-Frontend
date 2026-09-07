@@ -21,7 +21,11 @@ final class TokenProFrame extends JFrame {
     private final JTextField model = new JTextField();
     private final JPasswordField apiKey = new JPasswordField();
     private final JLabel status = new JLabel("就绪");
+    private final DefaultListModel<PricedModel> claudeModels = new DefaultListModel<>();
+    private final JList<PricedModel> claudeModelList = new JList<>(claudeModels);
+    private final JLabel bridgeStatus = new JLabel("桥接状态：未检测");
     private String accessToken;
+    private String accountId = "";
 
     TokenProFrame(SecureStore store) {
         super("TokenPro");
@@ -44,6 +48,7 @@ final class TokenProFrame extends JFrame {
         JTabbedPane tabs = new JTabbedPane();
         tabs.addTab("账户", accountPanel());
         tabs.addTab("Codex 连接", connectionPanel());
+        tabs.addTab("Claude 连接", claudePanel());
         tabs.addTab("工具", toolsPanel());
         root.add(tabs, BorderLayout.CENTER);
         status.setBorder(new EmptyBorder(6, 4, 0, 4));
@@ -67,7 +72,7 @@ final class TokenProFrame extends JFrame {
         }, this::showAccount));
         JButton logout = new JButton("退出本机登录");
         logout.addActionListener(e -> {
-            try { store.delete("java-session.json"); accessToken = null; keys.clear(); account.setText("尚未登录"); status("已清除本机登录信息"); }
+            try { store.delete("java-session.json"); accessToken = null; accountId = ""; keys.clear(); account.setText("尚未登录"); status("已清除本机登录信息"); }
             catch (Exception ex) { error(ex); }
         });
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -119,7 +124,7 @@ final class TokenProFrame extends JFrame {
             new AbstractMap.SimpleEntry<>("打开 TokenPro 网站", (Runnable) () -> browse("https://tokenpro.work")),
             new AbstractMap.SimpleEntry<>("打开充值页面", (Runnable) () -> browse("https://tokenpro.work/purchase")),
             new AbstractMap.SimpleEntry<>("打开 Codex", (Runnable) () -> openApp("Codex")),
-            new AbstractMap.SimpleEntry<>("打开 Claude", (Runnable) () -> openApp("Claude")))) {
+            new AbstractMap.SimpleEntry<>("打开 Claude", (Runnable) this::openClaude))) {
             JButton button = new JButton(item.getKey());
             button.setAlignmentX(Component.LEFT_ALIGNMENT);
             button.addActionListener(e -> item.getValue().run());
@@ -128,6 +133,51 @@ final class TokenProFrame extends JFrame {
         panel.add(new JLabel("系统：" + Platform.OS_KIND + " · Java " + System.getProperty("java.version")));
         panel.add(new JLabel("配置目录：" + store.root()));
         return panel;
+    }
+
+    private JComponent claudePanel() {
+        JPanel panel = vertical();
+        JLabel hint = new JLabel("从模型广场选择模型，TokenPro 会创建专用 Key 并配置本机 Claude Desktop。");
+        hint.setForeground(Color.GRAY); panel.add(hint); panel.add(Box.createVerticalStrut(10));
+        JButton load = new JButton("加载可用模型");
+        load.setAlignmentX(Component.LEFT_ALIGNMENT); load.addActionListener(e -> loadClaudeModels()); panel.add(load);
+        claudeModelList.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+        claudeModelList.setVisibleRowCount(12); panel.add(new JScrollPane(claudeModelList));
+        panel.add(Box.createVerticalStrut(8)); panel.add(bridgeStatus);
+        JButton apply = new JButton("应用并启动 Claude 桥接"); apply.addActionListener(e -> applyClaude());
+        JButton check = new JButton("检测桥接"); check.addActionListener(e -> updateBridgeStatus());
+        JButton restore = new JButton("恢复 Claude 官方配置");
+        restore.addActionListener(e -> { try { ClaudeDesktopConfig.restoreOfficial(store); bridgeStatus.setText("桥接状态：Claude 已恢复官方配置"); status("Claude 已恢复官方配置"); } catch (Exception ex) { error(ex); } });
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT)); buttons.add(apply); buttons.add(check); buttons.add(restore); panel.add(buttons);
+        SwingUtilities.invokeLater(this::updateBridgeStatus);
+        return panel;
+    }
+
+    private void loadClaudeModels() {
+        if (accessToken == null) { error(new IllegalStateException("请先登录 TokenPro")); return; }
+        async("正在加载模型广场…", () -> api.pricedModels(accessToken), models -> {
+            claudeModels.clear();
+            for (PricedModel item : models) if (!item.name().toLowerCase(Locale.ROOT).contains("image")) claudeModels.addElement(item);
+            status("已加载 " + claudeModels.size() + " 个可用模型，可按 Ctrl/Cmd 或 Shift 多选");
+        });
+    }
+
+    private void applyClaude() {
+        if (accessToken == null || accountId.isBlank()) { error(new IllegalStateException("请先登录 TokenPro")); return; }
+        List<PricedModel> selected = claudeModelList.getSelectedValuesList();
+        if (selected.isEmpty()) { error(new IllegalStateException("请至少选择一个模型")); return; }
+        async("正在创建 Claude 专用连接…", () -> {
+            ApiClient.ManagedKey managed = api.claudeManagedKey(accessToken, selected.getFirst().groupId());
+            ClaudeBridgeConfig config = ClaudeBridgeConfig.create(accountId, accessToken, managed, selected);
+            config.save(store); ClaudeDesktopConfig.install(store, config); ClaudeBridgeManager.ensureRunning(store); return config;
+        }, config -> { bridgeStatus.setText("桥接状态：运行中 · " + config.routes().size() + " 个模型 · " + config.baseUrl()); status("Claude 桥接已应用，重新打开 Claude 后生效"); });
+    }
+
+    private void updateBridgeStatus() { bridgeStatus.setText(ClaudeBridgeManager.healthy(store) ? "桥接状态：运行中 · 127.0.0.1:23179" : "桥接状态：未运行"); }
+
+    private void openClaude() {
+        try { ClaudeBridgeConfig.load(store); ClaudeBridgeManager.ensureRunning(store); openApp("Claude"); updateBridgeStatus(); }
+        catch (Exception e) { error(e); }
     }
 
     private void restoreSession() {
@@ -167,6 +217,7 @@ final class TokenProFrame extends JFrame {
         String emailValue = string(user.get("email"));
         String balance = String.valueOf(user.getOrDefault("balance", "—"));
         account.setText("已登录：" + emailValue + "    余额：" + balance);
+        accountId = string(user.get("id"));
         password.setText("");
         status("登录成功");
     }

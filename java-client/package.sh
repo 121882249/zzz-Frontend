@@ -20,5 +20,6 @@ case "$OS" in
 esac
 "$JAVA_HOME/bin/jpackage" --type "$TYPE" --name TokenPro --app-version "$VERSION" \
   --input build --main-jar TokenPro.jar --main-class work.tokenpro.client.Main \
+  --add-modules java.base,java.desktop,java.net.http,jdk.httpserver \
   --vendor TokenPro --description "TokenPro cross-platform desktop client" --dest dist
 echo "Created TokenPro $VERSION for $OS/$ARCH in java-client/dist"
