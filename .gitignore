@@ -1,0 +1,29 @@
+.DS_Store
+
+# Build outputs
+build*/
+dist/
+out/
+target/
+*.dmg
+*.pkg
+*.zip
+
+# IDE and local tooling
+.idea/
+.vscode/
+*.xcuserstate
+DerivedData/
+__pycache__/
+*.pyc
+
+# Local credentials and runtime state
+.env
+.env.*
+credentials/
+account-session.json
+codex-model-token
+claude-model-token
+claude-bridge.json
+connections.json
+codex-backup.json

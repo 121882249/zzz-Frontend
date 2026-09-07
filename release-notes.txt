@@ -1,0 +1,1 @@
+TokenPro v0.4.2：新增 Claude 桌面版模型接入。只显示有效分组中的 Claude 模型，同一分组可多选并在 Claude 内切换；使用独立的“TokenPro · Claude”Key 和本机凭据助手，不访问钥匙串；打开应用会退出并重启 Claude；恢复官方配置不会删除官网登录、聊天记录或其他配置档。
