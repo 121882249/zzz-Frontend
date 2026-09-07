@@ -27,8 +27,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.name }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
@@ -39,7 +39,7 @@ jobs:
       - if: runner.os == 'Windows'
         shell: pwsh
         run: ${{ matrix.script }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: TokenPro-${{ matrix.name }}
           path: java-client/dist/*
