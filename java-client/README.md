@@ -12,7 +12,7 @@
 - 打开 TokenPro 官网、充值页、Codex 和 Claude。
 - 配置目录自动适配 `%APPDATA%`、macOS Application Support 和 Linux XDG。
 
-现有 Swift 客户端仍包含更完整的 macOS Claude Desktop 桥接。Java 版暂不写 Claude 的第三方配置，因为 Windows 与 macOS 的 Claude 配置目录和版本格式需要分别实机验证。
+当前版本暂不写 Claude 的第三方配置，因为 Windows 与 macOS 的 Claude 配置目录和版本格式需要分别实机验证。客户端可以直接打开已经安装的 Claude。
 
 ## 构建
 
