@@ -12,7 +12,7 @@
 - 读取模型广场，并将选择的模型接入 Claude Desktop。
 - 纯 Java 本地桥接仅监听 `127.0.0.1`，支持 Anthropic Messages、OpenAI Responses、工具调用和 SSE 流式响应。
 - 为 Claude 创建专用 API Key；每次请求会先验证账户和可用分组，再自动切换 Key 分组。
-- 打开 TokenPro 官网、充值页、Codex 和 Claude。
+- 在 TokenPro 内置浏览器中打开后台管理、使用文档和充值页，并可启动 Codex 和 Claude。
 - 配置目录自动适配 `%APPDATA%`、macOS Application Support 和 Linux XDG。
 
 Claude 桥接配置和上游凭据保存在当前用户的 TokenPro 配置目录。Claude Desktop 只获得随机生成的本机桥接令牌，不会读取上游 API Key。

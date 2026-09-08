@@ -314,6 +314,13 @@
     .client-action.split { display: flex; align-items: center; padding: 0; }
     .client-action.split span { flex: 1; }
     .client-action.split img { width: 14px; height: 14px; padding: 0; margin: 0 10px; border-radius: 0; background: transparent; box-shadow: none; opacity: .45; filter: invert(1); }
+    .browser-page { height: 100%; padding: 28px 34px 34px; }
+    .browser-shell { height: 100%; overflow: hidden; border: 1px solid rgba(202,213,255,.16); border-radius: 18px; background: rgba(7,11,27,.88); box-shadow: 0 22px 60px rgba(0,0,0,.28); }
+    .browser-toolbar { height: 58px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; padding: 0 14px; border-bottom: 1px solid rgba(203,214,255,.12); background: rgba(17,23,50,.92); }
+    .browser-controls { display: flex; gap: 7px; }
+    .browser-toolbar button { height: 34px; padding: 0 13px; border: 1px solid rgba(197,209,255,.13); border-radius: 9px; color: rgba(239,242,255,.78); background: rgba(239,242,255,.07); cursor: pointer; }
+    .browser-address { height: 36px; margin: 0; padding: 0 14px; border-radius: 10px; text-align: center; font-size: 11px; color: rgba(224,231,255,.68); background: rgba(2,5,17,.62); }
+    .browser-frame { width: 100%; height: calc(100% - 58px); border: 0; background: #fff; }
     @media (max-width: 1100px) {
       .auth-view { grid-template-columns: 44% 56%; }
       .hero { padding-left: 44px; padding-right: 32px; }
@@ -367,8 +374,8 @@
         <div class="side-brand"><img src="../Router.iconset/icon_128x128.png" alt="TokenPro" /><span>TokenPro</span></div>
         <nav class="nav" aria-label="主导航">
           <button class="active" data-page="home"><img src="../Router.iconset/icon_32x32.png" alt="" />首页</button>
-          <button data-page="clients"><img src="../build-fixed/TokenPro.app/Contents/Resources/WebCog.svg" alt="" />后台管理</button>
-          <button data-page="docs"><img src="../build-fixed/TokenPro.app/Contents/Resources/WebBook.svg" alt="" />使用文档</button>
+          <button data-page="browser" data-title="后台管理" data-url="https://tokenpro.work/admin/dashboard"><img src="../build-fixed/TokenPro.app/Contents/Resources/WebCog.svg" alt="" />后台管理</button>
+          <button data-page="browser" data-title="使用文档" data-url="https://tokenpro.work/docs"><img src="../build-fixed/TokenPro.app/Contents/Resources/WebBook.svg" alt="" />使用文档</button>
         </nav>
         <button class="account-link" type="button" onclick="showLogin()"><span class="mini-avatar">T</span>我的账户</button>
       </aside>
@@ -379,7 +386,7 @@
             <div class="header-actions"><button class="update" type="button"><img src="../Resources/RefreshCwLucide.svg" alt="" />检查更新</button><div class="profile-pill"><span class="avatar">T</span>hurige@163.com</div></div>
           </header>
           <div class="wallet-zone">
-            <div class="balance"><div class="balance-copy"><small>钱包余额</small><strong>$20.00<img src="../Resources/RefreshCwLucide.svg" alt="刷新余额" /></strong><div class="exchange">充值比例 1 ¥ = 1 $</div></div><span class="balance-divider"></span><button class="recharge" type="button"><img src="../Resources/PlusLucide.svg" alt="" />充值</button></div>
+            <div class="balance"><div class="balance-copy"><small>钱包余额</small><strong>$20.00<img src="../Resources/RefreshCwLucide.svg" alt="刷新余额" /></strong><div class="exchange">充值比例 1 ¥ = 1 $</div></div><span class="balance-divider"></span><button class="recharge" type="button" onclick="openBrowser('充值','https://tokenpro.work/purchase')"><img src="../Resources/PlusLucide.svg" alt="" />充值</button></div>
           </div>
           <div class="section-head"><h3>我的客户端</h3><span>客户端状态</span></div>
           <div class="connections">
@@ -389,7 +396,16 @@
             <article class="connection-card claude"><img src="../Resources/ClaudeSparkOfficial.svg" alt="Claude Code" /><div><h4>Claude 命令行</h4><span class="download">去下载</span><p>命令行工具 · Claude Code</p></div><button class="client-action" type="button">打开 Claude 命令行</button></article>
           </div>
         </section>
-        <section class="page" id="page-generic"><header class="dash-header"><div><span class="dash-kicker">TOKENPRO</span><h2 id="genericTitle">连接管理</h2><p>此处将沿用宇宙主题呈现对应的真实客户端功能。</p></div></header></section>
+        <section class="page browser-page" id="page-browser">
+          <div class="browser-shell">
+            <div class="browser-toolbar">
+              <div class="browser-controls"><button type="button" onclick="showHome()">返回</button><button type="button" onclick="reloadBrowser()">刷新</button></div>
+              <input class="browser-address" id="browserAddress" value="https://tokenpro.work" aria-label="网页地址" readonly />
+              <button type="button" onclick="showHome()">关闭</button>
+            </div>
+            <iframe class="browser-frame" id="browserFrame" title="TokenPro 内置浏览器"></iframe>
+          </div>
+        </section>
       </div>
     </section>
   </section>
@@ -411,13 +427,41 @@
       document.querySelector('.window').classList.remove('dashboard-mode');
       document.getElementById('password').value = '';
     }
+    function openBrowser(title, url) {
+      document.getElementById('page-home').classList.remove('active');
+      document.getElementById('page-browser').classList.add('active');
+      document.getElementById('browserAddress').value = url;
+      document.getElementById('browserFrame').srcdoc = browserDocument(title, url);
+      document.querySelector('.dash-header h2').textContent = title;
+    }
+    function showHome() {
+      document.getElementById('page-browser').classList.remove('active');
+      document.getElementById('page-home').classList.add('active');
+      document.querySelector('.dash-header h2').textContent = 'TokenPro';
+      document.querySelectorAll('.nav button').forEach(item => item.classList.remove('active'));
+      document.querySelector('.nav button[data-page="home"]').classList.add('active');
+    }
+    function reloadBrowser() {
+      const frame = document.getElementById('browserFrame');
+      frame.srcdoc = browserDocument(document.querySelector('.dash-header h2').textContent, document.getElementById('browserAddress').value);
+    }
+    function browserDocument(title, url) {
+      return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style>
+        *{box-sizing:border-box}body{margin:0;font-family:Inter,"PingFang SC",sans-serif;color:#171927;background:#f6f7fb}
+        header{height:70px;display:flex;align-items:center;justify-content:space-between;padding:0 34px;background:white;border-bottom:1px solid #e8eaf1}
+        b{font-size:20px}.secure{font-size:12px;color:#5f6c80}main{padding:44px 48px}.kicker{font-size:11px;letter-spacing:.14em;color:#695cf3}
+        h1{margin:12px 0 8px;font-size:32px}.lead{color:#6d7280}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:30px}
+        article{min-height:150px;padding:22px;border:1px solid #e2e4ec;border-radius:16px;background:white;box-shadow:0 10px 30px rgba(31,35,58,.05)}
+        article strong{display:block;margin-bottom:12px;font-size:16px}article p{font-size:13px;line-height:1.7;color:#737887}.url{margin-top:34px;font-size:11px;color:#9a9eaa}
+      </style></head><body><header><b>TokenPro</b><span class="secure">应用内安全浏览</span></header><main><div class="kicker">TOKENPRO WEB</div><h1>${title}</h1><p class="lead">页面已在 TokenPro 内置浏览器中打开。</p><div class="grid"><article><strong>账户信息</strong><p>查看当前账户、余额与服务状态。</p></article><article><strong>快捷操作</strong><p>继续完成 ${title} 相关操作。</p></article><article><strong>安全连接</strong><p>网页始终保留在 TokenPro 应用窗口内。</p></article></div><div class="url">${url}</div></main></body></html>`;
+    }
     document.querySelectorAll('.nav button').forEach(button => button.addEventListener('click', () => {
       document.querySelectorAll('.nav button').forEach(item => item.classList.remove('active'));
       button.classList.add('active');
       const home = document.getElementById('page-home');
-      const generic = document.getElementById('page-generic');
-      if (button.dataset.page === 'home') { home.classList.add('active'); generic.classList.remove('active'); }
-      else { home.classList.remove('active'); generic.classList.add('active'); document.getElementById('genericTitle').textContent = button.textContent; }
+      const browserPage = document.getElementById('page-browser');
+      if (button.dataset.page === 'home') { home.classList.add('active'); browserPage.classList.remove('active'); }
+      else if (button.dataset.page === 'browser') { openBrowser(button.dataset.title, button.dataset.url); }
     }));
   </script>
 </body>

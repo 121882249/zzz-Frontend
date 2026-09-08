@@ -370,7 +370,9 @@ final class TokenProFrame extends JFrame {
         }.execute();
     }
 
-    private void browse(String url) { try { Platform.browse(url); } catch (Exception e) { error(e); } }
+    private void browse(String url) {
+        SwingUtilities.invokeLater(() -> new InAppBrowserDialog(this, url).setVisible(true));
+    }
     private void openApp(String app) { try { Platform.openApplication(app); } catch (Exception e) { error(e); } }
     private void status(String value) { status.setText(value); }
     private void error(Throwable error) { status("错误：" + error.getMessage()); JOptionPane.showMessageDialog(this, error.getMessage(), "TokenPro", JOptionPane.ERROR_MESSAGE); }
