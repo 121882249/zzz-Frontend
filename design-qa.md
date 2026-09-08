@@ -14,15 +14,15 @@
 - [Resolved P1] The warm peach composition was too close to the supplied reference. It was replaced with a full-window midnight cosmos scene, original headline, dark glass login surface, and a different spatial composition.
 - [Resolved P1] The prior client marks used rounded application tiles. The redesign uses the official OpenAI Blossom asset and the official Claude Spark asset from Anthropic's press kit.
 - [Resolved P2] The prior large white rounded window felt heavy. The redesign uses a thin dark window outline, compact translucent title bar, and one floating glass card.
-- [Resolved P1] The dashboard now follows the requested sidebar, wallet, account, and client-list hierarchy while retaining TokenPro's cosmos palette and glass surfaces.
-- [Resolved P1] Duplicate CLI client entries were removed. GPT/Codex, Claude, and Gemini each use one official mark and one client row.
+- [Resolved P1] The dashboard matches the supplied sidebar, wallet, account, navigation, and four-row client-list hierarchy while retaining TokenPro's cosmos palette and glass surfaces.
+- [Resolved P1] Model content now matches the supplied reference: Codex client, Claude client, Codex CLI, and Claude CLI, including installed/download states and action labels.
 
 **Required fidelity surfaces**
 
 - Fonts and typography: strong 70 px Chinese display headline, compact 34 px login title, restrained uppercase supporting labels, and clear field hierarchy.
 - Spacing and layout rhythm: balanced two-column composition, 52 px title bar, 56 px fields, 58 px primary action, consistent 14/24/28 px radii.
 - Colors and visual tokens: near-black navy base, indigo/violet nebula, cyan highlights, white text, and a blue-violet primary action.
-- Image quality and asset fidelity: 1122 × 1402 generated cosmos artwork is used at cover scale. OpenAI, Claude, and Gemini marks come from official brand sources and retain their native proportions.
+- Image quality and asset fidelity: 1122 × 1402 generated cosmos artwork is used at cover scale. OpenAI and Claude marks come from official brand sources and retain their native proportions. Interface icons use the existing TokenPro assets and Lucide.
 - Copy and content: all TEAMAO-specific wording and unsupported login methods were removed. TokenPro copy reflects email/password authentication.
 
 **Full-view comparison evidence**
@@ -38,7 +38,7 @@ The official marks, input borders, login card, title bar, and CTA were checked a
 - Email field accepts input.
 - Password field accepts masked input.
 - Primary button changes to the loading label “正在连接…”.
-- Successful login opens the post-login control center with sidebar navigation, account controls, wallet balance, and three model clients.
+- Successful login opens the post-login control center with sidebar navigation, account controls, wallet balance, and the four client entries from the reference.
 - Logout returns to the login view.
 - Page reload restores the empty login state.
 - Browser console contains no warnings or errors.
