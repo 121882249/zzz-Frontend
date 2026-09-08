@@ -28,7 +28,7 @@
 - Fonts and typography: strong 70 px Chinese display headline, compact 34 px login title, restrained uppercase supporting labels, and clear field hierarchy.
 - Spacing and layout rhythm: balanced two-column composition, 52 px title bar, 56 px fields, 58 px primary action, consistent 14/24/28 px radii.
 - Colors and visual tokens: near-black navy base, indigo/violet nebula, cyan highlights, white text, and a blue-violet primary action.
-- Image quality and asset fidelity: 1122 × 1402 generated cosmos artwork is used at cover scale. The transparent 1774 × 887 vortex asset is placed at native aspect ratio without cropping. OpenAI, Claude, Gemini, and Grok marks come from official sources and retain their native proportions; Gemini uses a transparent extracted sparkle. The future-provider mark uses Lucide Circle Question Mark.
+- Image quality and asset fidelity: 1122 × 1402 generated cosmos artwork is used at cover scale. The transparent 1774 × 887 vortex asset is placed at native aspect ratio without cropping. OpenAI, Claude, Gemini, and Grok marks come from official sources and retain their native proportions; Gemini and Grok use transparent extracted marks. The future-provider mark uses Lucide Circle Question Mark.
 - Copy and content: all TEAMAO-specific wording and unsupported login methods were removed. TokenPro copy reflects email/password authentication.
 
 **Full-view comparison evidence**
