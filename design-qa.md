@@ -1,13 +1,13 @@
 **Comparison target**
 
 - Structural reference: `/var/folders/1s/tl_s3grd4p50bs85w46x1h9h0000gn/T/codex-clipboard-585fbf82-8d0b-430d-b9d5-9278b02a1522.png`
-- New art direction: original deep-space cosmos theme with official OpenAI and Claude marks
+- New art direction: original deep-space cosmos theme with official OpenAI, Claude, Gemini, and Grok marks
 - Rendered implementation: `/Users/Tiger/Desktop/TokenPro/design-preview/tokenpro-cosmos-login.jpg`
 - Post-login implementation: `/Users/Tiger/Desktop/TokenPro/design-preview/tokenpro-dashboard-gemini.jpg`
 - In-app browser implementation: `/Users/Tiger/Desktop/TokenPro/design-preview/tokenpro-in-app-browser.jpg`
 - Account implementation: `/Users/Tiger/Desktop/TokenPro/design-preview/tokenpro-account.jpg`
 - Combined comparison: `/Users/Tiger/Desktop/TokenPro/design-preview/tokenpro-cosmos-comparison.jpg`
-- Viewport and implementation pixels: 1440 × 940 at 1× density
+- Viewport and implementation pixels: 1440 × 977 at 1× density
 - State: desktop login, light inputs empty, service available
 
 **Findings**
@@ -18,13 +18,14 @@
 - [Resolved P2] The prior large white rounded window felt heavy. The redesign uses a thin dark window outline, compact translucent title bar, and one floating glass card.
 - [Resolved P1] The dashboard matches the supplied sidebar, wallet, account, navigation, and four-row client-list hierarchy while retaining TokenPro's cosmos palette and glass surfaces.
 - [Resolved P1] Model content now matches the supplied reference: Codex client, Claude client, Codex CLI, and Claude CLI, including installed/download states and action labels.
+- [Resolved P1] The login hero now presents Codex, Claude, Gemini, and Grok as a continuously moving sample of the model universe, followed by “更多模型持续接入” so the interface does not imply a four-model limit.
 
 **Required fidelity surfaces**
 
 - Fonts and typography: strong 70 px Chinese display headline, compact 34 px login title, restrained uppercase supporting labels, and clear field hierarchy.
 - Spacing and layout rhythm: balanced two-column composition, 52 px title bar, 56 px fields, 58 px primary action, consistent 14/24/28 px radii.
 - Colors and visual tokens: near-black navy base, indigo/violet nebula, cyan highlights, white text, and a blue-violet primary action.
-- Image quality and asset fidelity: 1122 × 1402 generated cosmos artwork is used at cover scale. OpenAI and Claude marks come from official brand sources and retain their native proportions. Interface icons use the existing TokenPro assets and Lucide.
+- Image quality and asset fidelity: 1122 × 1402 generated cosmos artwork is used at cover scale. OpenAI, Claude, Gemini, and Grok marks come from official sources and retain their native proportions. Interface icons use the existing TokenPro assets and Lucide.
 - Copy and content: all TEAMAO-specific wording and unsupported login methods were removed. TokenPro copy reflects email/password authentication.
 
 **Full-view comparison evidence**
@@ -44,6 +45,7 @@ The official marks, input borders, login card, title bar, and CTA were checked a
 - Backend management, documentation, and recharge each open inside the TokenPro browser shell with return, refresh, close, and address controls.
 - The account page contains only the current balance and logout action.
 - The TokenPro app mark uses the approved simplified orbital-star icon at desktop, installer, sidebar, and navigation sizes.
+- The model universe marquee loops without a visible jump, the request pulse travels across the orbit, and reduced-motion mode disables both animations.
 - Logout returns to the login view.
 - Page reload restores the empty login state.
 - Browser console contains no warnings or errors.
@@ -54,9 +56,5 @@ The official marks, input borders, login card, title bar, and CTA were checked a
 - Keep real API authentication as email plus password.
 - Add loading, error, and disabled states during implementation.
 - Sync the approved design back to Figma when the Starter MCP allowance resets.
-
-**Follow-up polish**
-
-- Consider a subtle reduced-motion star drift only after the static Java version matches this frame.
 
 final result: passed
