@@ -21,13 +21,14 @@
 - [Resolved P1] The login hero now presents GPT, Claude, Gemini, and Grok as a continuously moving sample of the model universe, followed by “更多模型持续接入” so the interface does not imply a four-model limit.
 - [Resolved P1] The empty hero region now contains a generated transparent blue-violet galaxy vortex with GPT, Claude, Gemini, and Grok marks floating inside its center; the lower model marquee remains in place.
 - [Resolved P2] The login hero label “Codex” was changed to “GPT” in both the vortex and looping model strip. Dashboard client names remain aligned with the supplied post-login reference.
+- [Resolved P2] Vortex model marks no longer use square cards or borders. Their positions, sizes, and animation phases are staggered across the spiral, and a fifth question-mark mark represents future providers.
 
 **Required fidelity surfaces**
 
 - Fonts and typography: strong 70 px Chinese display headline, compact 34 px login title, restrained uppercase supporting labels, and clear field hierarchy.
 - Spacing and layout rhythm: balanced two-column composition, 52 px title bar, 56 px fields, 58 px primary action, consistent 14/24/28 px radii.
 - Colors and visual tokens: near-black navy base, indigo/violet nebula, cyan highlights, white text, and a blue-violet primary action.
-- Image quality and asset fidelity: 1122 × 1402 generated cosmos artwork is used at cover scale. The transparent 1774 × 887 vortex asset is placed at native aspect ratio without cropping. OpenAI, Claude, Gemini, and Grok marks come from official sources and retain their native proportions. Interface icons use the existing TokenPro assets and Lucide.
+- Image quality and asset fidelity: 1122 × 1402 generated cosmos artwork is used at cover scale. The transparent 1774 × 887 vortex asset is placed at native aspect ratio without cropping. OpenAI, Claude, Gemini, and Grok marks come from official sources and retain their native proportions; Gemini uses a transparent extracted sparkle. The future-provider mark uses Lucide Circle Question Mark.
 - Copy and content: all TEAMAO-specific wording and unsupported login methods were removed. TokenPro copy reflects email/password authentication.
 
 **Full-view comparison evidence**
@@ -48,7 +49,8 @@ The official marks, input borders, login card, title bar, and CTA were checked a
 - The account page contains only the current balance and logout action.
 - The TokenPro app mark uses the approved simplified orbital-star icon at desktop, installer, sidebar, and navigation sizes.
 - The model universe marquee loops without a visible jump, the request pulse travels across the orbit, and reduced-motion mode disables both animations.
-- The vortex glow breathes slowly and all four model marks float independently; reduced-motion mode also freezes these effects.
+- The vortex glow breathes slowly and the model marks float independently; reduced-motion mode also freezes these effects.
+- Five marks now float independently at varied points across the vortex, with no visible icon backplates.
 - Logout returns to the login view.
 - Page reload restores the empty login state.
 - Browser console contains no warnings or errors.

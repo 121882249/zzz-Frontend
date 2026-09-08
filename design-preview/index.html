@@ -108,21 +108,17 @@
     .vortex-models { position: absolute; inset: 0; }
     .vortex-model {
       position: absolute;
-      width: 46px;
-      height: 46px;
-      padding: 8px;
-      border: 1px solid rgba(210,220,255,.26);
-      border-radius: 14px;
+      width: 44px;
+      height: 44px;
       object-fit: contain;
-      background: rgba(248,250,255,.94);
-      box-shadow: 0 0 0 5px rgba(75,94,196,.10), 0 10px 30px rgba(0,0,0,.35), 0 0 26px rgba(94,132,255,.22);
-      backdrop-filter: blur(14px);
+      filter: drop-shadow(0 5px 9px rgba(0,0,0,.72)) drop-shadow(0 0 12px rgba(115,151,255,.5));
       animation: modelFloat 4.8s ease-in-out infinite;
     }
-    .vortex-model.gpt { left: 34%; top: 48%; }
-    .vortex-model.claude { left: 45%; top: 35%; padding: 6px; animation-delay: -.9s; }
-    .vortex-model.gemini { left: 57%; top: 48%; animation-delay: -1.8s; }
-    .vortex-model.grok { left: 46%; top: 60%; padding: 0; background: #000; animation-delay: -2.7s; }
+    .vortex-model.gpt { left: 20%; top: 51%; filter: invert(1) drop-shadow(0 5px 9px rgba(0,0,0,.72)) drop-shadow(0 0 12px rgba(115,151,255,.5)); }
+    .vortex-model.claude { left: 39%; top: 30%; width: 47px; height: 47px; animation-delay: -.9s; }
+    .vortex-model.gemini { left: 63%; top: 45%; width: 42px; height: 42px; animation-delay: -1.8s; }
+    .vortex-model.grok { left: 48%; top: 67%; width: 47px; height: 47px; mix-blend-mode: screen; filter: none; animation-delay: -2.7s; }
+    .vortex-model.unknown { left: 75%; top: 29%; width: 40px; height: 40px; opacity: .82; filter: invert(1) drop-shadow(0 5px 9px rgba(0,0,0,.72)) drop-shadow(0 0 15px rgba(136,163,255,.62)); animation-delay: -3.5s; }
     .orbit-copy { margin-top: 0; width: min(590px,100%); }
     .orbit-label { display: flex; align-items: center; gap: 9px; color: rgba(205,215,248,.58); font-size: 11px; letter-spacing: .14em; }
     .orbit-label::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #6ff0ca; box-shadow: 0 0 12px #6ff0ca; animation: livePulse 2s ease-in-out infinite; }
@@ -163,7 +159,7 @@
     @keyframes requestFlow { 0% { left: -8px; opacity: 0; } 12%,82% { opacity: 1; } 100% { left: calc(100% + 8px); opacity: 0; } }
     @keyframes livePulse { 50% { opacity: .4; transform: scale(.72); } }
     @keyframes vortexBreath { 50% { opacity: .98; transform: scale(1.025) rotate(.7deg); filter: drop-shadow(0 0 32px rgba(92,132,255,.36)); } }
-    @keyframes modelFloat { 50% { transform: translateY(-7px) scale(1.04); box-shadow: 0 0 0 6px rgba(75,94,196,.13), 0 14px 36px rgba(0,0,0,.38), 0 0 34px rgba(99,146,255,.34); } }
+    @keyframes modelFloat { 50% { transform: translate(5px,-8px) rotate(3deg) scale(1.06); } }
     .login-side { display: grid; place-items: center; padding: 42px 58px 58px 18px; }
     .login-card {
       width: min(520px, 100%);
@@ -394,8 +390,9 @@
           <div class="vortex-models">
             <img class="vortex-model gpt" src="../Resources/OpenAIBlossomOfficial.svg" alt="GPT" title="GPT" />
             <img class="vortex-model claude" src="../Resources/ClaudeSparkOfficial.svg" alt="Claude" title="Claude" />
-            <img class="vortex-model gemini" src="../Resources/GeminiOfficial.svg" alt="Gemini" title="Gemini" />
+            <img class="vortex-model gemini" src="../Resources/GeminiSparkTransparent.png" alt="Gemini" title="Gemini" />
             <img class="vortex-model grok" src="../Resources/GrokOfficial.png" alt="Grok" title="Grok" />
+            <img class="vortex-model unknown" src="../Resources/UnknownModelLucide.svg" alt="即将接入的未知模型" title="更多模型即将接入" />
           </div>
         </div>
         <div class="orbit-copy">
