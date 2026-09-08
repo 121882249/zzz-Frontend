@@ -10,6 +10,7 @@
 - 安全地保存 API Key，通过 Codex command-backed authentication 提供凭据。
 - 备份、接入和恢复 Codex 配置。
 - 读取模型广场，并将选择的模型接入 Claude Desktop。
+- 登录后的“我的账户”仅显示账户余额和退出账户操作。
 - 纯 Java 本地桥接仅监听 `127.0.0.1`，支持 Anthropic Messages、OpenAI Responses、工具调用和 SSE 流式响应。
 - 为 Claude 创建专用 API Key；每次请求会先验证账户和可用分组，再自动切换 Key 分组。
 - 在 TokenPro 内置浏览器中打开后台管理、使用文档和充值页，并可启动 Codex 和 Claude。

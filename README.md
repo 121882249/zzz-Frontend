@@ -7,6 +7,7 @@ TokenPro 现在只有一套 Java 21/Swing 客户端源码，支持 Windows、mac
 ## 功能
 
 - TokenPro 邮箱密码登录与本机会话恢复。
+- 登录后的“我的账户”仅显示账户余额和退出账户操作。
 - 读取和导入账户中的 API Key。
 - 设置接口地址与模型 ID。
 - 将连接应用到 Codex，并恢复接入前的 Codex 配置。

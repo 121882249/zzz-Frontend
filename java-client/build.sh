@@ -14,6 +14,8 @@ fi
 rm -rf build/classes build/TokenPro.jar
 mkdir -p build/classes
 find src/main/java -name '*.java' -print0 | xargs -0 "$JAVA_HOME/bin/javac" --release 21 --add-modules jdk.httpserver -encoding UTF-8 -d build/classes
+mkdir -p build/classes/assets
+cp ../Resources/TokenProCosmosIcon.png build/classes/assets/TokenProCosmosIcon.png
 cat > build/manifest.mf <<'EOF'
 Main-Class: work.tokenpro.client.Main
 Implementation-Title: TokenPro

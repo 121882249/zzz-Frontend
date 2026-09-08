@@ -4,6 +4,7 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.geom.RoundRectangle2D;
+import java.net.URL;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -35,6 +36,7 @@ final class TokenProFrame extends JFrame {
     private final JLabel headerTitle = new JLabel("TokenPro");
     private final JLabel headerUser = new JLabel("登录账户");
     private final JLabel headerBalance = new JLabel("—");
+    private final JLabel accountBalance = new JLabel("—");
     private final JLabel homeClaudeStatus = new JLabel("请先选择模型");
     private String accessToken;
     private String accountId = "";
@@ -43,6 +45,8 @@ final class TokenProFrame extends JFrame {
         super("TokenPro");
         this.store = store;
         this.codex = new CodexConfig(store);
+        URL iconUrl = TokenProFrame.class.getResource("/assets/TokenProCosmosIcon.png");
+        if (iconUrl != null) setIconImage(new ImageIcon(iconUrl).getImage());
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
         setMinimumSize(new Dimension(940, 650));
         setSize(1040, 720);
@@ -75,7 +79,7 @@ final class TokenProFrame extends JFrame {
         JButton backend = sideAction("⚙   后台管理"); backend.addActionListener(e -> browse("https://tokenpro.work/admin/dashboard")); top.add(backend); top.add(Box.createVerticalStrut(6));
         JButton docs = sideAction("▤   使用文档"); docs.addActionListener(e -> browse("https://tokenpro.work/docs")); top.add(docs); top.add(Box.createVerticalStrut(6));
         JButton tools = sideAction("•••   工具"); tools.addActionListener(e -> showPage("工具")); top.add(tools); panel.add(top, BorderLayout.NORTH);
-        JPanel bottom = new JPanel(new BorderLayout()); bottom.setOpaque(false); bottom.setBorder(new EmptyBorder(0, 12, 18, 12)); NavButton accountNav = new NavButton("●   我的账户"); accountNav.addActionListener(e -> showPage("我的账户")); navButtons.put("我的账户", accountNav); bottom.add(accountNav); panel.add(bottom, BorderLayout.SOUTH); return panel;
+        JPanel bottom = new JPanel(new BorderLayout()); bottom.setOpaque(false); bottom.setBorder(new EmptyBorder(0, 12, 18, 12)); NavButton accountNav = new NavButton("●   我的账户"); accountNav.addActionListener(e -> openAccount()); navButtons.put("我的账户", accountNav); bottom.add(accountNav); panel.add(bottom, BorderLayout.SOUTH); return panel;
     }
 
     private void addNav(JPanel parent, String page, String icon) { NavButton button = new NavButton(icon + "   " + page); button.addActionListener(e -> showPage(page)); navButtons.put(page, button); parent.add(button); parent.add(Box.createVerticalStrut(6)); }
@@ -84,7 +88,7 @@ final class TokenProFrame extends JFrame {
     private JComponent header() {
         GradientPanel panel = new GradientPanel(); panel.setLayout(new BorderLayout(0, 18)); panel.setBorder(new EmptyBorder(24, 28, 21, 28));
         JPanel title = transparent(new BorderLayout()); headerTitle.setFont(appFont(24, Font.BOLD)); title.add(headerTitle, BorderLayout.WEST);
-        JButton user = soft("●  登录账户"); user.addActionListener(e -> showPage("我的账户")); headerUser.addPropertyChangeListener("text", e -> user.setText("●  " + headerUser.getText())); title.add(user, BorderLayout.EAST); panel.add(title, BorderLayout.NORTH);
+        JButton user = soft("●  登录账户"); user.addActionListener(e -> openAccount()); headerUser.addPropertyChangeListener("text", e -> user.setText("●  " + headerUser.getText())); title.add(user, BorderLayout.EAST); panel.add(title, BorderLayout.NORTH);
         RoundedPanel wallet = new RoundedPanel(16, new Color(255, 255, 255, 125)); wallet.setLayout(new FlowLayout(FlowLayout.LEFT, 14, 11)); wallet.setBorder(new EmptyBorder(0, 7, 0, 7));
         JPanel captions = transparent(); captions.setLayout(new BoxLayout(captions, BoxLayout.Y_AXIS)); JLabel balanceText = new JLabel("钱包余额"); balanceText.setFont(appFont(12, Font.PLAIN)); balanceText.setForeground(MUTED); JLabel rate = new JLabel("充值比例  1￥ = 1$"); rate.setFont(appFont(10, Font.PLAIN)); rate.setForeground(MUTED); captions.add(balanceText); captions.add(rate); wallet.add(captions);
         headerBalance.setFont(appFont(27, Font.BOLD)); wallet.add(headerBalance); JButton refresh = soft("↻"); refresh.addActionListener(e -> refreshAccount()); wallet.add(refresh); JButton recharge = soft("＋ 充值"); recharge.addActionListener(e -> browse("https://tokenpro.work/purchase")); wallet.add(recharge);
@@ -111,42 +115,54 @@ final class TokenProFrame extends JFrame {
 
     private JComponent accountPanel() {
         JPanel panel = vertical();
-        panel.add(pageHeading("我的账户", "登录 TokenPro，查看余额并管理客户端使用的 API Key。"));
-        panel.add(Box.createVerticalStrut(18));
-        panel.add(account);
-        panel.add(Box.createVerticalStrut(14));
-        panel.add(row("邮箱", email));
-        panel.add(row("密码", password));
-        JButton login = new JButton("登录 TokenPro");
-        primary(login);
-        login.addActionListener(e -> async("正在登录…", () -> {
+        JLabel heading = new JLabel("我的账户");
+        heading.setFont(appFont(22, Font.BOLD));
+        heading.setAlignmentX(Component.LEFT_ALIGNMENT);
+        panel.add(heading);
+        panel.add(Box.createVerticalStrut(24));
+        JLabel balanceTitle = new JLabel("账户余额");
+        balanceTitle.setFont(appFont(12, Font.PLAIN));
+        balanceTitle.setForeground(MUTED);
+        panel.add(balanceTitle);
+        accountBalance.setFont(appFont(32, Font.BOLD));
+        accountBalance.setAlignmentX(Component.LEFT_ALIGNMENT);
+        panel.add(Box.createVerticalStrut(8));
+        panel.add(accountBalance);
+        panel.add(Box.createVerticalStrut(28));
+        JButton logout = new JButton("退出账户");
+        soft(logout);
+        logout.addActionListener(e -> logout());
+        logout.setAlignmentX(Component.LEFT_ALIGNMENT);
+        panel.add(logout);
+        return panel;
+    }
+
+    private void openAccount() {
+        if (accessToken == null) { showLoginDialog(); return; }
+        showPage("我的账户");
+    }
+
+    private void showLoginDialog() {
+        JPanel form = new JPanel(new GridLayout(0, 1, 6, 6));
+        form.add(new JLabel("邮箱")); form.add(email);
+        form.add(new JLabel("密码")); form.add(password);
+        int choice = JOptionPane.showConfirmDialog(this, form, "登录 TokenPro", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (choice != JOptionPane.OK_OPTION) return;
+        async("正在登录…", () -> {
             Map<String, Object> result = api.login(email.getText(), new String(password.getPassword()));
             accessToken = string(result.get("access_token"));
             if (accessToken.isBlank()) throw new IllegalStateException("登录响应缺少 access_token");
             store.write("java-session.json", Json.stringify(Map.of("access_token", accessToken)));
             return result.containsKey("user") ? Json.object(result.get("user")) : api.me(accessToken);
-        }, this::showAccount));
-        JButton logout = new JButton("退出本机登录");
-        soft(logout);
-        logout.addActionListener(e -> {
-            try { store.delete("java-session.json"); accessToken = null; accountId = ""; keys.clear(); account.setText("尚未登录"); headerUser.setText("登录账户"); headerBalance.setText("—"); status("已清除本机登录信息"); }
-            catch (Exception ex) { error(ex); }
-        });
-        JPanel buttons = transparent(new FlowLayout(FlowLayout.LEFT));
-        buttons.add(login); buttons.add(logout);
-        panel.add(buttons);
-        panel.add(Box.createVerticalStrut(14));
-        JButton loadKeys = new JButton("读取账户 API Key");
-        soft(loadKeys);
-        loadKeys.addActionListener(e -> loadKeys());
-        panel.add(loadKeys);
-        keyList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        keyList.setVisibleRowCount(8);
-        keyList.addListSelectionListener(e -> {
-            if (!e.getValueIsAdjusting() && keyList.getSelectedValue() != null) importKey(keyList.getSelectedValue());
-        });
-        panel.add(new JScrollPane(keyList));
-        return panel;
+        }, user -> { showAccount(user); showPage("我的账户"); });
+    }
+
+    private void logout() {
+        try {
+            store.delete("java-session.json"); accessToken = null; accountId = ""; keys.clear();
+            account.setText("尚未登录"); headerUser.setText("登录账户"); headerBalance.setText("—"); accountBalance.setText("—");
+            showPage("首页"); status("已退出账户");
+        } catch (Exception ex) { error(ex); }
     }
 
     private JComponent connectionPanel() {
@@ -293,6 +309,7 @@ final class TokenProFrame extends JFrame {
         account.setText("已登录：" + emailValue + "    余额：" + balance);
         headerUser.setText(emailValue.isBlank() ? "我的账户" : emailValue);
         headerBalance.setText(balance);
+        accountBalance.setText(balance);
         accountId = string(user.get("id"));
         password.setText("");
         status("登录成功");

@@ -5,6 +5,7 @@
 - Rendered implementation: `/Users/Tiger/Desktop/TokenPro/design-preview/tokenpro-cosmos-login.jpg`
 - Post-login implementation: `/Users/Tiger/Desktop/TokenPro/design-preview/tokenpro-dashboard-gemini.jpg`
 - In-app browser implementation: `/Users/Tiger/Desktop/TokenPro/design-preview/tokenpro-in-app-browser.jpg`
+- Account implementation: `/Users/Tiger/Desktop/TokenPro/design-preview/tokenpro-account.jpg`
 - Combined comparison: `/Users/Tiger/Desktop/TokenPro/design-preview/tokenpro-cosmos-comparison.jpg`
 - Viewport and implementation pixels: 1440 × 940 at 1× density
 - State: desktop login, light inputs empty, service available
@@ -41,6 +42,8 @@ The official marks, input borders, login card, title bar, and CTA were checked a
 - Primary button changes to the loading label “正在连接…”.
 - Successful login opens the post-login control center with sidebar navigation, account controls, wallet balance, and the four client entries from the reference.
 - Backend management, documentation, and recharge each open inside the TokenPro browser shell with return, refresh, close, and address controls.
+- The account page contains only the current balance and logout action.
+- The TokenPro app mark uses the approved simplified orbital-star icon at desktop, installer, sidebar, and navigation sizes.
 - Logout returns to the login view.
 - Page reload restores the empty login state.
 - Browser console contains no warnings or errors.

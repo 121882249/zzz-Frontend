@@ -14,12 +14,12 @@ ARCH="$(uname -m)"
 rm -rf dist
 mkdir -p dist
 case "$OS" in
-  Darwin) TYPE=dmg ;;
-  Linux) TYPE=deb ;;
+  Darwin) TYPE=dmg; ICON=(--icon ../Router.icns) ;;
+  Linux) TYPE=deb; ICON=(--icon ../Resources/TokenProCosmosIcon.png) ;;
   *) echo "Use package.ps1 on Windows." >&2; exit 1 ;;
 esac
 "$JAVA_HOME/bin/jpackage" --type "$TYPE" --name TokenPro --app-version "$VERSION" \
   --input build --main-jar TokenPro.jar --main-class work.tokenpro.client.Main \
   --add-modules java.base,java.desktop,java.net.http,jdk.httpserver \
-  --vendor TokenPro --description "TokenPro cross-platform desktop client" --dest dist
+  --vendor TokenPro --description "TokenPro cross-platform desktop client" "${ICON[@]}" --dest dist
 echo "Created TokenPro $VERSION for $OS/$ARCH in java-client/dist"

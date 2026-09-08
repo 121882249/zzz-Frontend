@@ -5,6 +5,8 @@ Remove-Item -Recurse -Force build -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force build/classes | Out-Null
 $sources = Get-ChildItem -Recurse src/main/java -Filter *.java | ForEach-Object FullName
 & "$env:JAVA_HOME/bin/javac.exe" --release 21 --add-modules jdk.httpserver -encoding UTF-8 -d build/classes $sources
+New-Item -ItemType Directory -Force build/classes/assets | Out-Null
+Copy-Item ../Resources/TokenProCosmosIcon.png build/classes/assets/TokenProCosmosIcon.png
 @"
 Main-Class: work.tokenpro.client.Main
 Implementation-Title: TokenPro
