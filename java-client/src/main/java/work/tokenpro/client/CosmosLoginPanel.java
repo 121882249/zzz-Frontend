@@ -39,44 +39,44 @@ final class CosmosLoginPanel extends JPanel {
 
     private JComponent loginCard(JTextField email, JPasswordField password, ActionListener loginAction) {
         GlassPanel card = new GlassPanel();
-        card.setPreferredSize(new Dimension(474, 548));
+        card.setPreferredSize(new Dimension(440, 492));
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
-        card.setBorder(new EmptyBorder(36, 40, 34, 40));
+        card.setBorder(new EmptyBorder(28, 34, 26, 34));
 
         JPanel top = new JPanel(new BorderLayout());
         top.setOpaque(false); top.setMaximumSize(new Dimension(Integer.MAX_VALUE, 18));
         top.add(label("●  服务运行正常", 11, Font.PLAIN, new Color(111, 229, 196)), BorderLayout.WEST);
         top.add(label("简体中文", 11, Font.PLAIN, new Color(151, 160, 190)), BorderLayout.EAST);
-        card.add(top); card.add(Box.createVerticalStrut(35));
+        card.add(top); card.add(Box.createVerticalStrut(25));
 
         JLabel title = label("登录 TokenPro", 31, Font.BOLD, TEXT);
-        title.setAlignmentX(Component.LEFT_ALIGNMENT); title.setHorizontalAlignment(SwingConstants.LEFT); title.setPreferredSize(new Dimension(394, 48)); title.setMinimumSize(new Dimension(394, 48)); title.setMaximumSize(new Dimension(Integer.MAX_VALUE, 48)); card.add(title); card.add(Box.createVerticalStrut(8));
+        title.setAlignmentX(Component.LEFT_ALIGNMENT); title.setHorizontalAlignment(SwingConstants.LEFT); title.setPreferredSize(new Dimension(372, 42)); title.setMinimumSize(new Dimension(372, 42)); title.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42)); card.add(title); card.add(Box.createVerticalStrut(5));
         JLabel sub = label("进入你的 AI 模型控制中心", 13, Font.PLAIN, new Color(145, 156, 191));
-        sub.setAlignmentX(Component.LEFT_ALIGNMENT); card.add(sub); card.add(Box.createVerticalStrut(30));
+        sub.setAlignmentX(Component.LEFT_ALIGNMENT); card.add(sub); card.add(Box.createVerticalStrut(22));
 
         addField(card, "邮箱", email, "请输入邮箱");
-        card.add(Box.createVerticalStrut(17));
+        card.add(Box.createVerticalStrut(13));
         addField(card, "密码", password, "请输入密码");
-        card.add(Box.createVerticalStrut(26));
+        card.add(Box.createVerticalStrut(20));
 
         loginButton.setAlignmentX(Component.LEFT_ALIGNMENT);
-        loginButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, 56));
-        loginButton.setPreferredSize(new Dimension(394, 56));
+        loginButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, 50));
+        loginButton.setPreferredSize(new Dimension(372, 50));
         loginButton.addActionListener(loginAction);
-        card.add(loginButton); card.add(Box.createVerticalStrut(27));
+        card.add(loginButton); card.add(Box.createVerticalStrut(21));
 
         JLabel divider = label("────────  端到端安全连接  ────────", 10, Font.PLAIN, new Color(102, 112, 148));
-        divider.setAlignmentX(Component.CENTER_ALIGNMENT); card.add(divider); card.add(Box.createVerticalStrut(19));
+        divider.setAlignmentX(Component.CENTER_ALIGNMENT); card.add(divider); card.add(Box.createVerticalStrut(14));
         feedback.setAlignmentX(Component.CENTER_ALIGNMENT); card.add(feedback);
         return card;
     }
 
     private void addField(JPanel card, String name, JTextField field, String tooltip) {
         JLabel label = label(name, 12, Font.BOLD, new Color(216, 222, 244));
-        label.setAlignmentX(Component.LEFT_ALIGNMENT); card.add(label); card.add(Box.createVerticalStrut(9));
+        label.setAlignmentX(Component.LEFT_ALIGNMENT); card.add(label); card.add(Box.createVerticalStrut(7));
         field.setToolTipText(tooltip);
-        field.setMaximumSize(new Dimension(Integer.MAX_VALUE, 54));
-        field.setPreferredSize(new Dimension(394, 54));
+        field.setMaximumSize(new Dimension(Integer.MAX_VALUE, 48));
+        field.setPreferredSize(new Dimension(372, 48));
         field.setFont(font(14, Font.PLAIN));
         field.setForeground(TEXT); field.setCaretColor(TEXT);
         field.setBackground(new Color(4, 8, 25));

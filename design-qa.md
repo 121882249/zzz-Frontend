@@ -1,70 +1,44 @@
-**Comparison target**
+# TokenPro v1.1.4 Design QA
 
-- Structural reference: `/var/folders/1s/tl_s3grd4p50bs85w46x1h9h0000gn/T/codex-clipboard-585fbf82-8d0b-430d-b9d5-9278b02a1522.png`
-- New art direction: original deep-space cosmos theme with official OpenAI, Claude, Gemini, and Grok marks
-- Rendered implementation: `/Users/Tiger/Desktop/TokenPro/design-preview/tokenpro-cosmos-login.jpg`
-- Post-login implementation: `/Users/Tiger/Desktop/TokenPro/design-preview/tokenpro-dashboard-gemini.jpg`
-- In-app browser implementation: `/Users/Tiger/Desktop/TokenPro/design-preview/tokenpro-in-app-browser.jpg`
-- Account implementation: `/Users/Tiger/Desktop/TokenPro/design-preview/tokenpro-account.jpg`
-- Combined comparison: `/Users/Tiger/Desktop/TokenPro/design-preview/tokenpro-cosmos-comparison.jpg`
-- Viewport and implementation pixels: 1440 × 977 at 1× density
-- State: desktop login, light inputs empty, service available
+## Evidence
 
-**Findings**
+- Source visual truth: `/var/folders/1s/tl_s3grd4p50bs85w46x1h9h0000gn/T/codex-clipboard-df2eea63-1d5a-4388-a8ad-e981fbc6e008.png`
+- Source icon truth: `/var/folders/1s/tl_s3grd4p50bs85w46x1h9h0000gn/T/codex-clipboard-b0085e15-b557-4374-b969-7cb1245d9d73.png`
+- Implementation screenshot: `design-preview/tokenpro-login-v1.1.4.jpg`
+- Focused layout comparison: `design-preview/tokenpro-login-v1.1.4-comparison.jpg`
+- Icon package comparison: `design-preview/tokenpro-icon-v1.1.4-comparison.jpg`
+- Small-size icon review: `design-preview/tokenpro-icon-small-size-review.png`
+- State: signed-out desktop login screen, cosmos theme.
+- Application viewport: configured at 1280 x 820 logical pixels; CUA window capture is 1199 x 768 pixels.
+- Source pixels: login-card reference 994 x 1118; icon reference 1254 x 1254.
+- Focused comparison normalization: source and implementation card crops were fitted to matching 760 x 900 panels. Icon source and packaged ICNS render were fitted to matching 600 x 600 panels.
 
-- No actionable P0/P1/P2 visual issues remain in the local design preview.
-- [Resolved P1] The warm peach composition was too close to the supplied reference. It was replaced with a full-window midnight cosmos scene, original headline, dark glass login surface, and a different spatial composition.
-- [Resolved P1] The prior client marks used rounded application tiles. The redesign uses the official OpenAI Blossom asset and the official Claude Spark asset from Anthropic's press kit.
-- [Resolved P2] The prior large white rounded window felt heavy. The redesign uses a thin dark window outline, compact translucent title bar, and one floating glass card.
-- [Resolved P1] The dashboard matches the supplied sidebar, wallet, account, navigation, and four-row client-list hierarchy while retaining TokenPro's cosmos palette and glass surfaces.
-- [Resolved P1] Model content now matches the supplied reference: Codex client, Claude client, Codex CLI, and Claude CLI, including installed/download states and action labels.
-- [Resolved P1] The login hero now presents GPT, Claude, Gemini, and Grok as a continuously moving sample of the model universe, followed by “更多模型持续接入” so the interface does not imply a four-model limit.
-- [Resolved P1] The empty hero region now contains a generated transparent blue-violet galaxy vortex with GPT, Claude, Gemini, and Grok marks floating inside its center; the lower model marquee remains in place.
-- [Resolved P2] The login hero label “Codex” was changed to “GPT” in both the vortex and looping model strip. Dashboard client names remain aligned with the supplied post-login reference.
-- [Resolved P2] Vortex model marks no longer use square cards or borders. Their positions, sizes, and animation phases are staggered across the spiral, and a fifth question-mark mark represents future providers.
-- [Resolved P2] The first transparent-mark pass still felt composited because every logo was large and equally bright. Marks now use smaller varied sizes, restrained opacity, softer provider-specific glow, and positions that follow separate spiral arms.
+## Findings
 
-**Required fidelity surfaces**
+- No P0/P1/P2 findings remain.
+- Fonts and typography: PingFang SC hierarchy, weight, wrapping, and contrast remain consistent. The title is still the strongest card element after compaction.
+- Spacing and layout rhythm: card size changed from 474 x 548 to 440 x 492; outer padding, field gaps, 48 px inputs, and 50 px primary action now form a tighter, coherent rhythm without overlap or clipping.
+- Colors and visual tokens: the navy glass surface, muted labels, mint service state, and violet-blue action gradient remain consistent with the cosmos background.
+- Image quality and asset fidelity: the supplied 1254 x 1254 icon is preserved pixel-for-pixel in the packaged source asset. macOS ICNS includes 16 through 1024 px representations; Windows ICO includes 16 through 256 px representations. There is no white surround.
+- Copy and content: all login labels and security text are unchanged.
 
-- Fonts and typography: strong 70 px Chinese display headline, compact 34 px login title, restrained uppercase supporting labels, and clear field hierarchy.
-- Spacing and layout rhythm: balanced two-column composition, 52 px title bar, 56 px fields, 58 px primary action, consistent 14/24/28 px radii.
-- Colors and visual tokens: near-black navy base, indigo/violet nebula, cyan highlights, white text, and a blue-violet primary action.
-- Image quality and asset fidelity: 1122 × 1402 generated cosmos artwork is used at cover scale. The transparent 1774 × 887 vortex asset is placed at native aspect ratio without cropping. OpenAI, Claude, Gemini, and Grok marks come from official sources and retain their native proportions; Gemini and Grok use transparent extracted marks. The future-provider mark uses Lucide Circle Question Mark.
-- Copy and content: all TEAMAO-specific wording and unsupported login methods were removed. TokenPro copy reflects email/password authentication.
+## Comparison History
 
-**Full-view comparison evidence**
+- Earlier P2: the login card felt vertically loose and oversized relative to the hero. Fixed by reducing the card dimensions, padding, field height, action height, and vertical gaps.
+- Post-fix evidence: the focused comparison shows the same visual hierarchy in a denser card; the full CUA capture shows balanced negative space between the hero and card.
+- Earlier P2: the application icon did not use the selected finished artwork. Fixed by regenerating PNG, ICNS, ICO, and every macOS iconset size directly from the supplied image.
+- Post-fix evidence: the packaged ICNS render matches the source artwork, and the 16/24/32/48/64/128 px contact sheet remains recognizable at normal launcher sizes.
 
-The combined comparison visibly preserves only the useful two-region login hierarchy. Palette, imagery, outer chrome, headline, chip treatment, card treatment, copy, and product marks are materially distinct.
+## Follow-up Polish
 
-**Focused region comparison evidence**
+- P3: at 16 px, fine nebula texture naturally collapses into the main cyan-violet silhouette; this is acceptable for the platform's smallest legacy icon slot.
 
-The official marks, input borders, login card, title bar, and CTA were checked at the full 1440 px capture. These regions are clearly legible at this resolution, so additional crops were unnecessary.
+## Implementation Checklist
 
-**Interactions tested**
-
-- Email field accepts input.
-- Password field accepts masked input.
-- Primary button uses the direct “登录 / 注册” label and changes to “正在登录…” while loading.
-- Successful login opens the post-login control center with sidebar navigation, account controls, wallet balance, and the four client entries from the reference.
-- Backend management, documentation, and recharge each open inside the TokenPro browser shell with return, refresh, close, and address controls.
-- The account page contains only the current balance and logout action.
-- The TokenPro app mark uses the approved simplified orbital-star icon at desktop, installer, sidebar, and navigation sizes.
-- The model universe marquee loops without a visible jump, the request pulse travels across the orbit, and reduced-motion mode disables both animations.
-- The vortex glow breathes slowly and the model marks float independently; reduced-motion mode also freezes these effects.
-- Five marks now float independently at varied points across the vortex, with no visible icon backplates.
-- The refined marks remain recognizable at full-window size while the vortex, rather than the logos, retains visual priority.
-- Logout returns to the login view.
-- Page reload restores the empty login state.
-- Browser console contains no warnings or errors.
-- The packaged Java 21 macOS application was installed and inspected at the real application window. The login hero, Chinese typography, galaxy vortex, provider marks, glass login card, title-bar integration, and responsive 1280 × 820 layout render correctly.
-- The packaged dashboard restores the saved TokenPro session, reads the live balance, detects Codex/ChatGPT and Claude, shows the original four-client hierarchy, disables desktop launch until a model is selected, and exposes the model-settings actions.
-- Live authenticated checks for `/auth/me`, `/groups/available`, and `/model-plaza` returned HTTP 200. The Java self-test passes all 15 configuration, bridge, authentication, and streaming checks.
-
-**Implementation status**
-
-- The approved visual is implemented as the Java Swing login gate.
-- Authentication uses the real TokenPro email/password API with loading, validation, error, session restore, and disabled states.
-- Codex and Claude provide model selection, managed credentials, official configuration restore, and application launch. CLI cards provide install guidance and terminal launch.
-- Backend management, documentation, recharge, and release pages use the TokenPro in-app browser shell.
+- [x] Compact login card and control spacing.
+- [x] Preserve the cosmos hierarchy and interaction states.
+- [x] Use the selected finished icon across macOS, Windows, and Linux.
+- [x] Build Java package and pass all 15 self-tests.
+- [x] Install and inspect the macOS package.
 
 final result: passed
