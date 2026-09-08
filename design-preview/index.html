@@ -192,12 +192,7 @@
       background: rgba(5,9,24,.68);
       backdrop-filter: blur(24px);
     }
-    .side-brand { display: flex; align-items: center; gap: 11px; padding: 0 14px 30px; font-size: 18px; font-weight: 800; letter-spacing: .08em; }
-    .brand-orbit { width: 28px; height: 28px; position: relative; border: 1px solid rgba(144,161,255,.5); border-radius: 50%; box-shadow: 0 0 22px rgba(92,115,255,.28); }
-    .brand-orbit::before, .brand-orbit::after { content: ""; position: absolute; left: 5px; right: 5px; top: 12px; height: 2px; border-radius: 2px; background: #8092ff; transform: rotate(45deg); }
-    .brand-orbit::after { transform: rotate(-45deg); }
-    .brand-orbit i { position: absolute; inset: 8px; border-radius: 50%; background: #83a2ff; box-shadow: 0 0 12px #607cff; }
-    .brand-copy { line-height: 1; }
+    .side-brand { padding: 0 14px 30px; font-size: 18px; font-weight: 800; line-height: 1; letter-spacing: .08em; }
     .side-caption { display: block; margin-top: 6px; color: rgba(193,203,235,.38); font-size: 9px; font-weight: 500; letter-spacing: .14em; }
     .nav { display: grid; gap: 7px; }
     .nav button, .logout {
@@ -309,7 +304,7 @@
     </main>
     <section class="dashboard-view" id="dashboardView">
       <aside class="sidebar">
-        <div class="side-brand"><span class="brand-orbit"><i></i></span><span class="brand-copy">TOKENPRO<span class="side-caption">UNIVERSAL AI GATEWAY</span></span></div>
+        <div class="side-brand">TOKENPRO<span class="side-caption">UNIVERSAL AI GATEWAY</span></div>
         <nav class="nav" aria-label="主导航">
           <button class="active" data-page="home">✦　首页</button>
           <button data-page="clients">⌁　客户端管理</button>
