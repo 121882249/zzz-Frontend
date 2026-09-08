@@ -43,7 +43,7 @@ The official marks, input borders, login card, title bar, and CTA were checked a
 
 - Email field accepts input.
 - Password field accepts masked input.
-- Primary button changes to the loading label “正在连接…”.
+- Primary button uses the direct “登录 / 注册” label and changes to “正在登录…” while loading.
 - Successful login opens the post-login control center with sidebar navigation, account controls, wallet balance, and the four client entries from the reference.
 - Backend management, documentation, and recharge each open inside the TokenPro browser shell with return, refresh, close, and address controls.
 - The account page contains only the current balance and logout action.

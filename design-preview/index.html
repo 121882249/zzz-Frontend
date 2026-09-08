@@ -425,7 +425,7 @@
           <input id="email" type="email" placeholder="请输入邮箱" autocomplete="email" />
           <label for="password">密码</label>
           <input id="password" type="password" placeholder="请输入密码" autocomplete="current-password" />
-          <button class="primary" type="submit">进入控制中心</button>
+          <button class="primary" type="submit">登录 / 注册</button>
           <div class="divider">端到端安全连接</div>
           <p class="privacy">登录信息仅加密保存在当前设备</p>
         </form>
@@ -480,12 +480,12 @@
     function showDashboard(event) {
       event.preventDefault();
       const button = document.querySelector('.primary');
-      button.textContent = '正在连接…';
+      button.textContent = '正在登录…';
       setTimeout(() => {
         document.getElementById('authView').style.display = 'none';
         document.getElementById('dashboardView').style.display = 'grid';
         document.querySelector('.window').classList.add('dashboard-mode');
-        button.textContent = '进入控制中心';
+        button.textContent = '登录 / 注册';
       }, 240);
     }
     function showLogin() {
