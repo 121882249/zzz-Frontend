@@ -59,7 +59,7 @@
     .traffic i:nth-child(3) { background: #28c840; }
     .wordmark { font-size: 12px; font-weight: 700; letter-spacing: .22em; color: rgba(242,245,255,.82); }
     .platform { justify-self: end; font-size: 11px; letter-spacing: .08em; color: rgba(216,223,248,.5); }
-    main {
+    .auth-view {
       height: calc(100% - 52px);
       display: grid;
       grid-template-columns: minmax(500px, 1fr) minmax(540px, .92fr);
@@ -176,11 +176,98 @@
     .divider { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 14px; margin: 27px 0 18px; color: rgba(195,205,237,.38); font-size: 11px; }
     .divider::before, .divider::after { content: ""; height: 1px; background: rgba(194,207,255,.12); }
     .privacy { margin: 0; text-align: center; color: rgba(190,201,233,.42); font-size: 11px; }
+    .dashboard-view {
+      height: calc(100% - 52px);
+      display: none;
+      grid-template-columns: 248px 1fr;
+      position: relative;
+      z-index: 2;
+      background: radial-gradient(circle at 82% 0%, rgba(84,79,212,.20), transparent 34%), linear-gradient(110deg, rgba(2,5,16,.92), rgba(5,9,25,.78));
+    }
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      padding: 32px 18px 22px;
+      border-right: 1px solid rgba(200,213,255,.12);
+      background: rgba(5,9,24,.68);
+      backdrop-filter: blur(24px);
+    }
+    .side-brand { display: flex; align-items: center; gap: 11px; padding: 0 14px 30px; font-size: 18px; font-weight: 800; letter-spacing: .08em; }
+    .brand-orbit { width: 28px; height: 28px; position: relative; border: 1px solid rgba(144,161,255,.5); border-radius: 50%; box-shadow: 0 0 22px rgba(92,115,255,.28); }
+    .brand-orbit::before, .brand-orbit::after { content: ""; position: absolute; left: 5px; right: 5px; top: 12px; height: 2px; border-radius: 2px; background: #8092ff; transform: rotate(45deg); }
+    .brand-orbit::after { transform: rotate(-45deg); }
+    .brand-orbit i { position: absolute; inset: 8px; border-radius: 50%; background: #83a2ff; box-shadow: 0 0 12px #607cff; }
+    .brand-copy { line-height: 1; }
+    .side-caption { display: block; margin-top: 6px; color: rgba(193,203,235,.38); font-size: 9px; font-weight: 500; letter-spacing: .14em; }
+    .nav { display: grid; gap: 7px; }
+    .nav button, .logout {
+      width: 100%; height: 46px; padding: 0 15px; text-align: left; color: rgba(224,231,255,.62);
+      border: 1px solid transparent; border-radius: 12px; background: transparent; cursor: pointer;
+    }
+    .nav button:hover, .nav button.active { color: white; border-color: rgba(180,197,255,.13); background: rgba(111,126,255,.13); }
+    .nav button.active { box-shadow: inset 3px 0 #7588ff; }
+    .side-account { margin-top: auto; padding: 15px 12px; border: 1px solid rgba(189,204,255,.12); border-radius: 14px; background: rgba(15,22,48,.52); }
+    .avatar { width: 32px; height: 32px; display: grid; place-items: center; float: left; margin-right: 10px; border-radius: 10px; background: linear-gradient(135deg,#7a62ff,#3e96ff); font-weight: 800; }
+    .account-name { display: block; padding-top: 1px; font-size: 12px; font-weight: 700; }
+    .account-email { display: block; margin-top: 3px; color: rgba(194,204,236,.42); font-size: 9px; overflow: hidden; text-overflow: ellipsis; }
+    .logout { height: 34px; margin-top: 12px; padding: 0; text-align: center; color: rgba(218,225,250,.44); font-size: 10px; }
+    .dashboard-main { min-width: 0; padding: 30px 38px 42px; overflow: auto; }
+    .dash-header { display: flex; justify-content: space-between; align-items: center; gap: 24px; }
+    .dash-kicker { color: #91a2ff; font-size: 10px; font-weight: 700; letter-spacing: .14em; }
+    .dash-header h2 { margin: 9px 0 5px; font-size: 30px; }
+    .dash-header p { margin: 0; color: rgba(205,214,243,.5); font-size: 12px; }
+    .header-actions { display: flex; align-items: center; gap: 10px; }
+    .update, .profile-pill { height: 46px; border: 1px solid rgba(194,208,255,.13); border-radius: 14px; background: rgba(13,20,45,.68); color: rgba(234,239,255,.78); }
+    .update { padding: 0 16px; color: #b8c4ff; cursor: pointer; }
+    .profile-pill { display: flex; align-items: center; gap: 10px; padding: 0 15px 0 8px; font-size: 11px; font-weight: 650; }
+    .profile-pill .avatar { float: none; margin: 0; }
+    .wallet-zone { margin: 27px -38px 0; padding: 28px 38px 30px; border-top: 1px solid rgba(198,211,255,.09); border-bottom: 1px solid rgba(198,211,255,.09); background: linear-gradient(100deg, rgba(67,81,164,.14), rgba(48,61,136,.08)); }
+    .balance { width: min(610px,100%); min-height: 104px; display: flex; align-items: center; gap: 28px; padding: 20px 24px; border: 1px solid rgba(194,208,255,.17); border-radius: 20px; background: linear-gradient(135deg, rgba(19,29,64,.82), rgba(11,17,39,.7)); box-shadow: inset 0 1px rgba(255,255,255,.07), 0 20px 50px rgba(0,0,0,.18); backdrop-filter: blur(22px); }
+    .balance small { display: block; color: rgba(200,211,243,.5); font-size: 10px; }
+    .balance strong { display: block; margin-top: 7px; font-size: 32px; letter-spacing: -.03em; }
+    .balance-copy { min-width: 150px; }
+    .exchange { margin-top: 5px; color: rgba(197,207,239,.36); font-size: 9px; }
+    .balance-divider { width: 1px; height: 54px; background: rgba(200,213,255,.12); }
+    .recharge { height: 48px; margin-left: auto; padding: 0 22px; border: 1px solid rgba(255,255,255,.14); border-radius: 13px; color: white; background: linear-gradient(110deg,#6d5eff,#4d7eff); font-weight: 750; cursor: pointer; box-shadow: 0 12px 28px rgba(76,88,255,.26); }
+    .stats { display: none; }
+    .stat, .panel, .connection-card {
+      border: 1px solid rgba(190,205,255,.12); background: rgba(9,15,35,.62); box-shadow: inset 0 1px rgba(255,255,255,.05); backdrop-filter: blur(22px);
+    }
+    .stat { padding: 18px 20px; border-radius: 16px; }
+    .stat span { color: rgba(201,211,242,.46); font-size: 10px; letter-spacing: .08em; }
+    .stat strong { display: block; margin-top: 9px; font-size: 21px; }
+    .stat em { display: block; margin-top: 5px; color: #70dfbb; font-size: 10px; font-style: normal; }
+    .section-head { display: flex; justify-content: space-between; align-items: center; margin: 28px 0 13px; }
+    .section-head h3 { margin: 0; font-size: 17px; }
+    .section-head span { color: rgba(197,208,240,.42); font-size: 10px; }
+    .connections { display: grid; gap: 12px; }
+    .connection-card { display: grid; grid-template-columns: 56px 1fr auto; align-items: center; gap: 17px; min-height: 104px; padding: 19px 22px; border-radius: 19px; transition: border-color .2s, transform .2s; }
+    .connection-card:hover { transform: translateY(-1px); border-color: rgba(143,162,255,.27); }
+    .connection-card img { width: 54px; height: 54px; padding: 11px; object-fit: contain; border-radius: 15px; background: #f8f9fc; box-shadow: 0 10px 28px rgba(0,0,0,.22); }
+    .connection-card.claude img { padding: 9px; }
+    .connection-card h4 { display: inline; margin: 0 9px 0 0; font-size: 17px; }
+    .connection-card p { margin: 7px 0 0; color: rgba(198,209,241,.45); font-size: 10px; }
+    .state { display: inline-flex; align-items: center; gap: 7px; color: #70dfbb; font-size: 10px; }
+    .state::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 10px currentColor; }
+    .client-action { min-width: 116px; height: 42px; padding: 0 16px; border: 1px solid rgba(179,195,255,.16); border-radius: 12px; color: #f5f7ff; background: rgba(96,108,222,.16); cursor: pointer; font-weight: 680; }
+    .client-action:hover { background: rgba(103,117,241,.28); }
+    .panel { padding: 19px 20px; border-radius: 18px; }
+    .usage-row { display: grid; grid-template-columns: 150px 1fr 80px; align-items: center; gap: 18px; padding: 11px 0; border-bottom: 1px solid rgba(191,205,248,.08); }
+    .usage-row:last-child { border: 0; }
+    .usage-name { font-size: 11px; }
+    .bar { height: 6px; overflow: hidden; border-radius: 4px; background: rgba(193,205,246,.1); }
+    .bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#725cff,#4598ff); }
+    .usage-value { text-align: right; color: rgba(215,223,249,.58); font-size: 10px; }
+    .page { display: none; }
+    .page.active { display: block; }
     @media (max-width: 1100px) {
-      main { grid-template-columns: 44% 56%; }
+      .auth-view { grid-template-columns: 44% 56%; }
       .hero { padding-left: 44px; padding-right: 32px; }
       h1 { font-size: 45px; }
       .login-side { padding-right: 34px; }
+      .dashboard-view { grid-template-columns: 218px 1fr; }
+      .dashboard-main { padding-left: 28px; padding-right: 28px; }
+      .wallet-zone { margin-left: -28px; margin-right: -28px; padding-left: 28px; padding-right: 28px; }
     }
   </style>
 </head>
@@ -191,23 +278,22 @@
       <div class="wordmark">TOKENPRO</div>
       <div class="platform">UNIVERSAL AI GATEWAY</div>
     </header>
-    <main>
+    <main class="auth-view" id="authView">
       <section class="hero">
         <div class="eyebrow">CROSS-PLATFORM AI ACCESS</div>
         <h1>连接每一颗<br />AI 星辰</h1>
-        <p class="lead">GPT 与 Claude，一个入口，跨平台启航。统一管理模型、余额与本地客户端连接。</p>
+        <p class="lead">GPT、Claude 与 Gemini，一个入口，跨平台启航。统一管理模型、余额与本地客户端连接。</p>
         <div class="orbit-copy">
           <div class="orbit-label">SUPPORTED CLIENTS</div>
           <div class="clients">
             <div class="client"><img src="../Resources/OpenAIBlossomOfficial.svg" alt="OpenAI" />GPT / Codex</div>
             <div class="client claude"><img src="../Resources/ClaudeSparkOfficial.svg" alt="Claude" />Claude</div>
-            <div class="client"><img src="../Resources/OpenAIBlossomOfficial.svg" alt="OpenAI" />Codex CLI</div>
-            <div class="client claude"><img src="../Resources/ClaudeSparkOfficial.svg" alt="Claude" />Claude Code</div>
+            <div class="client"><img src="../Resources/GeminiOfficial.svg" alt="Gemini" />Gemini</div>
           </div>
         </div>
       </section>
       <section class="login-side">
-        <form class="login-card" onsubmit="event.preventDefault(); document.querySelector('.primary').textContent='正在连接…';">
+        <form class="login-card" onsubmit="showDashboard(event)">
           <div class="card-top"><span class="status-dot">服务运行正常</span><span>简体中文</span></div>
           <h2>登录 TokenPro</h2>
           <p class="sub">进入你的 AI 模型控制中心</p>
@@ -221,6 +307,64 @@
         </form>
       </section>
     </main>
+    <section class="dashboard-view" id="dashboardView">
+      <aside class="sidebar">
+        <div class="side-brand"><span class="brand-orbit"><i></i></span><span class="brand-copy">TOKENPRO<span class="side-caption">UNIVERSAL AI GATEWAY</span></span></div>
+        <nav class="nav" aria-label="主导航">
+          <button class="active" data-page="home">✦　首页</button>
+          <button data-page="clients">⌁　客户端管理</button>
+          <button data-page="keys">◇　API Keys</button>
+          <button data-page="docs">▱　使用文档</button>
+        </nav>
+        <div class="side-account">
+          <span class="avatar">T</span><span class="account-name">TokenPro 用户</span><span class="account-email">demo@tokenpro.work</span>
+          <button class="logout" type="button" onclick="showLogin()">退出登录</button>
+        </div>
+      </aside>
+      <div class="dashboard-main">
+        <section class="page active" id="page-home">
+          <header class="dash-header">
+            <div><span class="dash-kicker">MISSION CONTROL</span><h2>TokenPro 控制中心</h2><p>跨平台 AI 客户端，一站式连接与管理。</p></div>
+            <div class="header-actions"><button class="update" type="button">↻　检查更新</button><div class="profile-pill"><span class="avatar">T</span>demo@tokenpro.work</div></div>
+          </header>
+          <div class="wallet-zone">
+            <div class="balance"><div class="balance-copy"><small>钱包余额</small><strong>$128.40</strong><div class="exchange">充值比例 1 ¥ = 1 $</div></div><span class="balance-divider"></span><button class="recharge" type="button">＋　充值</button></div>
+          </div>
+          <div class="section-head"><h3>我的客户端</h3><span>3 个模型入口 · 实时状态</span></div>
+          <div class="connections">
+            <article class="connection-card"><img src="../Resources/OpenAIBlossomOfficial.svg" alt="OpenAI" /><div><h4>GPT / Codex</h4><span class="state">已连接</span><p>OpenAI 模型与 Codex 桌面客户端</p></div><button class="client-action" type="button">打开应用</button></article>
+            <article class="connection-card claude"><img src="../Resources/ClaudeSparkOfficial.svg" alt="Claude" /><div><h4>Claude</h4><span class="state">已连接</span><p>Anthropic 模型与 Claude 桌面客户端</p></div><button class="client-action" type="button">打开应用</button></article>
+            <article class="connection-card"><img src="../Resources/GeminiOfficial.svg" alt="Gemini" /><div><h4>Gemini</h4><span class="state">已连接</span><p>Google AI 模型与 Gemini 客户端</p></div><button class="client-action" type="button">打开应用</button></article>
+          </div>
+        </section>
+        <section class="page" id="page-generic"><header class="dash-header"><div><span class="dash-kicker">TOKENPRO</span><h2 id="genericTitle">连接管理</h2><p>此处将沿用宇宙主题呈现对应的真实客户端功能。</p></div></header></section>
+      </div>
+    </section>
   </section>
+  <script>
+    function showDashboard(event) {
+      event.preventDefault();
+      const button = document.querySelector('.primary');
+      button.textContent = '正在连接…';
+      setTimeout(() => {
+        document.getElementById('authView').style.display = 'none';
+        document.getElementById('dashboardView').style.display = 'grid';
+        button.textContent = '进入控制中心';
+      }, 240);
+    }
+    function showLogin() {
+      document.getElementById('dashboardView').style.display = 'none';
+      document.getElementById('authView').style.display = 'grid';
+      document.getElementById('password').value = '';
+    }
+    document.querySelectorAll('.nav button').forEach(button => button.addEventListener('click', () => {
+      document.querySelectorAll('.nav button').forEach(item => item.classList.remove('active'));
+      button.classList.add('active');
+      const home = document.getElementById('page-home');
+      const generic = document.getElementById('page-generic');
+      if (button.dataset.page === 'home') { home.classList.add('active'); generic.classList.remove('active'); }
+      else { home.classList.remove('active'); generic.classList.add('active'); document.getElementById('genericTitle').textContent = button.textContent; }
+    }));
+  </script>
 </body>
 </html>
