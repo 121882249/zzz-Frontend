@@ -44,12 +44,14 @@ final class TokenProFrame extends JFrame {
     private final Map<String, NavButton> navButtons = new LinkedHashMap<>();
     private final JLabel headerTitle = new JLabel("TokenPro");
     private final JLabel headerUser = new JLabel("登录账户");
+    private final JLabel accountEmail = new JLabel("登录账户");
     private final JLabel headerBalance = new JLabel("—");
     private final JLabel accountBalance = new JLabel("—");
     private final JLabel homeClaudeStatus = new JLabel("请先选择模型");
     private final JLabel homeCodexStatus = new JLabel("请先选择模型");
     private JButton codexLaunch;
     private JButton claudeLaunch;
+    private JComponent dashboardHeader;
     private final CardLayout views = new CardLayout();
     private final JPanel viewHost = new JPanel(views);
     private CosmosLoginPanel loginView;
@@ -88,7 +90,7 @@ final class TokenProFrame extends JFrame {
     private JComponent dashboard() {
         JPanel root = new DashboardBackdrop(); root.setLayout(new BorderLayout());
         root.add(sidebar(), BorderLayout.WEST);
-        JPanel main = transparent(new BorderLayout()); main.add(header(), BorderLayout.NORTH);
+        JPanel main = transparent(new BorderLayout()); dashboardHeader = header(); main.add(dashboardHeader, BorderLayout.NORTH);
         pageHost.setOpaque(false);
         pageHost.add(scroll(homePanel()), "首页");
         pageHost.add(scroll(connectionPanel()), "Codex 连接");
@@ -96,8 +98,7 @@ final class TokenProFrame extends JFrame {
         pageHost.add(scroll(accountPanel()), "我的账户");
         pageHost.add(scroll(toolsPanel()), "工具");
         main.add(pageHost, BorderLayout.CENTER);
-        status.setBorder(new EmptyBorder(7, 26, 10, 26)); status.setForeground(MUTED); status.setFont(appFont(11, Font.PLAIN));
-        main.add(status, BorderLayout.SOUTH); root.add(main, BorderLayout.CENTER); showPage("首页");
+        root.add(main, BorderLayout.CENTER); showPage("首页");
         return root;
     }
 
@@ -105,26 +106,26 @@ final class TokenProFrame extends JFrame {
         JPanel panel = new SidebarPanel(); panel.setLayout(new BorderLayout()); panel.setPreferredSize(new Dimension(226, 650));
         JPanel top = new JPanel(); top.setOpaque(false); top.setBorder(new EmptyBorder(25, 12, 10, 12)); top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
         JLabel brand = new JLabel("TokenPro", resourceIconContained("TokenProCosmosIcon.png", 28, 28, false), SwingConstants.LEFT); brand.setIconTextGap(11); brand.setFont(appFont(17, Font.BOLD)); brand.setForeground(TEXT); brand.setBorder(new EmptyBorder(0, 5, 24, 0)); top.add(brand);
-        addNav(top, "首页", "");
-        JButton backend = sideAction("⚙   后台管理"); backend.addActionListener(e -> browse("https://tokenpro.work/admin/dashboard")); top.add(backend); top.add(Box.createVerticalStrut(6));
-        JButton docs = sideAction("▤   使用文档"); docs.addActionListener(e -> browse("https://tokenpro.work/docs")); top.add(docs); top.add(Box.createVerticalStrut(6));
+        addNav(top, "首页", "SparklesLucide.png");
+        JButton backend = sideAction("后台管理", "WebCog.png"); backend.addActionListener(e -> browse("https://tokenpro.work/admin/dashboard")); top.add(backend); top.add(Box.createVerticalStrut(6));
+        JButton docs = sideAction("使用文档", "WebBook.png"); docs.addActionListener(e -> browse("https://tokenpro.work/docs")); top.add(docs); top.add(Box.createVerticalStrut(6));
         panel.add(top, BorderLayout.NORTH);
-        JPanel bottom = new JPanel(new BorderLayout()); bottom.setOpaque(false); bottom.setBorder(new EmptyBorder(0, 12, 18, 12)); NavButton accountNav = new NavButton("●   我的账户"); accountNav.addActionListener(e -> openAccount()); navButtons.put("我的账户", accountNav); bottom.add(accountNav); panel.add(bottom, BorderLayout.SOUTH); return panel;
+        JPanel bottom = new JPanel(new BorderLayout()); bottom.setOpaque(false); bottom.setBorder(new EmptyBorder(0, 12, 18, 12)); NavButton accountNav = new NavButton("我的账户"); accountNav.setIcon(resourceIconContained("CircleUserLucide.png", 17, 17, true)); accountNav.setIconTextGap(12); accountNav.addActionListener(e -> openAccount()); navButtons.put("我的账户", accountNav); bottom.add(accountNav); panel.add(bottom, BorderLayout.SOUTH); return panel;
     }
 
-    private void addNav(JPanel parent, String page, String icon) { NavButton button = new NavButton((icon.isBlank() ? "" : icon + "   ") + page); if (page.equals("首页")) { button.setIcon(resourceIconContained("TokenProCosmosIcon.png", 18, 18, false)); button.setIconTextGap(12); } button.addActionListener(e -> showPage(page)); navButtons.put(page, button); parent.add(button); parent.add(Box.createVerticalStrut(6)); }
-    private JButton sideAction(String text) { JButton button = new JButton(text); button.setFont(appFont(13, Font.PLAIN)); button.setForeground(new Color(203, 211, 238)); button.setHorizontalAlignment(SwingConstants.LEFT); button.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42)); button.setBorder(new EmptyBorder(0, 16, 0, 16)); button.setFocusPainted(false); button.setContentAreaFilled(false); return button; }
+    private void addNav(JPanel parent, String page, String icon) { NavButton button = new NavButton(page); if (!icon.isBlank()) { button.setIcon(resourceIconContained(icon, 17, 17, true)); button.setIconTextGap(12); } button.addActionListener(e -> showPage(page)); navButtons.put(page, button); parent.add(button); parent.add(Box.createVerticalStrut(6)); }
+    private JButton sideAction(String text, String icon) { JButton button = new JButton(text); button.setIcon(resourceIconContained(icon, 17, 17, true)); button.setIconTextGap(12); button.setFont(appFont(13, Font.PLAIN)); button.setForeground(new Color(203, 211, 238)); button.setHorizontalAlignment(SwingConstants.LEFT); button.setPreferredSize(new Dimension(200, 44)); button.setMinimumSize(new Dimension(160, 44)); button.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44)); button.setBorder(new EmptyBorder(0, 16, 0, 16)); button.setFocusPainted(false); button.setContentAreaFilled(false); return button; }
 
     private JComponent header() {
         GradientPanel panel = new GradientPanel(); panel.setLayout(new BorderLayout(0, 16)); panel.setBorder(new EmptyBorder(23, 28, 20, 28));
         JPanel title = transparent(new BorderLayout()); headerTitle.setFont(appFont(23, Font.BOLD)); title.add(headerTitle, BorderLayout.WEST);
         JPanel right = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        JButton update = soft("↻  检查更新"); update.addActionListener(e -> checkForUpdates(update)); right.add(update);
-        JButton user = soft("●  登录账户"); user.addActionListener(e -> openAccount()); headerUser.addPropertyChangeListener("text", e -> user.setText("●  " + headerUser.getText())); right.add(user);
+        JButton update = soft("检查更新"); update.setIcon(resourceIconContained("RefreshCwLucide.png", 15, 15, true)); update.addActionListener(e -> checkForUpdates(update)); right.add(update);
+        JButton user = soft("登录账户"); user.setIcon(resourceIconContained("CircleUserLucide.png", 17, 17, true)); user.addActionListener(e -> openAccount()); headerUser.addPropertyChangeListener("text", e -> user.setText(headerUser.getText())); right.add(user);
         title.add(right, BorderLayout.EAST); panel.add(title, BorderLayout.NORTH);
         RoundedPanel wallet = new RoundedPanel(20, new Color(10, 18, 44, 214)); wallet.setLayout(new FlowLayout(FlowLayout.LEFT, 14, 10)); wallet.setBorder(new EmptyBorder(0, 7, 0, 7));
         JPanel captions = transparent(); captions.setLayout(new BoxLayout(captions, BoxLayout.Y_AXIS)); JLabel balanceText = new JLabel("钱包余额"); balanceText.setFont(appFont(12, Font.PLAIN)); balanceText.setForeground(MUTED); JLabel rate = new JLabel("充值比例  1￥ = 1$"); rate.setFont(appFont(10, Font.PLAIN)); rate.setForeground(MUTED); captions.add(balanceText); captions.add(rate); wallet.add(captions);
-        headerBalance.setFont(appFont(26, Font.BOLD)); wallet.add(headerBalance); JButton refresh = soft("↻"); refresh.addActionListener(e -> refreshAccount()); wallet.add(refresh); JButton recharge = soft("＋ 充值"); recharge.addActionListener(e -> browse("https://tokenpro.work/purchase")); wallet.add(recharge);
+        headerBalance.setFont(appFont(26, Font.BOLD)); wallet.add(headerBalance); JButton refresh = soft(""); refresh.setToolTipText("刷新余额"); refresh.setIcon(resourceIconContained("RefreshCwLucide.png", 15, 15, true)); refresh.addActionListener(e -> refreshAccount()); wallet.add(refresh); JButton recharge = soft("充值"); recharge.setIcon(resourceIconContained("PlusLucide.png", 15, 15, true)); recharge.addActionListener(e -> browse("https://tokenpro.work/purchase")); wallet.add(recharge);
         JPanel row = transparent(new FlowLayout(FlowLayout.LEFT, 0, 0)); row.add(wallet); panel.add(row, BorderLayout.CENTER); return panel;
     }
 
@@ -138,7 +139,7 @@ final class TokenProFrame extends JFrame {
 
     private JComponent desktopClientCard(String title, String subtitle, boolean installed, String iconName, Runnable chooseModel, Runnable restore, Runnable open, JLabel state) {
         RoundedPanel card = card(); card.setLayout(new BorderLayout(18, 0));
-        JLabel badge = new JLabel(providerMark(iconName, 44)); badge.setHorizontalAlignment(SwingConstants.CENTER); badge.setPreferredSize(new Dimension(52, 52)); card.add(badge, BorderLayout.WEST);
+        JLabel badge = new JLabel(clientIcon(iconName, 48)); badge.setHorizontalAlignment(SwingConstants.CENTER); badge.setPreferredSize(new Dimension(52, 52)); card.add(badge, BorderLayout.WEST);
         JPanel words = transparent(); words.setLayout(new BoxLayout(words, BoxLayout.Y_AXIS)); JPanel nameLine = transparent(new FlowLayout(FlowLayout.LEFT, 10, 0)); nameLine.setAlignmentX(Component.LEFT_ALIGNMENT); nameLine.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24)); JLabel heading = new JLabel(title); heading.setFont(appFont(17, Font.BOLD)); JLabel installedLabel = new JLabel(installed ? "已安装" : "未安装"); installedLabel.setFont(appFont(11, Font.BOLD)); installedLabel.setForeground(installed ? new Color(97, 222, 165) : MUTED); nameLine.add(heading); nameLine.add(installedLabel); JLabel detail = new JLabel(subtitle); detail.setAlignmentX(Component.LEFT_ALIGNMENT); detail.setFont(appFont(11, Font.PLAIN)); detail.setForeground(MUTED); words.add(Box.createVerticalStrut(3)); words.add(nameLine); words.add(Box.createVerticalStrut(6)); words.add(detail); card.add(words, BorderLayout.CENTER);
         JPanel actions = transparent(); actions.setLayout(new BoxLayout(actions, BoxLayout.Y_AXIS)); JPanel buttons = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         JButton menu = soft("模型设置  ▾");
@@ -151,18 +152,18 @@ final class TokenProFrame extends JFrame {
     private JComponent commandClientCard(String title, String subtitle, String iconName, String command, String downloadUrl) {
         boolean installed = Platform.commandInstalled(command);
         RoundedPanel card = card(); card.setLayout(new BorderLayout(18, 0));
-        JLabel badge = new JLabel(providerMark(iconName, 44)); badge.setHorizontalAlignment(SwingConstants.CENTER); badge.setPreferredSize(new Dimension(52, 52)); card.add(badge, BorderLayout.WEST);
+        JLabel badge = new JLabel(clientIcon(iconName, 48)); badge.setHorizontalAlignment(SwingConstants.CENTER); badge.setPreferredSize(new Dimension(52, 52)); card.add(badge, BorderLayout.WEST);
         JPanel words = transparent(); words.setLayout(new BoxLayout(words, BoxLayout.Y_AXIS)); JLabel heading = new JLabel(title); heading.setFont(appFont(17, Font.BOLD)); JLabel detail = new JLabel(subtitle); detail.setFont(appFont(11, Font.PLAIN)); detail.setForeground(MUTED); words.add(Box.createVerticalStrut(3)); words.add(heading); words.add(Box.createVerticalStrut(6)); words.add(detail); card.add(words, BorderLayout.CENTER);
         JPanel buttons = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0)); JButton download = soft(installed ? "已安装" : "去下载"); download.setEnabled(!installed); download.addActionListener(e -> browse(downloadUrl)); JButton terminal = primary("打开 " + (iconName.equals("Codex") ? "Codex 命令行" : "Claude 命令行")); terminal.setEnabled(installed); terminal.addActionListener(e -> openTerminal(command)); buttons.add(download); buttons.add(terminal); card.add(buttons, BorderLayout.EAST); return card;
     }
 
     private JComponent accountPanel() {
         JPanel panel = vertical();
-        JLabel heading = new JLabel("我的账户");
-        heading.setFont(appFont(22, Font.BOLD));
-        heading.setAlignmentX(Component.LEFT_ALIGNMENT);
-        panel.add(heading);
-        panel.add(Box.createVerticalStrut(24));
+        JPanel identity = transparent(new BorderLayout(18, 0)); identity.setAlignmentX(Component.LEFT_ALIGNMENT); identity.setMaximumSize(new Dimension(Integer.MAX_VALUE, 64));
+        JLabel avatar = new JLabel(resourceIconContained("CircleUserPurple.png", 48, 48, false)); avatar.setHorizontalAlignment(SwingConstants.CENTER); avatar.setPreferredSize(new Dimension(52, 52)); identity.add(avatar, BorderLayout.WEST);
+        JPanel identityWords = transparent(); identityWords.setLayout(new BoxLayout(identityWords, BoxLayout.Y_AXIS)); accountEmail.setFont(appFont(14, Font.BOLD)); accountEmail.setAlignmentX(Component.LEFT_ALIGNMENT); JLabel accountType = new JLabel("TokenPro 云端账户"); accountType.setFont(appFont(11, Font.PLAIN)); accountType.setForeground(MUTED); accountType.setAlignmentX(Component.LEFT_ALIGNMENT); identityWords.add(Box.createVerticalStrut(7)); identityWords.add(accountEmail); identityWords.add(Box.createVerticalStrut(5)); identityWords.add(accountType); identity.add(identityWords, BorderLayout.CENTER);
+        JButton logout = soft("退出登录"); logout.addActionListener(e -> logout()); identity.add(logout, BorderLayout.EAST); panel.add(identity); panel.add(Box.createVerticalStrut(18));
+        JSeparator divider = new JSeparator(); divider.setForeground(new Color(164, 181, 236, 35)); divider.setMaximumSize(new Dimension(Integer.MAX_VALUE, 1)); divider.setAlignmentX(Component.LEFT_ALIGNMENT); panel.add(divider); panel.add(Box.createVerticalStrut(18));
         JLabel balanceTitle = new JLabel("账户余额");
         balanceTitle.setFont(appFont(12, Font.PLAIN));
         balanceTitle.setForeground(MUTED);
@@ -171,12 +172,8 @@ final class TokenProFrame extends JFrame {
         accountBalance.setAlignmentX(Component.LEFT_ALIGNMENT);
         panel.add(Box.createVerticalStrut(8));
         panel.add(accountBalance);
-        panel.add(Box.createVerticalStrut(28));
-        JButton logout = new JButton("退出账户");
-        soft(logout);
-        logout.addActionListener(e -> logout());
-        logout.setAlignmentX(Component.LEFT_ALIGNMENT);
-        panel.add(logout);
+        panel.add(Box.createVerticalStrut(18));
+        JButton refresh = soft("刷新账户"); refresh.addActionListener(e -> refreshAccount()); refresh.setAlignmentX(Component.LEFT_ALIGNMENT); panel.add(refresh);
         return panel;
     }
 
@@ -227,7 +224,7 @@ final class TokenProFrame extends JFrame {
     private void logout() {
         try {
             store.delete("java-session.json"); accessToken = null; accountId = ""; keys.clear();
-            account.setText("尚未登录"); headerUser.setText("登录账户"); headerBalance.setText("—"); accountBalance.setText("—");
+            account.setText("尚未登录"); headerUser.setText("登录账户"); accountEmail.setText("登录账户"); headerBalance.setText("—"); accountBalance.setText("—");
             homeCodexStatus.setText("请先选择模型"); homeClaudeStatus.setText("请先选择模型"); if (codexLaunch != null) codexLaunch.setEnabled(false); if (claudeLaunch != null) claudeLaunch.setEnabled(false);
             showPage("首页"); showLoginScreen(); status("已退出账户");
         } catch (Exception ex) { error(ex); }
@@ -404,6 +401,7 @@ final class TokenProFrame extends JFrame {
         String balance = rawBalance instanceof Number number ? String.format(Locale.ROOT, "$%.2f", number.doubleValue()) : "—";
         account.setText("已登录：" + emailValue + "    余额：" + balance);
         headerUser.setText(emailValue.isBlank() ? "我的账户" : emailValue);
+        accountEmail.setText(emailValue.isBlank() ? "我的账户" : emailValue);
         headerBalance.setText(balance);
         accountBalance.setText(balance);
         accountId = string(user.get("id"));
@@ -432,6 +430,7 @@ final class TokenProFrame extends JFrame {
     private void showPage(String page) {
         pages.show(pageHost, page);
         headerTitle.setText(page.equals("首页") ? "TokenPro" : page);
+        if (dashboardHeader != null) dashboardHeader.setVisible(!page.equals("我的账户"));
         navButtons.forEach((name, button) -> button.setSelected(name.equals(page)));
     }
 
@@ -470,7 +469,7 @@ final class TokenProFrame extends JFrame {
                 return new String[]{string(release.get("tag_name")).replaceFirst("^v", ""), string(release.get("html_url"))};
             }
             protected void done() {
-                button.setEnabled(true); button.setText("↻  检查更新");
+                button.setEnabled(true); button.setText("检查更新");
                 try {
                     String[] release = get();
                     if (release[0].isBlank()) {
@@ -536,6 +535,10 @@ final class TokenProFrame extends JFrame {
         return name.equals("Codex") ? resourceIconContained("OpenAIBlossomRuntime.png", size, size, true) : resourceIconContained("ClaudeSparkRuntime.png", size, size, false);
     }
 
+    private static ImageIcon clientIcon(String name, int size) {
+        return resourceIconContained(name.equals("Codex") ? "CodexOriginal.png" : "ClaudeOriginal.png", size, size, false);
+    }
+
     private <T> void async(String running, Callable<T> task, java.util.function.Consumer<T> done) {
         status(running);
         new SwingWorker<T, Void>() {
@@ -564,7 +567,7 @@ final class TokenProFrame extends JFrame {
 
     private static final class NavButton extends JButton {
         private boolean selected;
-        NavButton(String text) { super(text); setFont(appFont(13, Font.PLAIN)); setForeground(new Color(203, 211, 238)); setHorizontalAlignment(SwingConstants.LEFT); setMaximumSize(new Dimension(Integer.MAX_VALUE, 42)); setBorder(new EmptyBorder(0, 16, 0, 16)); setFocusPainted(false); setContentAreaFilled(false); }
+        NavButton(String text) { super(text); setFont(appFont(13, Font.PLAIN)); setForeground(new Color(203, 211, 238)); setHorizontalAlignment(SwingConstants.LEFT); setPreferredSize(new Dimension(200, 44)); setMinimumSize(new Dimension(160, 44)); setMaximumSize(new Dimension(Integer.MAX_VALUE, 44)); setBorder(new EmptyBorder(0, 16, 0, 16)); setFocusPainted(false); setContentAreaFilled(false); }
         public void setSelected(boolean value) { super.setSelected(value); selected = value; setFont(appFont(13, value ? Font.BOLD : Font.PLAIN)); repaint(); }
         protected void paintComponent(Graphics g) { if (selected) { Graphics2D g2 = (Graphics2D) g.create(); g2.setColor(new Color(108, 92, 255, 48)); g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12); g2.dispose(); } super.paintComponent(g); }
     }
@@ -607,7 +610,7 @@ final class TokenProFrame extends JFrame {
             if (prominent && isEnabled()) g.setPaint(new GradientPaint(0, 0, new Color(111, 91, 255), getWidth(), 0, new Color(64, 142, 255)));
             else g.setColor(prominent ? new Color(62, 60, 112, 190) : (isEnabled() ? new Color(23, 31, 62, 220) : new Color(18, 24, 45, 190)));
             g.fillRoundRect(0, 0, getWidth(), getHeight(), 18, 18); g.setColor(new Color(190, 205, 255, prominent ? 32 : 24)); g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 18, 18);
-            g.setFont(getFont()); g.setColor(isEnabled() ? getForeground() : new Color(137, 145, 177)); FontMetrics fm = g.getFontMetrics(); g.drawString(getText(), (getWidth() - fm.stringWidth(getText())) / 2, (getHeight() - fm.getHeight()) / 2 + fm.getAscent()); g.dispose();
+            g.setFont(getFont()); g.setColor(isEnabled() ? getForeground() : new Color(137, 145, 177)); FontMetrics fm = g.getFontMetrics(); Icon icon = getIcon(); int textWidth = fm.stringWidth(getText()); int iconWidth = icon == null ? 0 : icon.getIconWidth(); int gap = icon == null || getText().isBlank() ? 0 : getIconTextGap(); int total = iconWidth + gap + textWidth; int x = (getWidth() - total) / 2; if (icon != null) { icon.paintIcon(this, g, x, (getHeight() - icon.getIconHeight()) / 2); x += iconWidth + gap; } g.drawString(getText(), x, (getHeight() - fm.getHeight()) / 2 + fm.getAscent()); g.dispose();
         }
     }
 }
