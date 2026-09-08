@@ -22,6 +22,7 @@
 - [Resolved P1] The empty hero region now contains a generated transparent blue-violet galaxy vortex with GPT, Claude, Gemini, and Grok marks floating inside its center; the lower model marquee remains in place.
 - [Resolved P2] The login hero label “Codex” was changed to “GPT” in both the vortex and looping model strip. Dashboard client names remain aligned with the supplied post-login reference.
 - [Resolved P2] Vortex model marks no longer use square cards or borders. Their positions, sizes, and animation phases are staggered across the spiral, and a fifth question-mark mark represents future providers.
+- [Resolved P2] The first transparent-mark pass still felt composited because every logo was large and equally bright. Marks now use smaller varied sizes, restrained opacity, softer provider-specific glow, and positions that follow separate spiral arms.
 
 **Required fidelity surfaces**
 
@@ -51,6 +52,7 @@ The official marks, input borders, login card, title bar, and CTA were checked a
 - The model universe marquee loops without a visible jump, the request pulse travels across the orbit, and reduced-motion mode disables both animations.
 - The vortex glow breathes slowly and the model marks float independently; reduced-motion mode also freezes these effects.
 - Five marks now float independently at varied points across the vortex, with no visible icon backplates.
+- The refined marks remain recognizable at full-window size while the vortex, rather than the logos, retains visual priority.
 - Logout returns to the login view.
 - Page reload restores the empty login state.
 - Browser console contains no warnings or errors.

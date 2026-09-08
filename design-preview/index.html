@@ -104,21 +104,22 @@
       line-height: 1.8;
     }
     .vortex-stage { position: relative; flex: 1; min-height: 220px; margin: 8px -18px 2px; display: grid; place-items: center; isolation: isolate; }
-    .vortex-disc { width: min(610px, 108%); max-height: 100%; object-fit: contain; opacity: .84; filter: drop-shadow(0 0 22px rgba(78,118,255,.22)); animation: vortexBreath 8s ease-in-out infinite; }
+    .vortex-disc { width: min(620px, 109%); max-height: 100%; object-fit: contain; opacity: .78; filter: drop-shadow(0 0 18px rgba(78,118,255,.18)); animation: vortexBreath 10s ease-in-out infinite; }
     .vortex-models { position: absolute; inset: 0; }
     .vortex-model {
       position: absolute;
-      width: 44px;
-      height: 44px;
+      width: 30px;
+      height: 30px;
       object-fit: contain;
-      filter: drop-shadow(0 5px 9px rgba(0,0,0,.72)) drop-shadow(0 0 12px rgba(115,151,255,.5));
-      animation: modelFloat 4.8s ease-in-out infinite;
+      opacity: .86;
+      filter: drop-shadow(0 3px 5px rgba(0,0,0,.74)) drop-shadow(0 0 8px rgba(120,157,255,.38));
+      animation: modelFloat 6.4s ease-in-out infinite;
     }
-    .vortex-model.gpt { left: 20%; top: 51%; filter: invert(1) drop-shadow(0 5px 9px rgba(0,0,0,.72)) drop-shadow(0 0 12px rgba(115,151,255,.5)); }
-    .vortex-model.claude { left: 39%; top: 30%; width: 47px; height: 47px; animation-delay: -.9s; }
-    .vortex-model.gemini { left: 63%; top: 45%; width: 42px; height: 42px; animation-delay: -1.8s; }
-    .vortex-model.grok { left: 48%; top: 67%; width: 47px; height: 47px; animation-delay: -2.7s; }
-    .vortex-model.unknown { left: 75%; top: 29%; width: 40px; height: 40px; opacity: .82; filter: invert(1) drop-shadow(0 5px 9px rgba(0,0,0,.72)) drop-shadow(0 0 15px rgba(136,163,255,.62)); animation-delay: -3.5s; }
+    .vortex-model.gpt { left: 22%; top: 56%; width: 32px; height: 32px; opacity: .92; filter: invert(1) drop-shadow(0 3px 5px rgba(0,0,0,.74)) drop-shadow(0 0 8px rgba(120,157,255,.38)); }
+    .vortex-model.claude { left: 41%; top: 34%; width: 29px; height: 29px; opacity: .78; filter: saturate(.82) drop-shadow(0 3px 5px rgba(0,0,0,.7)) drop-shadow(0 0 7px rgba(216,119,87,.28)); animation-delay: -1.2s; }
+    .vortex-model.gemini { left: 64%; top: 47%; width: 26px; height: 26px; opacity: .9; animation-delay: -2.5s; }
+    .vortex-model.grok { left: 51%; top: 69%; width: 29px; height: 29px; opacity: .8; animation-delay: -3.8s; }
+    .vortex-model.unknown { left: 76%; top: 34%; width: 22px; height: 22px; opacity: .48; filter: invert(1) drop-shadow(0 0 7px rgba(136,163,255,.42)); animation-delay: -5.1s; }
     .orbit-copy { margin-top: 0; width: min(590px,100%); }
     .orbit-label { display: flex; align-items: center; gap: 9px; color: rgba(205,215,248,.58); font-size: 11px; letter-spacing: .14em; }
     .orbit-label::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #6ff0ca; box-shadow: 0 0 12px #6ff0ca; animation: livePulse 2s ease-in-out infinite; }
@@ -158,8 +159,8 @@
     @keyframes modelDrift { to { transform: translateX(calc(-50% - 6px)); } }
     @keyframes requestFlow { 0% { left: -8px; opacity: 0; } 12%,82% { opacity: 1; } 100% { left: calc(100% + 8px); opacity: 0; } }
     @keyframes livePulse { 50% { opacity: .4; transform: scale(.72); } }
-    @keyframes vortexBreath { 50% { opacity: .98; transform: scale(1.025) rotate(.7deg); filter: drop-shadow(0 0 32px rgba(92,132,255,.36)); } }
-    @keyframes modelFloat { 50% { transform: translate(5px,-8px) rotate(3deg) scale(1.06); } }
+    @keyframes vortexBreath { 50% { opacity: .9; transform: scale(1.014) rotate(.35deg); filter: drop-shadow(0 0 26px rgba(92,132,255,.28)); } }
+    @keyframes modelFloat { 50% { transform: translate(3px,-4px) rotate(1.5deg) scale(1.035); } }
     .login-side { display: grid; place-items: center; padding: 42px 58px 58px 18px; }
     .login-card {
       width: min(520px, 100%);
@@ -366,7 +367,7 @@
       .dashboard-view { grid-template-columns: 250px 1fr; }
       .dash-header, .wallet-zone { padding-left: 28px; padding-right: 28px; }
       .connections { padding-left: 28px; padding-right: 28px; }
-      .vortex-model { width: 40px; height: 40px; border-radius: 12px; }
+      .vortex-model { transform: scale(.9); }
     }
     @media (prefers-reduced-motion: reduce) {
       .clients, .request-pulse, .orbit-label::before, .vortex-disc, .vortex-model { animation: none; }
