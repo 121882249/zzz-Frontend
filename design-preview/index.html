@@ -103,7 +103,27 @@
       font-size: 16px;
       line-height: 1.8;
     }
-    .orbit-copy { margin-top: auto; width: min(590px,100%); }
+    .vortex-stage { position: relative; flex: 1; min-height: 220px; margin: 8px -18px 2px; display: grid; place-items: center; isolation: isolate; }
+    .vortex-disc { width: min(610px, 108%); max-height: 100%; object-fit: contain; opacity: .84; filter: drop-shadow(0 0 22px rgba(78,118,255,.22)); animation: vortexBreath 8s ease-in-out infinite; }
+    .vortex-models { position: absolute; inset: 0; }
+    .vortex-model {
+      position: absolute;
+      width: 46px;
+      height: 46px;
+      padding: 8px;
+      border: 1px solid rgba(210,220,255,.26);
+      border-radius: 14px;
+      object-fit: contain;
+      background: rgba(248,250,255,.94);
+      box-shadow: 0 0 0 5px rgba(75,94,196,.10), 0 10px 30px rgba(0,0,0,.35), 0 0 26px rgba(94,132,255,.22);
+      backdrop-filter: blur(14px);
+      animation: modelFloat 4.8s ease-in-out infinite;
+    }
+    .vortex-model.gpt { left: 34%; top: 48%; }
+    .vortex-model.claude { left: 45%; top: 35%; padding: 6px; animation-delay: -.9s; }
+    .vortex-model.gemini { left: 57%; top: 48%; animation-delay: -1.8s; }
+    .vortex-model.grok { left: 46%; top: 60%; padding: 0; background: #000; animation-delay: -2.7s; }
+    .orbit-copy { margin-top: 0; width: min(590px,100%); }
     .orbit-label { display: flex; align-items: center; gap: 9px; color: rgba(205,215,248,.58); font-size: 11px; letter-spacing: .14em; }
     .orbit-label::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #6ff0ca; box-shadow: 0 0 12px #6ff0ca; animation: livePulse 2s ease-in-out infinite; }
     .model-universe { position: relative; height: 126px; margin-top: 14px; overflow: hidden; border: 1px solid rgba(191,205,255,.12); border-radius: 18px; background: radial-gradient(circle at 50% 120%, rgba(91,80,235,.28), transparent 55%), rgba(4,9,27,.46); box-shadow: inset 0 1px rgba(255,255,255,.04); }
@@ -142,6 +162,8 @@
     @keyframes modelDrift { to { transform: translateX(calc(-50% - 6px)); } }
     @keyframes requestFlow { 0% { left: -8px; opacity: 0; } 12%,82% { opacity: 1; } 100% { left: calc(100% + 8px); opacity: 0; } }
     @keyframes livePulse { 50% { opacity: .4; transform: scale(.72); } }
+    @keyframes vortexBreath { 50% { opacity: .98; transform: scale(1.025) rotate(.7deg); filter: drop-shadow(0 0 32px rgba(92,132,255,.36)); } }
+    @keyframes modelFloat { 50% { transform: translateY(-7px) scale(1.04); box-shadow: 0 0 0 6px rgba(75,94,196,.13), 0 14px 36px rgba(0,0,0,.38), 0 0 34px rgba(99,146,255,.34); } }
     .login-side { display: grid; place-items: center; padding: 42px 58px 58px 18px; }
     .login-card {
       width: min(520px, 100%);
@@ -348,9 +370,10 @@
       .dashboard-view { grid-template-columns: 250px 1fr; }
       .dash-header, .wallet-zone { padding-left: 28px; padding-right: 28px; }
       .connections { padding-left: 28px; padding-right: 28px; }
+      .vortex-model { width: 40px; height: 40px; border-radius: 12px; }
     }
     @media (prefers-reduced-motion: reduce) {
-      .clients, .request-pulse, .orbit-label::before { animation: none; }
+      .clients, .request-pulse, .orbit-label::before, .vortex-disc, .vortex-model { animation: none; }
     }
   </style>
 </head>
@@ -366,18 +389,27 @@
         <div class="eyebrow">CROSS-PLATFORM AI ACCESS</div>
         <h1>连接每一颗<br />AI 星辰</h1>
         <p class="lead">连接主流与新兴 AI 模型，一个入口，跨平台启航。模型宇宙实时同步，并持续扩展。</p>
+        <div class="vortex-stage" aria-label="GPT、Claude、Gemini 与 Grok 模型宇宙">
+          <img class="vortex-disc" src="../Resources/ModelUniverseVortex.png" alt="蓝紫色宇宙旋涡" />
+          <div class="vortex-models">
+            <img class="vortex-model gpt" src="../Resources/OpenAIBlossomOfficial.svg" alt="GPT" title="GPT" />
+            <img class="vortex-model claude" src="../Resources/ClaudeSparkOfficial.svg" alt="Claude" title="Claude" />
+            <img class="vortex-model gemini" src="../Resources/GeminiOfficial.svg" alt="Gemini" title="Gemini" />
+            <img class="vortex-model grok" src="../Resources/GrokOfficial.png" alt="Grok" title="Grok" />
+          </div>
+        </div>
         <div class="orbit-copy">
           <div class="orbit-label">MODEL UNIVERSE · 持续扩展</div>
           <div class="model-universe">
             <span class="request-pulse" aria-hidden="true"></span>
             <div class="model-viewport">
               <div class="clients">
-                <div class="client"><img src="../Resources/OpenAIBlossomOfficial.svg" alt="Codex" />Codex</div>
+                <div class="client"><img src="../Resources/OpenAIBlossomOfficial.svg" alt="GPT" />GPT</div>
                 <div class="client claude"><img src="../Resources/ClaudeSparkOfficial.svg" alt="Claude" />Claude</div>
                 <div class="client"><img src="../Resources/GeminiOfficial.svg" alt="Gemini" />Gemini</div>
                 <div class="client grok"><img src="../Resources/GrokOfficial.png" alt="Grok" />Grok</div>
                 <div class="client more">更多模型持续接入</div>
-                <div class="client" aria-hidden="true"><img src="../Resources/OpenAIBlossomOfficial.svg" alt="" />Codex</div>
+                <div class="client" aria-hidden="true"><img src="../Resources/OpenAIBlossomOfficial.svg" alt="" />GPT</div>
                 <div class="client claude" aria-hidden="true"><img src="../Resources/ClaudeSparkOfficial.svg" alt="" />Claude</div>
                 <div class="client" aria-hidden="true"><img src="../Resources/GeminiOfficial.svg" alt="" />Gemini</div>
                 <div class="client grok" aria-hidden="true"><img src="../Resources/GrokOfficial.png" alt="" />Grok</div>
