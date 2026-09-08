@@ -16,10 +16,17 @@ mkdir -p build/classes
 find src/main/java -name '*.java' -print0 | xargs -0 "$JAVA_HOME/bin/javac" --release 21 --add-modules jdk.httpserver -encoding UTF-8 -d build/classes
 mkdir -p build/classes/assets
 cp ../Resources/TokenProCosmosIcon.png build/classes/assets/TokenProCosmosIcon.png
+cp ../Resources/LoginCosmos-v2.png build/classes/assets/LoginCosmos-v2.png
+cp ../Resources/ModelUniverseVortex.png build/classes/assets/ModelUniverseVortex.png
+cp ../Resources/OpenAIBlossomRuntime.png build/classes/assets/OpenAIBlossomRuntime.png
+cp ../Resources/ClaudeSparkRuntime.png build/classes/assets/ClaudeSparkRuntime.png
+cp ../Resources/GeminiSparkTransparent.png build/classes/assets/GeminiSparkTransparent.png
+cp ../Resources/GrokMarkTransparent.png build/classes/assets/GrokMarkTransparent.png
+cp ../Resources/UnknownModelRuntime.png build/classes/assets/UnknownModelRuntime.png
 cat > build/manifest.mf <<'EOF'
 Main-Class: work.tokenpro.client.Main
 Implementation-Title: TokenPro
-Implementation-Version: 1.0.0
+Implementation-Version: 1.1.0
 
 EOF
 "$JAVA_HOME/bin/jar" --create --file build/TokenPro.jar --manifest build/manifest.mf -C build/classes .

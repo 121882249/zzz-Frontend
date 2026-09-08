@@ -5,15 +5,16 @@
 ## 当前功能
 
 - TokenPro 邮箱密码登录和登录状态恢复。
-- 读取并导入账户中的 API Key。
-- 配置 TokenPro 接口地址和模型 ID。
+- 从模型广场选择 Codex 模型，自动创建和复用 `TokenPro · Codex` 专用 Key。
 - 安全地保存 API Key，通过 Codex command-backed authentication 提供凭据。
-- 备份、接入和恢复 Codex 配置。
+- 备份、接入和一键恢复 Codex 官方配置。
 - 读取模型广场，并将选择的模型接入 Claude Desktop。
 - 登录后的“我的账户”仅显示账户余额和退出账户操作。
 - 纯 Java 本地桥接仅监听 `127.0.0.1`，支持 Anthropic Messages、OpenAI Responses、工具调用和 SSE 流式响应。
 - 为 Claude 创建专用 API Key；每次请求会先验证账户和可用分组，再自动切换 Key 分组。
-- 在 TokenPro 内置浏览器中打开后台管理、使用文档和充值页，并可启动 Codex 和 Claude。
+- 桌面客户端提供“选择模型 / 恢复官方配置 / 打开应用”；命令行客户端提供下载入口和打开命令行。
+- 在 TokenPro 内置浏览器中打开后台管理、使用文档、充值页和 GitHub 版本页。
+- 内置 GitHub Releases 更新检查。
 - 配置目录自动适配 `%APPDATA%`、macOS Application Support 和 Linux XDG。
 
 Claude 桥接配置和上游凭据保存在当前用户的 TokenPro 配置目录。Claude Desktop 只获得随机生成的本机桥接令牌，不会读取上游 API Key。

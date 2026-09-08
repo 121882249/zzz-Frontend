@@ -58,36 +58,48 @@ final class ApiClient {
     }
 
     ManagedKey claudeManagedKey(String token, long initialGroupId) throws Exception {
+        return managedKey(token, "TokenPro · Claude", initialGroupId);
+    }
+
+    ManagedKey codexManagedKey(String token, long initialGroupId) throws Exception {
+        return managedKey(token, "TokenPro · Codex", initialGroupId);
+    }
+
+    private ManagedKey managedKey(String token, String keyName, long initialGroupId) throws Exception {
         for (int page = 1; page <= 100; page++) {
             Map<String, Object> result = request("/keys?page=" + page + "&page_size=100", "GET", null, token);
             List<?> items = result.get("items") instanceof List<?> list ? list : List.of();
             for (Object raw : items) {
                 Map<String, Object> item = Json.object(raw);
-                if (!"TokenPro · Claude".equals(text(item.get("name")))) continue;
-                if (!"active".equals(text(item.get("status")))) throw new IllegalStateException("TokenPro · Claude 专用 Key 已停用");
+                if (!keyName.equals(text(item.get("name")))) continue;
+                if (!"active".equals(text(item.get("status")))) throw new IllegalStateException(keyName + " 专用 Key 已停用");
                 Long id = integer(item.get("id"));
-                if (id == null) throw new IllegalStateException("Claude 专用 Key 缺少编号");
-                switchClaudeGroup(token, id, initialGroupId);
+                if (id == null) throw new IllegalStateException(keyName + " 专用 Key 缺少编号");
+                switchManagedGroup(token, id, initialGroupId, keyName);
                 String key = text(key(token, id).get("key"));
                 validateKey(key);
                 return new ManagedKey(id, key);
             }
             if (items.size() < 100) break;
         }
-        Map<String, Object> created = request("/keys", "POST", Map.of("name", "TokenPro · Claude", "group_id", initialGroupId), token);
+        Map<String, Object> created = request("/keys", "POST", Map.of("name", keyName, "group_id", initialGroupId), token);
         Long id = integer(created.get("id"));
         String key = text(created.get("key"));
-        if (id == null) throw new IllegalStateException("TokenPro 未返回 Claude 专用 Key 编号");
+        if (id == null) throw new IllegalStateException("TokenPro 未返回专用 Key 编号");
         validateKey(key);
         return new ManagedKey(id, key);
     }
 
     void switchClaudeGroup(String token, long keyId, long groupId) throws Exception {
+        switchManagedGroup(token, keyId, groupId, "TokenPro · Claude");
+    }
+
+    private void switchManagedGroup(String token, long keyId, long groupId, String keyName) throws Exception {
         boolean allowed = availableGroups(token).stream().anyMatch(group -> Objects.equals(integer(group.get("id")), groupId));
         if (!allowed) throw new IllegalStateException("该模型分组当前不可用");
         Map<String, Object> before = key(token, keyId);
-        if (!"TokenPro · Claude".equals(text(before.get("name"))) || !"active".equals(text(before.get("status")))) {
-            throw new IllegalStateException("Claude 专用 Key 不可用");
+        if (!keyName.equals(text(before.get("name"))) || !"active".equals(text(before.get("status")))) {
+            throw new IllegalStateException(keyName + " 专用 Key 不可用");
         }
         Long current = integer(before.get("group_id"));
         if (current == null && before.get("group") instanceof Map<?, ?> group) current = integer(Json.object(group).get("id"));
@@ -123,7 +135,7 @@ final class ApiClient {
     private static String text(Object value) { return value == null ? "" : String.valueOf(value); }
     private static void validateKey(String key) {
         if (key.length() < 8 || key.contains("*") || key.contains("…") || key.contains("...") || key.chars().anyMatch(Character::isWhitespace)) {
-            throw new IllegalStateException("服务器没有返回完整的 Claude 专用 Key");
+            throw new IllegalStateException("服务器没有返回完整的专用 Key");
         }
     }
 

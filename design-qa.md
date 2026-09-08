@@ -56,12 +56,15 @@ The official marks, input borders, login card, title bar, and CTA were checked a
 - Logout returns to the login view.
 - Page reload restores the empty login state.
 - Browser console contains no warnings or errors.
+- The packaged Java 21 macOS application was installed and inspected at the real application window. The login hero, Chinese typography, galaxy vortex, provider marks, glass login card, title-bar integration, and responsive 1280 × 820 layout render correctly.
+- The packaged dashboard restores the saved TokenPro session, reads the live balance, detects Codex/ChatGPT and Claude, shows the original four-client hierarchy, disables desktop launch until a model is selected, and exposes the model-settings actions.
+- Live authenticated checks for `/auth/me`, `/groups/available`, and `/model-plaza` returned HTTP 200. The Java self-test passes all 15 configuration, bridge, authentication, and streaming checks.
 
-**Implementation checklist**
+**Implementation status**
 
-- Use this approved visual as the source for the Java Swing login gate.
-- Keep real API authentication as email plus password.
-- Add loading, error, and disabled states during implementation.
-- Sync the approved design back to Figma when the Starter MCP allowance resets.
+- The approved visual is implemented as the Java Swing login gate.
+- Authentication uses the real TokenPro email/password API with loading, validation, error, session restore, and disabled states.
+- Codex and Claude provide model selection, managed credentials, official configuration restore, and application launch. CLI cards provide install guidance and terminal launch.
+- Backend management, documentation, recharge, and release pages use the TokenPro in-app browser shell.
 
 final result: passed

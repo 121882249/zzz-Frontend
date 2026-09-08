@@ -4,16 +4,21 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.geom.RoundRectangle2D;
+import java.net.URI;
 import java.net.URL;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.Callable;
 
 final class TokenProFrame extends JFrame {
     private static final Color PURPLE = new Color(102, 82, 240);
-    private static final Color CANVAS = new Color(251, 251, 253);
-    private static final Color SIDEBAR = new Color(244, 244, 248);
-    private static final Color MUTED = new Color(104, 106, 116);
+    private static final Color CANVAS = new Color(4, 7, 22);
+    private static final Color SIDEBAR = new Color(7, 11, 29);
+    private static final Color TEXT = new Color(242, 245, 255);
+    private static final Color MUTED = new Color(145, 154, 185);
     private final SecureStore store;
     private final ApiClient api = new ApiClient();
     private final CodexConfig codex;
@@ -29,6 +34,8 @@ final class TokenProFrame extends JFrame {
     private final JLabel status = new JLabel("就绪");
     private final DefaultListModel<PricedModel> claudeModels = new DefaultListModel<>();
     private final JList<PricedModel> claudeModelList = new JList<>(claudeModels);
+    private final DefaultListModel<PricedModel> codexModels = new DefaultListModel<>();
+    private final JList<PricedModel> codexModelList = new JList<>(codexModels);
     private final JLabel bridgeStatus = new JLabel("桥接状态：未检测");
     private final CardLayout pages = new CardLayout();
     private final JPanel pageHost = new JPanel(pages);
@@ -38,6 +45,12 @@ final class TokenProFrame extends JFrame {
     private final JLabel headerBalance = new JLabel("—");
     private final JLabel accountBalance = new JLabel("—");
     private final JLabel homeClaudeStatus = new JLabel("请先选择模型");
+    private final JLabel homeCodexStatus = new JLabel("请先选择模型");
+    private JButton codexLaunch;
+    private JButton claudeLaunch;
+    private final CardLayout views = new CardLayout();
+    private final JPanel viewHost = new JPanel(views);
+    private CosmosLoginPanel loginView;
     private String accessToken;
     private String accountId = "";
 
@@ -47,15 +60,30 @@ final class TokenProFrame extends JFrame {
         this.codex = new CodexConfig(store);
         URL iconUrl = TokenProFrame.class.getResource("/assets/TokenProCosmosIcon.png");
         if (iconUrl != null) setIconImage(new ImageIcon(iconUrl).getImage());
+        if (Platform.OS_KIND == Platform.OS.MAC) {
+            getRootPane().putClientProperty("apple.awt.fullWindowContent", true);
+            getRootPane().putClientProperty("apple.awt.transparentTitleBar", true);
+        }
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
-        setMinimumSize(new Dimension(940, 650));
-        setSize(1040, 720);
+        setMinimumSize(new Dimension(1080, 720));
+        setSize(1280, 820);
         setLocationRelativeTo(null);
         setContentPane(content());
         restoreSession();
     }
 
     private JComponent content() {
+        CosmosLoginPanel.Backdrop shell = new CosmosLoginPanel.Backdrop();
+        viewHost.setOpaque(false);
+        loginView = new CosmosLoginPanel(email, password, e -> authenticate());
+        viewHost.add(loginView, "login");
+        viewHost.add(dashboard(), "dashboard");
+        shell.add(viewHost, BorderLayout.CENTER);
+        views.show(viewHost, "login");
+        return shell;
+    }
+
+    private JComponent dashboard() {
         JPanel root = new JPanel(new BorderLayout()); root.setBackground(CANVAS);
         root.add(sidebar(), BorderLayout.WEST);
         JPanel main = new JPanel(new BorderLayout()); main.setBackground(CANVAS); main.add(header(), BorderLayout.NORTH);
@@ -74,22 +102,25 @@ final class TokenProFrame extends JFrame {
     private JComponent sidebar() {
         JPanel panel = new JPanel(new BorderLayout()); panel.setBackground(SIDEBAR); panel.setPreferredSize(new Dimension(226, 650));
         JPanel top = new JPanel(); top.setOpaque(false); top.setBorder(new EmptyBorder(25, 12, 10, 12)); top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
-        JLabel brand = new JLabel("  ◈  TokenPro"); brand.setFont(appFont(17, Font.BOLD)); brand.setForeground(new Color(30, 30, 36)); brand.setBorder(new EmptyBorder(0, 5, 24, 0)); top.add(brand);
-        addNav(top, "首页", "✦");
+        JLabel brand = new JLabel("  TokenPro", resourceIcon("TokenProCosmosIcon.png", 28), SwingConstants.LEFT); brand.setFont(appFont(17, Font.BOLD)); brand.setForeground(TEXT); brand.setBorder(new EmptyBorder(0, 5, 24, 0)); top.add(brand);
+        addNav(top, "首页", "");
         JButton backend = sideAction("⚙   后台管理"); backend.addActionListener(e -> browse("https://tokenpro.work/admin/dashboard")); top.add(backend); top.add(Box.createVerticalStrut(6));
         JButton docs = sideAction("▤   使用文档"); docs.addActionListener(e -> browse("https://tokenpro.work/docs")); top.add(docs); top.add(Box.createVerticalStrut(6));
-        JButton tools = sideAction("•••   工具"); tools.addActionListener(e -> showPage("工具")); top.add(tools); panel.add(top, BorderLayout.NORTH);
+        panel.add(top, BorderLayout.NORTH);
         JPanel bottom = new JPanel(new BorderLayout()); bottom.setOpaque(false); bottom.setBorder(new EmptyBorder(0, 12, 18, 12)); NavButton accountNav = new NavButton("●   我的账户"); accountNav.addActionListener(e -> openAccount()); navButtons.put("我的账户", accountNav); bottom.add(accountNav); panel.add(bottom, BorderLayout.SOUTH); return panel;
     }
 
-    private void addNav(JPanel parent, String page, String icon) { NavButton button = new NavButton(icon + "   " + page); button.addActionListener(e -> showPage(page)); navButtons.put(page, button); parent.add(button); parent.add(Box.createVerticalStrut(6)); }
-    private JButton sideAction(String text) { JButton button = new JButton(text); button.setFont(appFont(13, Font.PLAIN)); button.setHorizontalAlignment(SwingConstants.LEFT); button.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42)); button.setBorder(new EmptyBorder(0, 16, 0, 16)); button.setFocusPainted(false); button.setContentAreaFilled(false); return button; }
+    private void addNav(JPanel parent, String page, String icon) { NavButton button = new NavButton((icon.isBlank() ? "" : icon + "   ") + page); if (page.equals("首页")) { button.setIcon(resourceIcon("TokenProCosmosIcon.png", 18)); button.setIconTextGap(12); } button.addActionListener(e -> showPage(page)); navButtons.put(page, button); parent.add(button); parent.add(Box.createVerticalStrut(6)); }
+    private JButton sideAction(String text) { JButton button = new JButton(text); button.setFont(appFont(13, Font.PLAIN)); button.setForeground(new Color(203, 211, 238)); button.setHorizontalAlignment(SwingConstants.LEFT); button.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42)); button.setBorder(new EmptyBorder(0, 16, 0, 16)); button.setFocusPainted(false); button.setContentAreaFilled(false); return button; }
 
     private JComponent header() {
         GradientPanel panel = new GradientPanel(); panel.setLayout(new BorderLayout(0, 18)); panel.setBorder(new EmptyBorder(24, 28, 21, 28));
         JPanel title = transparent(new BorderLayout()); headerTitle.setFont(appFont(24, Font.BOLD)); title.add(headerTitle, BorderLayout.WEST);
-        JButton user = soft("●  登录账户"); user.addActionListener(e -> openAccount()); headerUser.addPropertyChangeListener("text", e -> user.setText("●  " + headerUser.getText())); title.add(user, BorderLayout.EAST); panel.add(title, BorderLayout.NORTH);
-        RoundedPanel wallet = new RoundedPanel(16, new Color(255, 255, 255, 125)); wallet.setLayout(new FlowLayout(FlowLayout.LEFT, 14, 11)); wallet.setBorder(new EmptyBorder(0, 7, 0, 7));
+        JPanel right = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        JButton update = soft("↻  检查更新"); update.addActionListener(e -> checkForUpdates(update)); right.add(update);
+        JButton user = soft("●  登录账户"); user.addActionListener(e -> openAccount()); headerUser.addPropertyChangeListener("text", e -> user.setText("●  " + headerUser.getText())); right.add(user);
+        title.add(right, BorderLayout.EAST); panel.add(title, BorderLayout.NORTH);
+        RoundedPanel wallet = new RoundedPanel(16, new Color(15, 22, 48, 220)); wallet.setLayout(new FlowLayout(FlowLayout.LEFT, 14, 11)); wallet.setBorder(new EmptyBorder(0, 7, 0, 7));
         JPanel captions = transparent(); captions.setLayout(new BoxLayout(captions, BoxLayout.Y_AXIS)); JLabel balanceText = new JLabel("钱包余额"); balanceText.setFont(appFont(12, Font.PLAIN)); balanceText.setForeground(MUTED); JLabel rate = new JLabel("充值比例  1￥ = 1$"); rate.setFont(appFont(10, Font.PLAIN)); rate.setForeground(MUTED); captions.add(balanceText); captions.add(rate); wallet.add(captions);
         headerBalance.setFont(appFont(27, Font.BOLD)); wallet.add(headerBalance); JButton refresh = soft("↻"); refresh.addActionListener(e -> refreshAccount()); wallet.add(refresh); JButton recharge = soft("＋ 充值"); recharge.addActionListener(e -> browse("https://tokenpro.work/purchase")); wallet.add(recharge);
         JPanel row = transparent(new FlowLayout(FlowLayout.LEFT, 0, 0)); row.add(wallet); panel.add(row, BorderLayout.CENTER); return panel;
@@ -97,20 +128,30 @@ final class TokenProFrame extends JFrame {
 
     private JComponent homePanel() {
         JPanel panel = vertical(); JLabel title = new JLabel("我的客户端"); title.setFont(appFont(14, Font.BOLD)); panel.add(title); panel.add(Box.createVerticalStrut(11));
-        panel.add(clientCard("C", "Codex 客户端", "桌面应用 · 独立登录", Platform.applicationInstalled("Codex"), "选择模型", () -> showPage("Codex 连接"), () -> openApp("Codex"), null)); panel.add(Box.createVerticalStrut(12));
-        panel.add(clientCard("A", "Claude 客户端", "桌面应用 · 本地安全桥接", Platform.applicationInstalled("Claude"), "选择模型", () -> showPage("Claude 连接"), this::openClaude, homeClaudeStatus)); panel.add(Box.createVerticalStrut(12));
-        panel.add(clientCard("›_", "Codex 命令行", "命令行工具 · Codex CLI", Platform.commandInstalled("codex"), "配置连接", () -> showPage("Codex 连接"), () -> openApp("Codex"), null)); panel.add(Box.createVerticalStrut(12));
-        panel.add(clientCard("›_", "Claude 命令行", "命令行工具 · Claude Code", Platform.commandInstalled("claude"), "配置连接", () -> showPage("Claude 连接"), this::openClaude, null)); panel.add(Box.createVerticalGlue()); return panel;
+        panel.add(desktopClientCard("Codex 客户端", "桌面应用 · 独立登录", Platform.applicationInstalled("Codex"), "Codex", () -> showPage("Codex 连接"), this::restoreCodex, () -> openApp("Codex"), homeCodexStatus)); panel.add(Box.createVerticalStrut(12));
+        panel.add(desktopClientCard("Claude 客户端", "桌面应用 · 独立登录", Platform.applicationInstalled("Claude"), "Claude", () -> showPage("Claude 连接"), this::restoreClaude, this::openClaude, homeClaudeStatus)); panel.add(Box.createVerticalStrut(12));
+        panel.add(commandClientCard("Codex 命令行", "命令行工具 · Codex CLI", "Codex", "codex", "https://learn.chatgpt.com/docs/codex/cli")); panel.add(Box.createVerticalStrut(12));
+        panel.add(commandClientCard("Claude 命令行", "命令行工具 · Claude Code", "Claude", "claude", "https://docs.anthropic.com/en/docs/claude-code/getting-started")); panel.add(Box.createVerticalGlue()); return panel;
     }
 
-    private JComponent clientCard(String icon, String title, String subtitle, boolean installed, String setup, Runnable configure, Runnable open, JLabel state) {
+    private JComponent desktopClientCard(String title, String subtitle, boolean installed, String iconName, Runnable chooseModel, Runnable restore, Runnable open, JLabel state) {
         RoundedPanel card = card(); card.setLayout(new BorderLayout(16, 0));
-        JLabel badge = new JLabel(icon, SwingConstants.CENTER);
-        if (title.startsWith("Codex")) { badge.setText(""); badge.setIcon(OfficialIcons.client("Codex", 52)); }
-        else if (title.startsWith("Claude")) { badge.setText(""); badge.setIcon(OfficialIcons.client("Claude", 52)); }
-        badge.setFont(appFont(icon.equals("›_") ? 17 : 26, Font.BOLD)); badge.setForeground(PURPLE); badge.setPreferredSize(new Dimension(54, 54)); card.add(badge, BorderLayout.WEST);
+        JLabel badge = new JLabel(OfficialIcons.client(iconName, 52)); badge.setPreferredSize(new Dimension(54, 54)); card.add(badge, BorderLayout.WEST);
         JPanel words = transparent(); words.setLayout(new BoxLayout(words, BoxLayout.Y_AXIS)); JLabel heading = new JLabel(title + "   " + (installed ? "已安装" : "未安装")); heading.setFont(appFont(19, Font.BOLD)); JLabel detail = new JLabel(subtitle); detail.setFont(appFont(12, Font.PLAIN)); detail.setForeground(MUTED); words.add(Box.createVerticalStrut(4)); words.add(heading); words.add(Box.createVerticalStrut(7)); words.add(detail); card.add(words, BorderLayout.CENTER);
-        JPanel actions = transparent(); actions.setLayout(new BoxLayout(actions, BoxLayout.Y_AXIS)); JPanel buttons = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0)); JButton choose = soft(setup); choose.addActionListener(e -> configure.run()); JButton launch = primary("打开应用"); launch.addActionListener(e -> open.run()); buttons.add(choose); buttons.add(launch); actions.add(buttons); if (state != null) { state.setFont(appFont(11, Font.BOLD)); state.setForeground(PURPLE); state.setAlignmentX(Component.RIGHT_ALIGNMENT); actions.add(Box.createVerticalStrut(7)); actions.add(state); } card.add(actions, BorderLayout.EAST); return card;
+        JPanel actions = transparent(); actions.setLayout(new BoxLayout(actions, BoxLayout.Y_AXIS)); JPanel buttons = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        JButton menu = soft("模型设置  ▾");
+        JPopupMenu popup = new JPopupMenu(); JMenuItem choose = new JMenuItem("选择模型"); choose.addActionListener(e -> chooseModel.run()); JMenuItem official = new JMenuItem("恢复官方配置"); official.addActionListener(e -> restore.run()); popup.add(choose); popup.add(official); menu.addActionListener(e -> popup.show(menu, 0, menu.getHeight()));
+        JButton launch = primary("打开应用"); launch.addActionListener(e -> open.run()); launch.setEnabled(false);
+        if (iconName.equals("Codex")) codexLaunch = launch; else claudeLaunch = launch;
+        buttons.add(menu); buttons.add(launch); actions.add(buttons); state.setFont(appFont(11, Font.BOLD)); state.setForeground(PURPLE); state.setAlignmentX(Component.RIGHT_ALIGNMENT); actions.add(Box.createVerticalStrut(7)); actions.add(state); card.add(actions, BorderLayout.EAST); return card;
+    }
+
+    private JComponent commandClientCard(String title, String subtitle, String iconName, String command, String downloadUrl) {
+        boolean installed = Platform.commandInstalled(command);
+        RoundedPanel card = card(); card.setLayout(new BorderLayout(16, 0));
+        JLabel badge = new JLabel(OfficialIcons.client(iconName, 52)); badge.setPreferredSize(new Dimension(54, 54)); card.add(badge, BorderLayout.WEST);
+        JPanel words = transparent(); words.setLayout(new BoxLayout(words, BoxLayout.Y_AXIS)); JLabel heading = new JLabel(title); heading.setFont(appFont(19, Font.BOLD)); JLabel detail = new JLabel(subtitle); detail.setFont(appFont(12, Font.PLAIN)); detail.setForeground(MUTED); words.add(Box.createVerticalStrut(4)); words.add(heading); words.add(Box.createVerticalStrut(7)); words.add(detail); card.add(words, BorderLayout.CENTER);
+        JPanel buttons = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0)); JButton download = soft(installed ? "已安装" : "去下载"); download.setEnabled(!installed); download.addActionListener(e -> browse(downloadUrl)); JButton terminal = primary("打开 " + (iconName.equals("Codex") ? "Codex 命令行" : "Claude 命令行")); terminal.setEnabled(installed); terminal.addActionListener(e -> openTerminal(command)); buttons.add(download); buttons.add(terminal); card.add(buttons, BorderLayout.EAST); return card;
     }
 
     private JComponent accountPanel() {
@@ -138,62 +179,98 @@ final class TokenProFrame extends JFrame {
     }
 
     private void openAccount() {
-        if (accessToken == null) { showLoginDialog(); return; }
+        if (accessToken == null) { showLoginScreen(); return; }
         showPage("我的账户");
     }
 
-    private void showLoginDialog() {
-        JPanel form = new JPanel(new GridLayout(0, 1, 6, 6));
-        form.add(new JLabel("邮箱")); form.add(email);
-        form.add(new JLabel("密码")); form.add(password);
-        int choice = JOptionPane.showConfirmDialog(this, form, "登录 TokenPro", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-        if (choice != JOptionPane.OK_OPTION) return;
-        async("正在登录…", () -> {
-            Map<String, Object> result = api.login(email.getText(), new String(password.getPassword()));
-            accessToken = string(result.get("access_token"));
-            if (accessToken.isBlank()) throw new IllegalStateException("登录响应缺少 access_token");
-            store.write("java-session.json", Json.stringify(Map.of("access_token", accessToken)));
-            return result.containsKey("user") ? Json.object(result.get("user")) : api.me(accessToken);
-        }, user -> { showAccount(user); showPage("我的账户"); });
+    private void authenticate() {
+        String emailValue = email.getText().trim();
+        char[] secret = password.getPassword();
+        if (emailValue.isBlank() || secret.length == 0) {
+            Arrays.fill(secret, '\0');
+            loginView.setLoading(false, "请输入邮箱和密码");
+            return;
+        }
+        String passwordValue = new String(secret); Arrays.fill(secret, '\0');
+        loginView.setLoading(true, "正在安全连接 TokenPro…");
+        new SwingWorker<Map<String, Object>, Void>() {
+            protected Map<String, Object> doInBackground() throws Exception {
+                Map<String, Object> result = api.login(emailValue, passwordValue);
+                accessToken = string(result.get("access_token"));
+                if (accessToken.isBlank()) throw new IllegalStateException("登录响应缺少 access_token");
+                store.write("java-session.json", Json.stringify(Map.of("access_token", accessToken)));
+                return result.containsKey("user") ? Json.object(result.get("user")) : api.me(accessToken);
+            }
+            protected void done() {
+                try {
+                    showAccount(get()); updateCodexStatus(); updateBridgeStatus(); showPage("首页"); showDashboardScreen(); loginView.setLoading(false, null);
+                } catch (Exception e) {
+                    accessToken = null;
+                    Throwable cause = e.getCause() == null ? e : e.getCause();
+                    loginView.setLoading(false, "登录失败：" + cause.getMessage());
+                }
+            }
+        }.execute();
+    }
+
+    private void showLoginScreen() {
+        views.show(viewHost, "login");
+        loginView.setLoading(false, null);
+    }
+
+    private void showDashboardScreen() {
+        views.show(viewHost, "dashboard");
     }
 
     private void logout() {
         try {
             store.delete("java-session.json"); accessToken = null; accountId = ""; keys.clear();
             account.setText("尚未登录"); headerUser.setText("登录账户"); headerBalance.setText("—"); accountBalance.setText("—");
-            showPage("首页"); status("已退出账户");
+            homeCodexStatus.setText("请先选择模型"); homeClaudeStatus.setText("请先选择模型"); if (codexLaunch != null) codexLaunch.setEnabled(false); if (claudeLaunch != null) claudeLaunch.setEnabled(false);
+            showPage("首页"); showLoginScreen(); status("已退出账户");
         } catch (Exception ex) { error(ex); }
     }
 
     private JComponent connectionPanel() {
         JPanel panel = vertical();
-        panel.add(pageHeading("Codex 连接", "将 TokenPro 接口安全接入 Codex，令牌不会写入 config.toml。"));
-        panel.add(Box.createVerticalStrut(18));
-        panel.add(row("连接名称", name));
-        panel.add(row("接口地址", baseUrl));
-        panel.add(row("模型 ID", model));
-        panel.add(row("API Key", apiKey));
-        JLabel hint = new JLabel("Key 只保存在当前系统用户的 TokenPro 配置目录中，不写入 Codex config.toml。");
-        hint.setForeground(Color.GRAY);
-        panel.add(hint);
-        panel.add(Box.createVerticalStrut(12));
-        JButton apply = new JButton("应用到 Codex");
-        primary(apply);
-        apply.addActionListener(e -> {
-            try {
-                codex.apply(baseUrl.getText(), model.getText(), new String(apiKey.getPassword()));
-                Arrays.fill(apiKey.getPassword(), '\0');
-                apiKey.setText("");
-                status("Codex 配置已更新，重新打开 Codex 后生效");
-            } catch (Exception ex) { error(ex); }
-        });
-        JButton restore = new JButton("恢复接入前配置");
-        soft(restore);
-        restore.addActionListener(e -> { try { codex.restore(); status("Codex 原配置已恢复"); } catch (Exception ex) { error(ex); } });
-        JPanel buttons = transparent(new FlowLayout(FlowLayout.LEFT));
-        buttons.add(apply); buttons.add(restore);
-        panel.add(buttons);
+        panel.add(pageHeading("选择 Codex 模型", "选择一个模型后，TokenPro 会自动创建专用连接并写入 Codex 配置。"));
+        panel.add(Box.createVerticalStrut(15));
+        JLabel hint = new JLabel("专用 Key 保存在当前系统账户的 TokenPro 安全目录中，可随时恢复官方配置。"); hint.setForeground(MUTED); panel.add(hint); panel.add(Box.createVerticalStrut(10));
+        JButton load = soft("加载可用模型"); load.setAlignmentX(Component.LEFT_ALIGNMENT); load.addActionListener(e -> loadCodexModels()); panel.add(load);
+        codexModelList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION); codexModelList.setVisibleRowCount(7); codexModelList.setFixedCellHeight(46); codexModelList.setCellRenderer(new ModelRenderer());
+        JScrollPane modelScroll = new JScrollPane(codexModelList); modelScroll.setPreferredSize(new Dimension(640, 260)); modelScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, 280)); panel.add(modelScroll); panel.add(Box.createVerticalStrut(10));
+        JButton apply = primary("应用到 Codex"); apply.addActionListener(e -> applyCodex()); JButton restore = soft("恢复 Codex 官方配置"); restore.addActionListener(e -> restoreCodex());
+        JPanel buttons = transparent(new FlowLayout(FlowLayout.LEFT)); buttons.add(apply); buttons.add(restore); panel.add(buttons);
         return panel;
+    }
+
+    private void loadCodexModels() {
+        if (accessToken == null) { error(new IllegalStateException("请先登录 TokenPro")); return; }
+        async("正在加载模型广场…", () -> api.pricedModels(accessToken), models -> {
+            codexModels.clear();
+            for (PricedModel item : models) if (!item.name().toLowerCase(Locale.ROOT).contains("image")) codexModels.addElement(item);
+            status("已加载 " + codexModels.size() + " 个可用模型");
+        });
+    }
+
+    private void applyCodex() {
+        if (accessToken == null || accountId.isBlank()) { error(new IllegalStateException("请先登录 TokenPro")); return; }
+        PricedModel selected = codexModelList.getSelectedValue();
+        if (selected == null) { error(new IllegalStateException("请选择一个模型")); return; }
+        async("正在创建 Codex 专用连接…", () -> {
+            ApiClient.ManagedKey managed = api.codexManagedKey(accessToken, selected.groupId());
+            codex.apply("https://tokenpro.work/v1", selected.name(), managed.key());
+            store.write("codex-selected.json", Json.stringify(Map.of("model", selected.name(), "group_id", selected.groupId(), "key_id", managed.id())));
+            return selected;
+        }, selectedModel -> {
+            homeCodexStatus.setText(selectedModel.name()); if (codexLaunch != null) codexLaunch.setEnabled(true);
+            status("Codex 已接入 " + selectedModel.name() + "，重新打开 Codex 后生效"); showPage("首页");
+        });
+    }
+
+    private void restoreCodex() {
+        try { codex.restore(); store.delete("codex-selected.json"); homeCodexStatus.setText("请先选择模型"); if (codexLaunch != null) codexLaunch.setEnabled(false); status("Codex 已恢复官方配置"); }
+        catch (Exception ex) { error(ex); }
     }
 
     private JComponent toolsPanel() {
@@ -233,7 +310,7 @@ final class TokenProFrame extends JFrame {
         soft(check);
         JButton restore = new JButton("恢复 Claude 官方配置");
         soft(restore);
-        restore.addActionListener(e -> { try { ClaudeDesktopConfig.restoreOfficial(store); bridgeStatus.setText("桥接状态：Claude 已恢复官方配置"); status("Claude 已恢复官方配置"); } catch (Exception ex) { error(ex); } });
+        restore.addActionListener(e -> restoreClaude());
         JPanel buttons = transparent(new FlowLayout(FlowLayout.LEFT)); buttons.add(apply); buttons.add(check); buttons.add(restore); panel.add(buttons);
         SwingUtilities.invokeLater(this::updateBridgeStatus);
         return panel;
@@ -256,12 +333,17 @@ final class TokenProFrame extends JFrame {
             ApiClient.ManagedKey managed = api.claudeManagedKey(accessToken, selected.getFirst().groupId());
             ClaudeBridgeConfig config = ClaudeBridgeConfig.create(accountId, accessToken, managed, selected);
             config.save(store); ClaudeDesktopConfig.install(store, config); ClaudeBridgeManager.ensureRunning(store); return config;
-        }, config -> { bridgeStatus.setText("桥接状态：运行中 · " + config.routes().size() + " 个模型 · " + config.baseUrl()); homeClaudeStatus.setText("已选 " + config.routes().size() + " 个模型"); status("Claude 桥接已应用，重新打开 Claude 后生效"); });
+        }, config -> { bridgeStatus.setText("桥接状态：运行中 · " + config.routes().size() + " 个模型 · " + config.baseUrl()); homeClaudeStatus.setText("已选 " + config.routes().size() + " 个模型"); if (claudeLaunch != null) claudeLaunch.setEnabled(true); status("Claude 桥接已应用，重新打开 Claude 后生效"); showPage("首页"); });
     }
 
     private void updateBridgeStatus() {
-        try { ClaudeBridgeConfig config = ClaudeBridgeConfig.load(store); boolean healthy = ClaudeBridgeManager.healthy(store); bridgeStatus.setText("桥接状态：" + (healthy ? "运行中" : "已配置") + " · " + config.routes().size() + " 个模型"); homeClaudeStatus.setText("已选 " + config.routes().size() + " 个模型"); }
-        catch (Exception e) { bridgeStatus.setText("桥接状态：未配置"); homeClaudeStatus.setText("请先选择模型"); }
+        try { ClaudeBridgeConfig config = ClaudeBridgeConfig.load(store); boolean healthy = ClaudeBridgeManager.healthy(store); bridgeStatus.setText("桥接状态：" + (healthy ? "运行中" : "已配置") + " · " + config.routes().size() + " 个模型"); homeClaudeStatus.setText("已选 " + config.routes().size() + " 个模型"); if (claudeLaunch != null) claudeLaunch.setEnabled(true); }
+        catch (Exception e) { bridgeStatus.setText("桥接状态：未配置"); homeClaudeStatus.setText("请先选择模型"); if (claudeLaunch != null) claudeLaunch.setEnabled(false); }
+    }
+
+    private void restoreClaude() {
+        try { ClaudeDesktopConfig.restoreOfficial(store); bridgeStatus.setText("桥接状态：Claude 已恢复官方配置"); homeClaudeStatus.setText("请先选择模型"); if (claudeLaunch != null) claudeLaunch.setEnabled(false); status("Claude 已恢复官方配置"); }
+        catch (Exception ex) { error(ex); }
     }
 
     private void openClaude() {
@@ -275,7 +357,19 @@ final class TokenProFrame extends JFrame {
             if (raw.isEmpty()) return null;
             accessToken = string(Json.object(Json.parse(raw.get())).get("access_token"));
             return accessToken.isBlank() ? null : api.me(accessToken);
-        }, value -> { if (value == null) status("就绪"); else showAccount(value); });
+        }, value -> {
+            if (value == null) { status("就绪"); showLoginScreen(); }
+            else { showAccount(value); updateCodexStatus(); updateBridgeStatus(); showPage("首页"); showDashboardScreen(); }
+        });
+    }
+
+    private void updateCodexStatus() {
+        try {
+            Optional<String> raw = store.read("codex-selected.json");
+            if (raw.isEmpty()) throw new IllegalStateException("未选择");
+            String selected = string(Json.object(Json.parse(raw.get())).get("model")); if (selected.isBlank()) throw new IllegalStateException("未选择");
+            homeCodexStatus.setText(selected); if (codexLaunch != null) codexLaunch.setEnabled(true);
+        } catch (Exception ignored) { homeCodexStatus.setText("请先选择模型"); if (codexLaunch != null) codexLaunch.setEnabled(false); }
     }
 
     private void loadKeys() {
@@ -356,21 +450,62 @@ final class TokenProFrame extends JFrame {
         async("正在刷新余额…", () -> api.me(accessToken), this::showAccount);
     }
 
+    private void checkForUpdates(JButton button) {
+        button.setEnabled(false); button.setText("检查中…");
+        status("正在检查更新…");
+        new SwingWorker<String[], Void>() {
+            protected String[] doInBackground() throws Exception {
+                String payload = "";
+                try {
+                    HttpRequest request = HttpRequest.newBuilder(URI.create("https://api.github.com/repos/121882249/TokenPro-Frontend/releases/latest"))
+                        .header("Accept", "application/vnd.github+json").timeout(java.time.Duration.ofSeconds(20)).GET().build();
+                    HttpResponse<String> response = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build().send(request, HttpResponse.BodyHandlers.ofString());
+                    if (response.statusCode() == 200) payload = response.body();
+                } catch (Exception ignored) {}
+                if (payload.isBlank()) payload = Platform.githubLatestReleaseJson().orElse("");
+                if (payload.isBlank()) return new String[]{"", "https://github.com/121882249/TokenPro-Frontend/releases"};
+                Map<String, Object> release = Json.object(Json.parse(payload));
+                return new String[]{string(release.get("tag_name")).replaceFirst("^v", ""), string(release.get("html_url"))};
+            }
+            protected void done() {
+                button.setEnabled(true); button.setText("↻  检查更新");
+                try {
+                    String[] release = get();
+                    if (release[0].isBlank()) {
+                        int choice = JOptionPane.showConfirmDialog(TokenProFrame.this, "暂时无法自动读取版本信息，是否打开下载页面？", "检查更新", JOptionPane.YES_NO_OPTION);
+                        if (choice == JOptionPane.YES_OPTION) browse(release[1]);
+                    } else if (compareVersions(release[0], Main.VERSION) > 0) {
+                        int choice = JOptionPane.showConfirmDialog(TokenProFrame.this, "发现 TokenPro " + release[0] + "，现在打开下载页面吗？", "发现新版本", JOptionPane.YES_NO_OPTION);
+                        if (choice == JOptionPane.YES_OPTION) browse(release[1]);
+                    } else JOptionPane.showMessageDialog(TokenProFrame.this, "当前已是最新版本 " + Main.VERSION, "检查更新", JOptionPane.INFORMATION_MESSAGE);
+                    status("更新检查完成");
+                } catch (Exception ex) { error(ex.getCause() == null ? ex : ex.getCause()); }
+            }
+        }.execute();
+    }
+
+    private static int compareVersions(String left, String right) {
+        int[] a = Arrays.stream(left.split("[^0-9]+" )).filter(s -> !s.isBlank()).mapToInt(Integer::parseInt).toArray();
+        int[] b = Arrays.stream(right.split("[^0-9]+" )).filter(s -> !s.isBlank()).mapToInt(Integer::parseInt).toArray();
+        for (int i = 0; i < Math.max(a.length, b.length); i++) { int x = i < a.length ? a[i] : 0, y = i < b.length ? b[i] : 0; if (x != y) return Integer.compare(x, y); }
+        return 0;
+    }
+
     private RoundedPanel card() {
-        RoundedPanel panel = new RoundedPanel(15, Color.WHITE); panel.setBorder(new EmptyBorder(18, 18, 18, 18));
+        RoundedPanel panel = new RoundedPanel(18, new Color(12, 17, 37)); panel.setBorder(new EmptyBorder(18, 18, 18, 18));
         panel.setAlignmentX(Component.LEFT_ALIGNMENT); panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 112)); return panel;
     }
 
-    private JButton primary(String text) { JButton button = new JButton(text); primary(button); return button; }
+    private JButton primary(String text) { JButton button = new ActionButton(text, true); primary(button); return button; }
     private void primary(JButton button) {
         button.setFont(appFont(13, Font.BOLD)); button.setForeground(Color.WHITE); button.setBackground(PURPLE);
         button.setOpaque(true); button.setBorder(new EmptyBorder(11, 17, 11, 17)); button.setFocusPainted(false);
         button.setMaximumSize(button.getPreferredSize());
     }
 
-    private JButton soft(String text) { JButton button = new JButton(text); soft(button); return button; }
+    private JButton soft(String text) { JButton button = new ActionButton(text, false); soft(button); return button; }
     private void soft(JButton button) {
-        button.setFont(appFont(13, Font.BOLD)); button.setForeground(new Color(42, 42, 48)); button.setBackground(new Color(241, 241, 244));
+        button.setFont(appFont(13, Font.BOLD)); button.setForeground(new Color(222, 228, 249)); button.setBackground(new Color(24, 31, 58));
         button.setBorder(new EmptyBorder(10, 15, 10, 15)); button.setFocusPainted(false);
         button.setMaximumSize(button.getPreferredSize());
     }
@@ -378,6 +513,11 @@ final class TokenProFrame extends JFrame {
     private static JPanel transparent() { return transparent(new FlowLayout(FlowLayout.LEFT, 0, 0)); }
     private static JPanel transparent(LayoutManager layout) { JPanel panel = new JPanel(layout); panel.setOpaque(false); return panel; }
     private static Font appFont(float size, int style) { return new Font(Platform.OS_KIND == Platform.OS.MAC ? ".AppleSystemUIFont" : "SansSerif", style, Math.round(size)); }
+
+    private static ImageIcon resourceIcon(String name, int size) {
+        URL url = TokenProFrame.class.getResource("/assets/" + name); if (url == null) return null;
+        return new ImageIcon(new ImageIcon(url).getImage().getScaledInstance(size, size, Image.SCALE_SMOOTH));
+    }
 
     private <T> void async(String running, Callable<T> task, java.util.function.Consumer<T> done) {
         status(running);
@@ -391,6 +531,7 @@ final class TokenProFrame extends JFrame {
         SwingUtilities.invokeLater(() -> new InAppBrowserDialog(this, url).setVisible(true));
     }
     private void openApp(String app) { try { Platform.openApplication(app); } catch (Exception e) { error(e); } }
+    private void openTerminal(String command) { try { Platform.openTerminalCommand(command); } catch (Exception e) { error(e); } }
     private void status(String value) { status.setText(value); }
     private void error(Throwable error) { status("错误：" + error.getMessage()); JOptionPane.showMessageDialog(this, error.getMessage(), "TokenPro", JOptionPane.ERROR_MESSAGE); }
     private static String string(Object value) { return value == null ? "" : String.valueOf(value); }
@@ -400,25 +541,35 @@ final class TokenProFrame extends JFrame {
         public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean selected, boolean focus) {
             JLabel label = (JLabel) super.getListCellRendererComponent(list, value, index, selected, focus);
             label.setBorder(new EmptyBorder(5, 12, 5, 12)); label.setFont(appFont(13, selected ? Font.BOLD : Font.PLAIN));
-            label.setBackground(selected ? new Color(235, 232, 255) : Color.WHITE); label.setForeground(selected ? PURPLE : new Color(42, 42, 48)); return label;
+            label.setBackground(selected ? new Color(44, 40, 91) : new Color(8, 13, 31)); label.setForeground(selected ? new Color(188, 196, 255) : new Color(222, 228, 249)); return label;
         }
     }
 
     private static final class NavButton extends JButton {
         private boolean selected;
-        NavButton(String text) { super(text); setFont(appFont(13, Font.PLAIN)); setHorizontalAlignment(SwingConstants.LEFT); setMaximumSize(new Dimension(Integer.MAX_VALUE, 42)); setBorder(new EmptyBorder(0, 16, 0, 16)); setFocusPainted(false); setContentAreaFilled(false); }
+        NavButton(String text) { super(text); setFont(appFont(13, Font.PLAIN)); setForeground(new Color(203, 211, 238)); setHorizontalAlignment(SwingConstants.LEFT); setMaximumSize(new Dimension(Integer.MAX_VALUE, 42)); setBorder(new EmptyBorder(0, 16, 0, 16)); setFocusPainted(false); setContentAreaFilled(false); }
         public void setSelected(boolean value) { super.setSelected(value); selected = value; setFont(appFont(13, value ? Font.BOLD : Font.PLAIN)); repaint(); }
-        protected void paintComponent(Graphics g) { if (selected) { Graphics2D g2 = (Graphics2D) g.create(); g2.setColor(new Color(102, 82, 240, 25)); g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10); g2.dispose(); } super.paintComponent(g); }
+        protected void paintComponent(Graphics g) { if (selected) { Graphics2D g2 = (Graphics2D) g.create(); g2.setColor(new Color(108, 92, 255, 48)); g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12); g2.dispose(); } super.paintComponent(g); }
     }
 
     private static class RoundedPanel extends JPanel {
         private final int radius; private final Color fill;
         RoundedPanel(int radius, Color fill) { this.radius = radius; this.fill = fill; setOpaque(false); }
-        protected void paintComponent(Graphics g) { Graphics2D g2 = (Graphics2D) g.create(); g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON); g2.setColor(fill); g2.fill(new RoundRectangle2D.Double(.5, .5, getWidth()-1, getHeight()-1, radius, radius)); g2.setColor(new Color(0,0,0,18)); g2.draw(new RoundRectangle2D.Double(.5, .5, getWidth()-1, getHeight()-1, radius, radius)); g2.dispose(); super.paintComponent(g); }
+        protected void paintComponent(Graphics g) { Graphics2D g2 = (Graphics2D) g.create(); g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON); g2.setColor(fill); g2.fill(new RoundRectangle2D.Double(.5, .5, getWidth()-1, getHeight()-1, radius, radius)); g2.setColor(new Color(194,208,255,34)); g2.draw(new RoundRectangle2D.Double(.5, .5, getWidth()-1, getHeight()-1, radius, radius)); g2.dispose(); super.paintComponent(g); }
     }
 
     private static final class GradientPanel extends JPanel {
         GradientPanel() { setOpaque(false); }
-        protected void paintComponent(Graphics g) { Graphics2D g2 = (Graphics2D) g.create(); g2.setPaint(new GradientPaint(0, 0, new Color(232, 238, 255), getWidth(), getHeight(), new Color(244, 235, 255))); g2.fillRect(0, 0, getWidth(), getHeight()); g2.dispose(); super.paintComponent(g); }
+        protected void paintComponent(Graphics g) { Graphics2D g2 = (Graphics2D) g.create(); g2.setPaint(new GradientPaint(0, 0, new Color(13, 21, 50), getWidth(), getHeight(), new Color(23, 18, 59))); g2.fillRect(0, 0, getWidth(), getHeight()); g2.dispose(); super.paintComponent(g); }
+    }
+
+    private static final class ActionButton extends JButton {
+        private final boolean prominent;
+        ActionButton(String text, boolean prominent) { super(text); this.prominent = prominent; setContentAreaFilled(false); setOpaque(false); setBorderPainted(false); setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)); }
+        protected void paintComponent(Graphics graphics) {
+            Graphics2D g = (Graphics2D) graphics.create(); g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            Color fill = prominent ? (isEnabled() ? PURPLE : new Color(67, 59, 123)) : (isEnabled() ? new Color(24, 31, 58) : new Color(18, 23, 43));
+            g.setColor(fill); g.fillRoundRect(0, 0, getWidth(), getHeight(), 14, 14); g.dispose(); super.paintComponent(graphics);
+        }
     }
 }
