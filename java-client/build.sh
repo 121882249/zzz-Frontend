@@ -26,7 +26,7 @@ cp ../Resources/UnknownModelRuntime.png build/classes/assets/UnknownModelRuntime
 cat > build/manifest.mf <<'EOF'
 Main-Class: work.tokenpro.client.Main
 Implementation-Title: TokenPro
-Implementation-Version: 1.1.0
+Implementation-Version: 1.1.1
 
 EOF
 "$JAVA_HOME/bin/jar" --create --file build/TokenPro.jar --manifest build/manifest.mf -C build/classes .

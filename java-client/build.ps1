@@ -17,7 +17,7 @@ Copy-Item ../Resources/UnknownModelRuntime.png build/classes/assets/UnknownModel
 @"
 Main-Class: work.tokenpro.client.Main
 Implementation-Title: TokenPro
-Implementation-Version: 1.1.0
+Implementation-Version: 1.1.1
 
 "@ | Set-Content -Encoding ascii build/manifest.mf
 & "$env:JAVA_HOME/bin/jar.exe" --create --file build/TokenPro.jar --manifest build/manifest.mf -C build/classes .

@@ -4,6 +4,8 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.geom.RoundRectangle2D;
+import java.awt.image.BufferedImage;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.URL;
 import java.net.http.HttpClient;
@@ -84,10 +86,10 @@ final class TokenProFrame extends JFrame {
     }
 
     private JComponent dashboard() {
-        JPanel root = new JPanel(new BorderLayout()); root.setBackground(CANVAS);
+        JPanel root = new DashboardBackdrop(); root.setLayout(new BorderLayout());
         root.add(sidebar(), BorderLayout.WEST);
-        JPanel main = new JPanel(new BorderLayout()); main.setBackground(CANVAS); main.add(header(), BorderLayout.NORTH);
-        pageHost.setBackground(CANVAS);
+        JPanel main = transparent(new BorderLayout()); main.add(header(), BorderLayout.NORTH);
+        pageHost.setOpaque(false);
         pageHost.add(scroll(homePanel()), "首页");
         pageHost.add(scroll(connectionPanel()), "Codex 连接");
         pageHost.add(scroll(claudePanel()), "Claude 连接");
@@ -100,9 +102,9 @@ final class TokenProFrame extends JFrame {
     }
 
     private JComponent sidebar() {
-        JPanel panel = new JPanel(new BorderLayout()); panel.setBackground(SIDEBAR); panel.setPreferredSize(new Dimension(226, 650));
+        JPanel panel = new SidebarPanel(); panel.setLayout(new BorderLayout()); panel.setPreferredSize(new Dimension(226, 650));
         JPanel top = new JPanel(); top.setOpaque(false); top.setBorder(new EmptyBorder(25, 12, 10, 12)); top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
-        JLabel brand = new JLabel("  TokenPro", resourceIcon("TokenProCosmosIcon.png", 28), SwingConstants.LEFT); brand.setFont(appFont(17, Font.BOLD)); brand.setForeground(TEXT); brand.setBorder(new EmptyBorder(0, 5, 24, 0)); top.add(brand);
+        JLabel brand = new JLabel("TokenPro", resourceIconContained("TokenProCosmosIcon.png", 28, 28, false), SwingConstants.LEFT); brand.setIconTextGap(11); brand.setFont(appFont(17, Font.BOLD)); brand.setForeground(TEXT); brand.setBorder(new EmptyBorder(0, 5, 24, 0)); top.add(brand);
         addNav(top, "首页", "");
         JButton backend = sideAction("⚙   后台管理"); backend.addActionListener(e -> browse("https://tokenpro.work/admin/dashboard")); top.add(backend); top.add(Box.createVerticalStrut(6));
         JButton docs = sideAction("▤   使用文档"); docs.addActionListener(e -> browse("https://tokenpro.work/docs")); top.add(docs); top.add(Box.createVerticalStrut(6));
@@ -110,24 +112,24 @@ final class TokenProFrame extends JFrame {
         JPanel bottom = new JPanel(new BorderLayout()); bottom.setOpaque(false); bottom.setBorder(new EmptyBorder(0, 12, 18, 12)); NavButton accountNav = new NavButton("●   我的账户"); accountNav.addActionListener(e -> openAccount()); navButtons.put("我的账户", accountNav); bottom.add(accountNav); panel.add(bottom, BorderLayout.SOUTH); return panel;
     }
 
-    private void addNav(JPanel parent, String page, String icon) { NavButton button = new NavButton((icon.isBlank() ? "" : icon + "   ") + page); if (page.equals("首页")) { button.setIcon(resourceIcon("TokenProCosmosIcon.png", 18)); button.setIconTextGap(12); } button.addActionListener(e -> showPage(page)); navButtons.put(page, button); parent.add(button); parent.add(Box.createVerticalStrut(6)); }
+    private void addNav(JPanel parent, String page, String icon) { NavButton button = new NavButton((icon.isBlank() ? "" : icon + "   ") + page); if (page.equals("首页")) { button.setIcon(resourceIconContained("TokenProCosmosIcon.png", 18, 18, false)); button.setIconTextGap(12); } button.addActionListener(e -> showPage(page)); navButtons.put(page, button); parent.add(button); parent.add(Box.createVerticalStrut(6)); }
     private JButton sideAction(String text) { JButton button = new JButton(text); button.setFont(appFont(13, Font.PLAIN)); button.setForeground(new Color(203, 211, 238)); button.setHorizontalAlignment(SwingConstants.LEFT); button.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42)); button.setBorder(new EmptyBorder(0, 16, 0, 16)); button.setFocusPainted(false); button.setContentAreaFilled(false); return button; }
 
     private JComponent header() {
-        GradientPanel panel = new GradientPanel(); panel.setLayout(new BorderLayout(0, 18)); panel.setBorder(new EmptyBorder(24, 28, 21, 28));
-        JPanel title = transparent(new BorderLayout()); headerTitle.setFont(appFont(24, Font.BOLD)); title.add(headerTitle, BorderLayout.WEST);
+        GradientPanel panel = new GradientPanel(); panel.setLayout(new BorderLayout(0, 16)); panel.setBorder(new EmptyBorder(23, 28, 20, 28));
+        JPanel title = transparent(new BorderLayout()); headerTitle.setFont(appFont(23, Font.BOLD)); title.add(headerTitle, BorderLayout.WEST);
         JPanel right = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         JButton update = soft("↻  检查更新"); update.addActionListener(e -> checkForUpdates(update)); right.add(update);
         JButton user = soft("●  登录账户"); user.addActionListener(e -> openAccount()); headerUser.addPropertyChangeListener("text", e -> user.setText("●  " + headerUser.getText())); right.add(user);
         title.add(right, BorderLayout.EAST); panel.add(title, BorderLayout.NORTH);
-        RoundedPanel wallet = new RoundedPanel(16, new Color(15, 22, 48, 220)); wallet.setLayout(new FlowLayout(FlowLayout.LEFT, 14, 11)); wallet.setBorder(new EmptyBorder(0, 7, 0, 7));
+        RoundedPanel wallet = new RoundedPanel(20, new Color(10, 18, 44, 214)); wallet.setLayout(new FlowLayout(FlowLayout.LEFT, 14, 10)); wallet.setBorder(new EmptyBorder(0, 7, 0, 7));
         JPanel captions = transparent(); captions.setLayout(new BoxLayout(captions, BoxLayout.Y_AXIS)); JLabel balanceText = new JLabel("钱包余额"); balanceText.setFont(appFont(12, Font.PLAIN)); balanceText.setForeground(MUTED); JLabel rate = new JLabel("充值比例  1￥ = 1$"); rate.setFont(appFont(10, Font.PLAIN)); rate.setForeground(MUTED); captions.add(balanceText); captions.add(rate); wallet.add(captions);
-        headerBalance.setFont(appFont(27, Font.BOLD)); wallet.add(headerBalance); JButton refresh = soft("↻"); refresh.addActionListener(e -> refreshAccount()); wallet.add(refresh); JButton recharge = soft("＋ 充值"); recharge.addActionListener(e -> browse("https://tokenpro.work/purchase")); wallet.add(recharge);
+        headerBalance.setFont(appFont(26, Font.BOLD)); wallet.add(headerBalance); JButton refresh = soft("↻"); refresh.addActionListener(e -> refreshAccount()); wallet.add(refresh); JButton recharge = soft("＋ 充值"); recharge.addActionListener(e -> browse("https://tokenpro.work/purchase")); wallet.add(recharge);
         JPanel row = transparent(new FlowLayout(FlowLayout.LEFT, 0, 0)); row.add(wallet); panel.add(row, BorderLayout.CENTER); return panel;
     }
 
     private JComponent homePanel() {
-        JPanel panel = vertical(); JLabel title = new JLabel("我的客户端"); title.setFont(appFont(14, Font.BOLD)); panel.add(title); panel.add(Box.createVerticalStrut(11));
+        JPanel panel = vertical(); JLabel title = new JLabel("我的客户端"); title.setFont(appFont(15, Font.BOLD)); panel.add(title); panel.add(Box.createVerticalStrut(13));
         panel.add(desktopClientCard("Codex 客户端", "桌面应用 · 独立登录", Platform.applicationInstalled("Codex"), "Codex", () -> showPage("Codex 连接"), this::restoreCodex, () -> openApp("Codex"), homeCodexStatus)); panel.add(Box.createVerticalStrut(12));
         panel.add(desktopClientCard("Claude 客户端", "桌面应用 · 独立登录", Platform.applicationInstalled("Claude"), "Claude", () -> showPage("Claude 连接"), this::restoreClaude, this::openClaude, homeClaudeStatus)); panel.add(Box.createVerticalStrut(12));
         panel.add(commandClientCard("Codex 命令行", "命令行工具 · Codex CLI", "Codex", "codex", "https://learn.chatgpt.com/docs/codex/cli")); panel.add(Box.createVerticalStrut(12));
@@ -135,9 +137,9 @@ final class TokenProFrame extends JFrame {
     }
 
     private JComponent desktopClientCard(String title, String subtitle, boolean installed, String iconName, Runnable chooseModel, Runnable restore, Runnable open, JLabel state) {
-        RoundedPanel card = card(); card.setLayout(new BorderLayout(16, 0));
-        JLabel badge = new JLabel(OfficialIcons.client(iconName, 52)); badge.setPreferredSize(new Dimension(54, 54)); card.add(badge, BorderLayout.WEST);
-        JPanel words = transparent(); words.setLayout(new BoxLayout(words, BoxLayout.Y_AXIS)); JLabel heading = new JLabel(title + "   " + (installed ? "已安装" : "未安装")); heading.setFont(appFont(19, Font.BOLD)); JLabel detail = new JLabel(subtitle); detail.setFont(appFont(12, Font.PLAIN)); detail.setForeground(MUTED); words.add(Box.createVerticalStrut(4)); words.add(heading); words.add(Box.createVerticalStrut(7)); words.add(detail); card.add(words, BorderLayout.CENTER);
+        RoundedPanel card = card(); card.setLayout(new BorderLayout(18, 0));
+        JLabel badge = new JLabel(providerMark(iconName, 44)); badge.setHorizontalAlignment(SwingConstants.CENTER); badge.setPreferredSize(new Dimension(52, 52)); card.add(badge, BorderLayout.WEST);
+        JPanel words = transparent(); words.setLayout(new BoxLayout(words, BoxLayout.Y_AXIS)); JPanel nameLine = transparent(new FlowLayout(FlowLayout.LEFT, 10, 0)); nameLine.setAlignmentX(Component.LEFT_ALIGNMENT); nameLine.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24)); JLabel heading = new JLabel(title); heading.setFont(appFont(17, Font.BOLD)); JLabel installedLabel = new JLabel(installed ? "已安装" : "未安装"); installedLabel.setFont(appFont(11, Font.BOLD)); installedLabel.setForeground(installed ? new Color(97, 222, 165) : MUTED); nameLine.add(heading); nameLine.add(installedLabel); JLabel detail = new JLabel(subtitle); detail.setAlignmentX(Component.LEFT_ALIGNMENT); detail.setFont(appFont(11, Font.PLAIN)); detail.setForeground(MUTED); words.add(Box.createVerticalStrut(3)); words.add(nameLine); words.add(Box.createVerticalStrut(6)); words.add(detail); card.add(words, BorderLayout.CENTER);
         JPanel actions = transparent(); actions.setLayout(new BoxLayout(actions, BoxLayout.Y_AXIS)); JPanel buttons = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         JButton menu = soft("模型设置  ▾");
         JPopupMenu popup = new JPopupMenu(); JMenuItem choose = new JMenuItem("选择模型"); choose.addActionListener(e -> chooseModel.run()); JMenuItem official = new JMenuItem("恢复官方配置"); official.addActionListener(e -> restore.run()); popup.add(choose); popup.add(official); menu.addActionListener(e -> popup.show(menu, 0, menu.getHeight()));
@@ -148,9 +150,9 @@ final class TokenProFrame extends JFrame {
 
     private JComponent commandClientCard(String title, String subtitle, String iconName, String command, String downloadUrl) {
         boolean installed = Platform.commandInstalled(command);
-        RoundedPanel card = card(); card.setLayout(new BorderLayout(16, 0));
-        JLabel badge = new JLabel(OfficialIcons.client(iconName, 52)); badge.setPreferredSize(new Dimension(54, 54)); card.add(badge, BorderLayout.WEST);
-        JPanel words = transparent(); words.setLayout(new BoxLayout(words, BoxLayout.Y_AXIS)); JLabel heading = new JLabel(title); heading.setFont(appFont(19, Font.BOLD)); JLabel detail = new JLabel(subtitle); detail.setFont(appFont(12, Font.PLAIN)); detail.setForeground(MUTED); words.add(Box.createVerticalStrut(4)); words.add(heading); words.add(Box.createVerticalStrut(7)); words.add(detail); card.add(words, BorderLayout.CENTER);
+        RoundedPanel card = card(); card.setLayout(new BorderLayout(18, 0));
+        JLabel badge = new JLabel(providerMark(iconName, 44)); badge.setHorizontalAlignment(SwingConstants.CENTER); badge.setPreferredSize(new Dimension(52, 52)); card.add(badge, BorderLayout.WEST);
+        JPanel words = transparent(); words.setLayout(new BoxLayout(words, BoxLayout.Y_AXIS)); JLabel heading = new JLabel(title); heading.setFont(appFont(17, Font.BOLD)); JLabel detail = new JLabel(subtitle); detail.setFont(appFont(11, Font.PLAIN)); detail.setForeground(MUTED); words.add(Box.createVerticalStrut(3)); words.add(heading); words.add(Box.createVerticalStrut(6)); words.add(detail); card.add(words, BorderLayout.CENTER);
         JPanel buttons = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0)); JButton download = soft(installed ? "已安装" : "去下载"); download.setEnabled(!installed); download.addActionListener(e -> browse(downloadUrl)); JButton terminal = primary("打开 " + (iconName.equals("Codex") ? "Codex 命令行" : "Claude 命令行")); terminal.setEnabled(installed); terminal.addActionListener(e -> openTerminal(command)); buttons.add(download); buttons.add(terminal); card.add(buttons, BorderLayout.EAST); return card;
     }
 
@@ -411,7 +413,7 @@ final class TokenProFrame extends JFrame {
 
     private JPanel vertical() {
         JPanel panel = new JPanel();
-        panel.setBackground(CANVAS);
+        panel.setOpaque(false);
         panel.setBorder(new EmptyBorder(24, 26, 26, 26));
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         return panel;
@@ -434,7 +436,7 @@ final class TokenProFrame extends JFrame {
     }
 
     private JScrollPane scroll(JComponent view) {
-        JScrollPane scroll = new JScrollPane(view); scroll.setBorder(null); scroll.getViewport().setBackground(CANVAS);
+        JScrollPane scroll = new JScrollPane(view); scroll.setOpaque(false); scroll.setBorder(null); scroll.getViewport().setOpaque(false);
         scroll.getVerticalScrollBar().setUnitIncrement(16); return scroll;
     }
 
@@ -492,21 +494,21 @@ final class TokenProFrame extends JFrame {
     }
 
     private RoundedPanel card() {
-        RoundedPanel panel = new RoundedPanel(18, new Color(12, 17, 37)); panel.setBorder(new EmptyBorder(18, 18, 18, 18));
-        panel.setAlignmentX(Component.LEFT_ALIGNMENT); panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 112)); return panel;
+        RoundedPanel panel = new RoundedPanel(22, new Color(8, 14, 35, 218)); panel.setBorder(new EmptyBorder(16, 19, 16, 19));
+        panel.setAlignmentX(Component.LEFT_ALIGNMENT); panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 104)); return panel;
     }
 
     private JButton primary(String text) { JButton button = new ActionButton(text, true); primary(button); return button; }
     private void primary(JButton button) {
         button.setFont(appFont(13, Font.BOLD)); button.setForeground(Color.WHITE); button.setBackground(PURPLE);
-        button.setOpaque(true); button.setBorder(new EmptyBorder(11, 17, 11, 17)); button.setFocusPainted(false);
+        button.setOpaque(false); button.setBorder(new EmptyBorder(10, 17, 10, 17)); button.setFocusPainted(false);
         button.setMaximumSize(button.getPreferredSize());
     }
 
     private JButton soft(String text) { JButton button = new ActionButton(text, false); soft(button); return button; }
     private void soft(JButton button) {
         button.setFont(appFont(13, Font.BOLD)); button.setForeground(new Color(222, 228, 249)); button.setBackground(new Color(24, 31, 58));
-        button.setBorder(new EmptyBorder(10, 15, 10, 15)); button.setFocusPainted(false);
+        button.setBorder(new EmptyBorder(9, 15, 9, 15)); button.setFocusPainted(false);
         button.setMaximumSize(button.getPreferredSize());
     }
 
@@ -514,9 +516,24 @@ final class TokenProFrame extends JFrame {
     private static JPanel transparent(LayoutManager layout) { JPanel panel = new JPanel(layout); panel.setOpaque(false); return panel; }
     private static Font appFont(float size, int style) { return new Font(Platform.OS_KIND == Platform.OS.MAC ? ".AppleSystemUIFont" : "SansSerif", style, Math.round(size)); }
 
-    private static ImageIcon resourceIcon(String name, int size) {
-        URL url = TokenProFrame.class.getResource("/assets/" + name); if (url == null) return null;
-        return new ImageIcon(new ImageIcon(url).getImage().getScaledInstance(size, size, Image.SCALE_SMOOTH));
+    private static BufferedImage resourceImage(String name) {
+        try (InputStream input = TokenProFrame.class.getResourceAsStream("/assets/" + name)) {
+            return input == null ? null : javax.imageio.ImageIO.read(input);
+        } catch (Exception ignored) { return null; }
+    }
+
+    private static ImageIcon resourceIconContained(String name, int maxWidth, int maxHeight, boolean tintWhite) {
+        BufferedImage source = resourceImage(name); if (source == null) return null;
+        double scale = Math.min(maxWidth / (double) source.getWidth(), maxHeight / (double) source.getHeight());
+        int width = Math.max(1, (int) Math.round(source.getWidth() * scale)), height = Math.max(1, (int) Math.round(source.getHeight() * scale));
+        BufferedImage output = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = output.createGraphics(); g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC); g.drawImage(source, 0, 0, width, height, null); g.dispose();
+        if (tintWhite) for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) { int alpha = output.getRGB(x, y) >>> 24; output.setRGB(x, y, (alpha << 24) | 0xF4F6FF); }
+        return new ImageIcon(output);
+    }
+
+    private static ImageIcon providerMark(String name, int size) {
+        return name.equals("Codex") ? resourceIconContained("OpenAIBlossomRuntime.png", size, size, true) : resourceIconContained("ClaudeSparkRuntime.png", size, size, false);
     }
 
     private <T> void async(String running, Callable<T> task, java.util.function.Consumer<T> done) {
@@ -552,6 +569,24 @@ final class TokenProFrame extends JFrame {
         protected void paintComponent(Graphics g) { if (selected) { Graphics2D g2 = (Graphics2D) g.create(); g2.setColor(new Color(108, 92, 255, 48)); g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12); g2.dispose(); } super.paintComponent(g); }
     }
 
+    private static final class SidebarPanel extends JPanel {
+        SidebarPanel() { setOpaque(false); }
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create(); g2.setColor(new Color(3, 7, 23, 238)); g2.fillRect(0, 0, getWidth(), getHeight()); g2.setColor(new Color(170, 188, 255, 24)); g2.drawLine(getWidth() - 1, 0, getWidth() - 1, getHeight()); g2.dispose(); super.paintComponent(g);
+        }
+    }
+
+    private static final class DashboardBackdrop extends JPanel {
+        private final BufferedImage cosmos = resourceImage("LoginCosmos-v2.png");
+        DashboardBackdrop() { setOpaque(true); setBackground(CANVAS); }
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g); Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            if (cosmos != null) { double scale = Math.max(getWidth() / (double) cosmos.getWidth(), getHeight() / (double) cosmos.getHeight()); int w = (int) Math.ceil(cosmos.getWidth() * scale), h = (int) Math.ceil(cosmos.getHeight() * scale); g2.setComposite(AlphaComposite.SrcOver.derive(.34f)); g2.drawImage(cosmos, (getWidth() - w) / 2, (getHeight() - h) / 2, w, h, null); }
+            g2.setComposite(AlphaComposite.SrcOver); g2.setPaint(new GradientPaint(0, 0, new Color(2, 6, 20, 145), getWidth(), getHeight(), new Color(4, 6, 22, 205))); g2.fillRect(0, 0, getWidth(), getHeight()); g2.dispose();
+        }
+    }
+
     private static class RoundedPanel extends JPanel {
         private final int radius; private final Color fill;
         RoundedPanel(int radius, Color fill) { this.radius = radius; this.fill = fill; setOpaque(false); }
@@ -559,8 +594,9 @@ final class TokenProFrame extends JFrame {
     }
 
     private static final class GradientPanel extends JPanel {
+        private final BufferedImage cosmos = resourceImage("LoginCosmos-v2.png");
         GradientPanel() { setOpaque(false); }
-        protected void paintComponent(Graphics g) { Graphics2D g2 = (Graphics2D) g.create(); g2.setPaint(new GradientPaint(0, 0, new Color(13, 21, 50), getWidth(), getHeight(), new Color(23, 18, 59))); g2.fillRect(0, 0, getWidth(), getHeight()); g2.dispose(); super.paintComponent(g); }
+        protected void paintComponent(Graphics g) { Graphics2D g2 = (Graphics2D) g.create(); if (cosmos != null) { g2.setComposite(AlphaComposite.SrcOver.derive(.32f)); g2.drawImage(cosmos, 0, -cosmos.getHeight() / 4, getWidth(), getHeight() * 2, null); } g2.setComposite(AlphaComposite.SrcOver); g2.setPaint(new GradientPaint(0, 0, new Color(11, 22, 56, 215), getWidth(), getHeight(), new Color(32, 18, 76, 220))); g2.fillRect(0, 0, getWidth(), getHeight()); g2.dispose(); super.paintComponent(g); }
     }
 
     private static final class ActionButton extends JButton {
@@ -568,8 +604,10 @@ final class TokenProFrame extends JFrame {
         ActionButton(String text, boolean prominent) { super(text); this.prominent = prominent; setContentAreaFilled(false); setOpaque(false); setBorderPainted(false); setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)); }
         protected void paintComponent(Graphics graphics) {
             Graphics2D g = (Graphics2D) graphics.create(); g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            Color fill = prominent ? (isEnabled() ? PURPLE : new Color(67, 59, 123)) : (isEnabled() ? new Color(24, 31, 58) : new Color(18, 23, 43));
-            g.setColor(fill); g.fillRoundRect(0, 0, getWidth(), getHeight(), 14, 14); g.dispose(); super.paintComponent(graphics);
+            if (prominent && isEnabled()) g.setPaint(new GradientPaint(0, 0, new Color(111, 91, 255), getWidth(), 0, new Color(64, 142, 255)));
+            else g.setColor(prominent ? new Color(62, 60, 112, 190) : (isEnabled() ? new Color(23, 31, 62, 220) : new Color(18, 24, 45, 190)));
+            g.fillRoundRect(0, 0, getWidth(), getHeight(), 18, 18); g.setColor(new Color(190, 205, 255, prominent ? 32 : 24)); g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 18, 18);
+            g.setFont(getFont()); g.setColor(isEnabled() ? getForeground() : new Color(137, 145, 177)); FontMetrics fm = g.getFontMetrics(); g.drawString(getText(), (getWidth() - fm.stringWidth(getText())) / 2, (getHeight() - fm.getHeight()) / 2 + fm.getAscent()); g.dispose();
         }
     }
 }
