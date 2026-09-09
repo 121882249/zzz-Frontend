@@ -21,7 +21,11 @@ final class SelfTest {
         PricedModel priced = new PricedModel("gpt-test", "openai", "GPT", 16);
         check("GPT-Test".equals(priced.displayName()), "GPT model display name"); passed++;
         check("GPT-Image-2.5-Sunburst".equals(new PricedModel("gpt-image-2.5-sunburst", "openai", "gpt models", 17).displayName()), "GPT acronym and model title case"); passed++;
+        check("GPT\u2060-5.6-Terra".equals(new PricedModel("gpt-5.6-terra", "openai", "gpt models", 17).codexDisplayName()), "Codex keeps GPT vendor label"); passed++;
+        check("GPT\u2060-Image-2.5-Sunburst".equals(new PricedModel("gpt-image-2.5-sunburst", "openai", "gpt models", 17).codexDisplayName()), "Codex keeps GPT image vendor label"); passed++;
         check("Claude-3.7-Sonnet".equals(new PricedModel("claude-3.7-sonnet", "anthropic", "claude models", 17).displayName()), "model title case"); passed++;
+        check("Claude-Opus-4.8".equals(new PricedModel("claude-opus-4-8", "anthropic", "claude", 17).displayName()), "numeric model version punctuation"); passed++;
+        check("Claude-Fable-5.1".equals(new PricedModel("claude-fable-5-1", "anthropic", "claude", 17).displayName()), "minor model version punctuation"); passed++;
         check("Claude Models".equals(new PricedModel("claude", "anthropic", "claude models", 17).displayGroupName()), "vendor group title case"); passed++;
         check("Gemini".equals(new PricedModel("Gemini", "google", "Google", 17).displayName()), "non-GPT model display name"); passed++;
         check(CodexConfig.inferredReasoningEfforts(priced).equals(List.of("low", "medium", "high", "xhigh", "max")), "GPT five reasoning levels"); passed++;

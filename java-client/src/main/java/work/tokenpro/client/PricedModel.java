@@ -9,6 +9,14 @@ record PricedModel(String name, String platform, String groupName, long groupId)
         return displayCase(value);
     }
 
+    String codexDisplayName() {
+        String value = displayName();
+        // Codex prettifies a leading ASCII "GPT-" by removing the vendor name.
+        // A zero-width word joiner preserves the intended visual label while
+        // leaving the real model slug untouched.
+        return value.startsWith("GPT-") ? "GPT\u2060-" + value.substring(4) : value;
+    }
+
     String displayGroupName() { return displayCase(groupName); }
     String displayPlatform() { return displayCase(platform); }
 
@@ -24,6 +32,12 @@ record PricedModel(String name, String platform, String groupName, long groupId)
                 continue;
             }
             char current = value.charAt(index++);
+            if (current == '-' && index > 1 && index < value.length()
+                && Character.isDigit(value.charAt(index - 2)) && Character.isDigit(value.charAt(index))) {
+                result.append('.');
+                wordStart = false;
+                continue;
+            }
             if (wordStart && Character.isLetter(current)) current = Character.toUpperCase(current);
             result.append(current);
             wordStart = current == '-' || current == '_' || current == '/' || Character.isWhitespace(current);

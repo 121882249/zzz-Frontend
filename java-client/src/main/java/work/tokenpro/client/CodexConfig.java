@@ -99,7 +99,7 @@ final class CodexConfig {
             if (closest == null) closest = bySlug.values().stream().min(Comparator.comparing(item -> String.valueOf(item.get("slug")))).orElseThrow();
             Map<String, Object> entry = deepCopy(closest);
             entry.put("slug", model.name());
-            entry.put("display_name", model.displayName());
+            entry.put("display_name", model.codexDisplayName());
             entry.put("description", model.groupName() + " · TokenPro");
             entry.put("visibility", "list");
             entry.put("supported_in_api", true);
