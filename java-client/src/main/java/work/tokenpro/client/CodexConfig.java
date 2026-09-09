@@ -113,6 +113,11 @@ final class CodexConfig {
             entry.put("priority", priority++);
             entry.put("availability_nux", null);
             entry.put("upgrade", null);
+            // TokenPro is a custom API-key provider. Responses Lite is a
+            // ChatGPT-only wire mode and rejects hosted tools such as
+            // image_generation before the gateway can normalize image-only
+            // selections into a text driver plus image tool.
+            disableResponsesLite(entry);
             applyReasoningProfile(entry, model, exact != null);
             entries.add(entry);
         }
@@ -125,6 +130,10 @@ final class CodexConfig {
         catch (AtomicMoveNotSupportedException e) { Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING); }
         Platform.privateFile(target);
         return target;
+    }
+
+    static void disableResponsesLite(Map<String, Object> entry) {
+        entry.put("use_responses_lite", false);
     }
 
     private static void applyReasoningProfile(Map<String, Object> entry, PricedModel model, boolean exactMatch) {
