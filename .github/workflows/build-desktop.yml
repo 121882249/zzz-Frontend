@@ -54,6 +54,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v5
       - uses: actions/download-artifact@v6
         with:
           path: release-assets
@@ -67,4 +68,27 @@ jobs:
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" release-files/* --title "TokenPro $GITHUB_REF_NAME" --generate-notes --repo "$GITHUB_REPOSITORY"
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release-files/* --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$GITHUB_REF_NAME" release-files/* --title "TokenPro $GITHUB_REF_NAME" --generate-notes --repo "$GITHUB_REPOSITORY"
+          fi
+      - name: Configure TokenPro download server
+        env:
+          DEPLOY_KEY: ${{ secrets.TOKENPRO_DEPLOY_KEY }}
+          KNOWN_HOSTS: ${{ secrets.TOKENPRO_KNOWN_HOSTS }}
+        run: |
+          install -d -m 0700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/tokenpro-deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/tokenpro-deploy ~/.ssh/known_hosts
+      - name: Publish installers to tokenpro.work
+        env:
+          DEPLOY_HOST: ${{ secrets.TOKENPRO_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.TOKENPRO_DEPLOY_USER }}
+        run: |
+          remote_dir="/home/${DEPLOY_USER}/tokenpro-release-${GITHUB_RUN_ID}"
+          ssh -i ~/.ssh/tokenpro-deploy "${DEPLOY_USER}@${DEPLOY_HOST}" "mkdir -p '$remote_dir'"
+          scp -i ~/.ssh/tokenpro-deploy release-files/* scripts/publish-downloads.sh "${DEPLOY_USER}@${DEPLOY_HOST}:$remote_dir/"
+          ssh -i ~/.ssh/tokenpro-deploy "${DEPLOY_USER}@${DEPLOY_HOST}" "sudo bash '$remote_dir/publish-downloads.sh' '$GITHUB_REF_NAME' '$remote_dir' && rm -rf '$remote_dir'"
