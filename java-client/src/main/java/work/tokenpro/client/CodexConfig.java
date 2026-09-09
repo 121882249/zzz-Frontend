@@ -17,15 +17,13 @@ final class CodexConfig {
         String url = validateUrl(baseUrl);
         if (models.isEmpty()) throw new IllegalArgumentException("请至少选择一个 Codex 模型");
         String modelId = required(models.getFirst().name(), "模型 ID");
-        String credentialId = store.createCredential(key.trim());
         Path target = Platform.codexConfig();
         Files.createDirectories(target.getParent());
         String current = Files.exists(target) ? Files.readString(target) : "";
         if (store.read("codex-original.toml").isEmpty()) store.write("codex-original.toml", current);
         String clean = stripRootOverrides(stripManaged(current));
-        Helper helper = installHelper();
         Path catalog = writeModelCatalog(models);
-        String block = managedBlock(url, modelId, catalog, credentialId, helper);
+        String block = managedBlock(url, modelId, catalog, key.trim());
         writeAtomic(target, block + (clean.isBlank() ? "" : "\n" + clean.stripLeading()));
     }
 
@@ -43,11 +41,12 @@ final class CodexConfig {
         store.delete("codex-model-catalog.json");
     }
 
-    private String managedBlock(String url, String model, Path catalog, String credentialId, Helper helper) {
+    private String managedBlock(String url, String model, Path catalog, String key) {
         StringBuilder out = new StringBuilder();
         out.append(START).append('\n');
         out.append("model = ").append(toml(model)).append('\n');
-        out.append("model_provider = \"tokenpro_direct\"\n\n");
+        out.append("model_provider = \"custom\"\n");
+        out.append("review_model = ").append(toml(model)).append("\n\n");
         // Keep the TokenPro route on the Responses API without invoking Codex's
         // first-party OpenAI login path. That path replaces the supplied key and
         // loses the account's model-group routing, which especially breaks Gemini.
@@ -55,22 +54,14 @@ final class CodexConfig {
         out.append("model_context_window = 372000\n");
         out.append("model_auto_compact_token_limit = 372000\n\n");
         out.append("model_catalog_json = ").append(toml(catalog.toAbsolutePath().toString())).append("\n\n");
-        out.append("[model_providers.tokenpro_direct]\n");
-        out.append("name = \"TokenPro\"\n");
-        out.append("base_url = ").append(toml(url)).append('\n');
+        out.append("[model_providers.custom]\n");
+        out.append("name = \"Codex\"\n");
+        out.append("base_url = ").append(toml(url.replaceFirst("/v1$", ""))).append('\n');
         out.append("wire_api = \"responses\"\n");
         out.append("requires_openai_auth = false\n");
+        out.append("experimental_bearer_token = ").append(toml(key)).append('\n');
+        out.append("http_headers = { \"x-openai-actor-authorization\" = \"Codex\" }\n");
         out.append("supports_websockets = false\n\n");
-        out.append("[model_providers.tokenpro_direct.auth]\n");
-        out.append("command = ").append(toml(helper.command())).append('\n');
-        out.append("args = [");
-        for (int i = 0; i < helper.prefixArgs().size(); i++) {
-            if (i > 0) out.append(", ");
-            out.append(toml(helper.prefixArgs().get(i)));
-        }
-        if (!helper.prefixArgs().isEmpty()) out.append(", ");
-        out.append(toml(credentialId)).append("]\n");
-        out.append("timeout_ms = 5000\nrefresh_interval_ms = 300000\n");
         out.append(END).append('\n');
         return out.toString();
     }
@@ -143,11 +134,6 @@ final class CodexConfig {
         return value;
     }
 
-    private Helper installHelper() throws Exception {
-        List<String> command = RuntimeCommand.withArgs("--route-token");
-        return new Helper(command.getFirst(), List.copyOf(command.subList(1, command.size())));
-    }
-
     static String stripManaged(String text) {
         int start = text.indexOf(START);
         if (start < 0) return text;
@@ -165,7 +151,7 @@ final class CodexConfig {
         }
         StringBuilder out = new StringBuilder();
         boolean root = true;
-        Pattern managedKey = Pattern.compile("^(model|model_provider|model_catalog_json|model_reasoning_effort|model_context_window|model_auto_compact_token_limit)\\s*=.*$");
+        Pattern managedKey = Pattern.compile("^(model|model_provider|review_model|model_catalog_json|model_reasoning_effort|model_context_window|model_auto_compact_token_limit)\\s*=.*$");
         for (String line : text.split("(?<=\\n)", -1)) {
             String trimmed = line.stripLeading();
             if (trimmed.startsWith("[")) root = false;
@@ -213,5 +199,4 @@ final class CodexConfig {
         Platform.privateFile(target);
     }
 
-    private record Helper(String command, List<String> prefixArgs) {}
 }
