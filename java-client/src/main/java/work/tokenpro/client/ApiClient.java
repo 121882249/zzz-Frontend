@@ -68,8 +68,37 @@ final class ApiClient {
                 result.add(new PricedModel(modelName, text(model.getOrDefault("platform", groupPlatform)), groupName, groupId));
             }
         }
-        result.sort(Comparator.comparing(PricedModel::platform).thenComparing(PricedModel::groupName).thenComparing(PricedModel::name));
+        result.sort(Comparator.comparingLong(PricedModel::groupId).reversed()
+            .thenComparing(PricedModel::name, ApiClient::compareNaturalDescending));
         return result;
+    }
+
+    static int compareNaturalDescending(String left, String right) {
+        return -compareNatural(left == null ? "" : left, right == null ? "" : right);
+    }
+
+    private static int compareNatural(String left, String right) {
+        int a = 0, b = 0;
+        while (a < left.length() && b < right.length()) {
+            char x = left.charAt(a), y = right.charAt(b);
+            if (Character.isDigit(x) && Character.isDigit(y)) {
+                int aEnd = a, bEnd = b;
+                while (aEnd < left.length() && Character.isDigit(left.charAt(aEnd))) aEnd++;
+                while (bEnd < right.length() && Character.isDigit(right.charAt(bEnd))) bEnd++;
+                String aDigits = left.substring(a, aEnd).replaceFirst("^0+(?!$)", "");
+                String bDigits = right.substring(b, bEnd).replaceFirst("^0+(?!$)", "");
+                int length = Integer.compare(aDigits.length(), bDigits.length());
+                if (length != 0) return length;
+                int number = aDigits.compareTo(bDigits);
+                if (number != 0) return number;
+                a = aEnd; b = bEnd;
+                continue;
+            }
+            int compared = Character.compare(Character.toLowerCase(x), Character.toLowerCase(y));
+            if (compared != 0) return compared;
+            a++; b++;
+        }
+        return Integer.compare(left.length(), right.length());
     }
 
     ManagedKey globalKey(String token) throws Exception {
