@@ -62,7 +62,7 @@
     .auth-view {
       height: calc(100% - 52px);
       display: grid;
-      grid-template-columns: minmax(500px, 1fr) minmax(540px, .92fr);
+      grid-template-columns: minmax(620px, 1.16fr) minmax(460px, .84fr);
       position: relative;
       z-index: 2;
     }
@@ -89,9 +89,10 @@
       box-shadow: 0 0 12px #6e84ff;
     }
     h1 {
-      max-width: 610px;
-      margin: 30px 0 20px;
-      font-size: clamp(48px, 4.4vw, 70px);
+      max-width: 760px;
+      margin: 28px 0 16px;
+      font-size: clamp(42px, 3.7vw, 58px);
+      white-space: nowrap;
       line-height: 1.13;
       letter-spacing: -.045em;
       text-shadow: 0 12px 44px rgba(0, 0, 0, .48);
@@ -161,30 +162,30 @@
     @keyframes livePulse { 50% { opacity: .4; transform: scale(.72); } }
     @keyframes vortexBreath { 50% { opacity: .9; transform: scale(1.014) rotate(.35deg); filter: drop-shadow(0 0 26px rgba(92,132,255,.28)); } }
     @keyframes modelFloat { 50% { transform: translate(3px,-4px) rotate(1.5deg) scale(1.035); } }
-    .login-side { display: grid; place-items: center; padding: 34px 58px 42px 18px; }
+    .login-side { display: grid; place-items: center; padding: 32px 44px 34px 18px; }
     .login-card {
-      width: min(474px, 100%);
-      padding: 30px 36px 28px;
+      width: min(400px, 100%);
+      padding: 20px 24px;
       border: 1px solid rgba(200, 213, 255, .16);
-      border-radius: 28px;
-      background: linear-gradient(155deg, rgba(18, 25, 55, .86), rgba(7, 11, 29, .78));
+      border-radius: 24px;
+      background: linear-gradient(155deg, rgba(18, 26, 58, .92), rgba(6, 10, 27, .86));
       box-shadow: inset 0 1px rgba(255,255,255,.08), 0 34px 80px rgba(0,0,0,.38);
       backdrop-filter: blur(32px) saturate(125%);
     }
     .card-top { display: flex; justify-content: space-between; align-items: center; color: rgba(211,219,246,.5); font-size: 11px; letter-spacing: .09em; }
     .status-dot { display: flex; align-items: center; gap: 8px; }
     .status-dot::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #63e6be; box-shadow: 0 0 12px #63e6be; }
-    h2 { margin: 26px 0 6px; font-size: 32px; line-height: 1.2; letter-spacing: -.025em; }
-    .sub { margin: 0 0 24px; color: rgba(211,219,246,.58); font-size: 13px; }
-    label { display: block; margin: 0 0 7px; color: rgba(235,239,255,.8); font-size: 12px; font-weight: 650; }
+    h2 { margin: 16px 0 2px; font-size: 27px; line-height: 1.2; letter-spacing: -.025em; }
+    .sub { margin: 0 0 14px; color: rgba(211,219,246,.58); font-size: 12px; }
+    label { display: block; margin: 0 0 5px; color: rgba(235,239,255,.8); font-size: 12px; font-weight: 650; }
     input {
       width: 100%;
-      height: 50px;
-      margin-bottom: 14px;
-      padding: 0 17px;
+      height: 40px;
+      margin-bottom: 8px;
+      padding: 0 14px;
       color: #f7f8ff;
       border: 1px solid rgba(194, 208, 255, .17);
-      border-radius: 14px;
+      border-radius: 12px;
       outline: none;
       background: rgba(3, 7, 22, .5);
       box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
@@ -193,10 +194,10 @@
     input:focus { border-color: #8094ff; box-shadow: 0 0 0 3px rgba(102,124,255,.14), 0 0 24px rgba(91,114,255,.1); }
     .primary {
       width: 100%;
-      height: 52px;
+      height: 44px;
       margin-top: 6px;
       border: 1px solid rgba(255,255,255,.16);
-      border-radius: 14px;
+      border-radius: 12px;
       color: white;
       background: linear-gradient(110deg, #6c5cff, #526fff 56%, #3e9bff);
       box-shadow: 0 14px 34px rgba(77, 91, 255, .32), inset 0 1px rgba(255,255,255,.25);
@@ -204,7 +205,7 @@
       cursor: pointer;
     }
     .primary:hover { filter: brightness(1.08); transform: translateY(-1px); }
-    .divider { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 14px; margin: 21px 0 14px; color: rgba(195,205,237,.38); font-size: 11px; }
+    .divider { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; margin: 14px 0 10px; color: rgba(195,205,237,.38); font-size: 10px; }
     .divider::before, .divider::after { content: ""; height: 1px; background: rgba(194,207,255,.12); }
     .privacy { margin: 0; text-align: center; color: rgba(190,201,233,.42); font-size: 11px; }
     .dashboard-view {
@@ -384,7 +385,7 @@
     <main class="auth-view" id="authView">
       <section class="hero">
         <div class="eyebrow">CROSS-PLATFORM AI ACCESS</div>
-        <h1>连接每一颗<br />AI 星辰</h1>
+        <h1>连接每一颗 AI 星辰</h1>
         <p class="lead">连接主流与新兴 AI 模型，一个入口，跨平台启航。模型宇宙实时同步，并持续扩展。</p>
         <div class="vortex-stage" aria-label="GPT、Claude、Gemini 与 Grok 模型宇宙">
           <img class="vortex-disc" src="../Resources/ModelUniverseVortex.png" alt="蓝紫色宇宙旋涡" />

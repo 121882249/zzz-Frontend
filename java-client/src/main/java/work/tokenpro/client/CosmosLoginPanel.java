@@ -2,9 +2,7 @@ package work.tokenpro.client;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
-import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
-import javax.swing.border.LineBorder;
 import java.awt.*;
 import java.awt.event.ActionListener;
 import java.awt.geom.RoundRectangle2D;
@@ -21,15 +19,15 @@ final class CosmosLoginPanel extends JPanel {
     CosmosLoginPanel(JTextField email, JPasswordField password, ActionListener loginAction) {
         super(new GridBagLayout());
         setOpaque(false);
-        setBorder(new EmptyBorder(34, 48, 40, 48));
+        setBorder(new EmptyBorder(32, 44, 34, 44));
 
         GridBagConstraints hero = new GridBagConstraints();
-        hero.gridx = 0; hero.gridy = 0; hero.weightx = .54; hero.weighty = 1;
-        hero.fill = GridBagConstraints.BOTH; hero.insets = new Insets(0, 0, 0, 34);
+        hero.gridx = 0; hero.gridy = 0; hero.weightx = .58; hero.weighty = 1;
+        hero.fill = GridBagConstraints.BOTH; hero.insets = new Insets(0, 0, 0, 26);
         add(new HeroPanel(), hero);
 
         GridBagConstraints login = new GridBagConstraints();
-        login.gridx = 1; login.gridy = 0; login.weightx = .46; login.weighty = 1;
+        login.gridx = 1; login.gridy = 0; login.weightx = .42; login.weighty = 1;
         login.fill = GridBagConstraints.BOTH;
         JPanel loginWell = new JPanel(new GridBagLayout());
         loginWell.setOpaque(false);
@@ -39,49 +37,52 @@ final class CosmosLoginPanel extends JPanel {
 
     private JComponent loginCard(JTextField email, JPasswordField password, ActionListener loginAction) {
         GlassPanel card = new GlassPanel();
-        card.setPreferredSize(new Dimension(440, 492));
+        card.setPreferredSize(new Dimension(400, 404));
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
-        card.setBorder(new EmptyBorder(28, 34, 26, 34));
+        card.setBorder(new EmptyBorder(20, 24, 20, 24));
 
         JPanel top = new JPanel(new BorderLayout());
         top.setOpaque(false); top.setMaximumSize(new Dimension(Integer.MAX_VALUE, 18));
+        top.setAlignmentX(Component.LEFT_ALIGNMENT);
         top.add(label("●  服务运行正常", 11, Font.PLAIN, new Color(111, 229, 196)), BorderLayout.WEST);
         top.add(label("简体中文", 11, Font.PLAIN, new Color(151, 160, 190)), BorderLayout.EAST);
-        card.add(top); card.add(Box.createVerticalStrut(25));
+        card.add(top); card.add(Box.createVerticalStrut(16));
 
-        JLabel title = label("登录 TokenPro", 31, Font.BOLD, TEXT);
-        title.setAlignmentX(Component.LEFT_ALIGNMENT); title.setHorizontalAlignment(SwingConstants.LEFT); title.setPreferredSize(new Dimension(372, 42)); title.setMinimumSize(new Dimension(372, 42)); title.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42)); card.add(title); card.add(Box.createVerticalStrut(5));
-        JLabel sub = label("进入你的 AI 模型控制中心", 13, Font.PLAIN, new Color(145, 156, 191));
-        sub.setAlignmentX(Component.LEFT_ALIGNMENT); card.add(sub); card.add(Box.createVerticalStrut(22));
+        JLabel title = label("登录 TokenPro", 27, Font.BOLD, TEXT);
+        title.setAlignmentX(Component.LEFT_ALIGNMENT); title.setHorizontalAlignment(SwingConstants.LEFT); title.setPreferredSize(new Dimension(352, 36)); title.setMinimumSize(new Dimension(352, 36)); title.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36)); card.add(title); card.add(Box.createVerticalStrut(2));
+        JLabel sub = label("进入你的 AI 模型控制中心", 12, Font.PLAIN, new Color(145, 156, 191));
+        sub.setAlignmentX(Component.LEFT_ALIGNMENT); sub.setMaximumSize(new Dimension(Integer.MAX_VALUE, sub.getPreferredSize().height)); card.add(sub); card.add(Box.createVerticalStrut(14));
 
         addField(card, "邮箱", email, "请输入邮箱");
-        card.add(Box.createVerticalStrut(13));
+        card.add(Box.createVerticalStrut(8));
         addField(card, "密码", password, "请输入密码");
-        card.add(Box.createVerticalStrut(20));
+        card.add(Box.createVerticalStrut(14));
 
         loginButton.setAlignmentX(Component.LEFT_ALIGNMENT);
-        loginButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, 50));
-        loginButton.setPreferredSize(new Dimension(372, 50));
+        loginButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
+        loginButton.setPreferredSize(new Dimension(352, 44));
         loginButton.addActionListener(loginAction);
-        card.add(loginButton); card.add(Box.createVerticalStrut(21));
+        card.add(loginButton); card.add(Box.createVerticalStrut(14));
 
         JLabel divider = label("────────  端到端安全连接  ────────", 10, Font.PLAIN, new Color(102, 112, 148));
-        divider.setAlignmentX(Component.CENTER_ALIGNMENT); card.add(divider); card.add(Box.createVerticalStrut(14));
-        feedback.setAlignmentX(Component.CENTER_ALIGNMENT); card.add(feedback);
+        divider.setAlignmentX(Component.LEFT_ALIGNMENT); divider.setHorizontalAlignment(SwingConstants.CENTER); divider.setMaximumSize(new Dimension(Integer.MAX_VALUE, divider.getPreferredSize().height)); card.add(divider); card.add(Box.createVerticalStrut(10));
+        feedback.setAlignmentX(Component.LEFT_ALIGNMENT); feedback.setHorizontalAlignment(SwingConstants.CENTER); feedback.setMaximumSize(new Dimension(Integer.MAX_VALUE, feedback.getPreferredSize().height)); card.add(feedback);
         return card;
     }
 
     private void addField(JPanel card, String name, JTextField field, String tooltip) {
         JLabel label = label(name, 12, Font.BOLD, new Color(216, 222, 244));
-        label.setAlignmentX(Component.LEFT_ALIGNMENT); card.add(label); card.add(Box.createVerticalStrut(7));
+        label.setAlignmentX(Component.LEFT_ALIGNMENT); card.add(label); card.add(Box.createVerticalStrut(5));
         field.setToolTipText(tooltip);
-        field.setMaximumSize(new Dimension(Integer.MAX_VALUE, 48));
-        field.setPreferredSize(new Dimension(372, 48));
         field.setFont(font(14, Font.PLAIN));
         field.setForeground(TEXT); field.setCaretColor(TEXT);
-        field.setBackground(new Color(4, 8, 25));
-        field.setBorder(new CompoundBorder(new LineBorder(new Color(66, 76, 117), 1, true), new EmptyBorder(0, 16, 0, 16)));
-        field.setAlignmentX(Component.LEFT_ALIGNMENT); card.add(field);
+        field.setOpaque(false);
+        field.setBorder(new EmptyBorder(0, 14, 0, 14));
+        RoundedInput input = new RoundedInput(field);
+        input.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
+        input.setPreferredSize(new Dimension(352, 40));
+        input.setAlignmentX(Component.LEFT_ALIGNMENT);
+        card.add(input);
     }
 
     void setLoading(boolean loading, String text) {
@@ -137,9 +138,28 @@ final class CosmosLoginPanel extends JPanel {
         protected void paintComponent(Graphics graphics) {
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            RoundRectangle2D shape = new RoundRectangle2D.Double(.5, .5, getWidth() - 1, getHeight() - 1, 28, 28);
-            g.setPaint(new GradientPaint(0, 0, new Color(20, 28, 61, 232), getWidth(), getHeight(), new Color(7, 11, 30, 225)));
+            RoundRectangle2D shape = new RoundRectangle2D.Double(.5, .5, getWidth() - 1, getHeight() - 1, 24, 24);
+            g.setPaint(new GradientPaint(0, 0, new Color(18, 26, 58, 236), getWidth(), getHeight(), new Color(6, 10, 27, 220)));
             g.fill(shape); g.setColor(new Color(178, 194, 255, 42)); g.draw(shape); g.dispose(); super.paintComponent(graphics);
+        }
+    }
+
+    private static final class RoundedInput extends JPanel {
+        RoundedInput(JTextField field) {
+            super(new BorderLayout());
+            setOpaque(false);
+            add(field, BorderLayout.CENTER);
+        }
+
+        protected void paintComponent(Graphics graphics) {
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(new Color(4, 8, 25, 225));
+            g.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 12, 12);
+            g.setColor(new Color(72, 84, 132));
+            g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 12, 12);
+            g.dispose();
+            super.paintComponent(graphics);
         }
     }
 
@@ -149,7 +169,7 @@ final class CosmosLoginPanel extends JPanel {
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g.setPaint(new GradientPaint(0, 0, isEnabled() ? new Color(108, 92, 255) : new Color(72, 73, 122), getWidth(), 0, isEnabled() ? new Color(62, 155, 255) : new Color(73, 82, 126)));
-            g.fillRoundRect(0, 0, getWidth(), getHeight(), 16, 16); g.dispose(); super.paintComponent(graphics);
+            g.fillRoundRect(0, 0, getWidth(), getHeight(), 14, 14); g.dispose(); super.paintComponent(graphics);
         }
     }
 
@@ -158,8 +178,7 @@ final class CosmosLoginPanel extends JPanel {
             super(new BorderLayout()); setOpaque(false);
             JPanel copy = new JPanel(); copy.setOpaque(false); copy.setLayout(new BoxLayout(copy, BoxLayout.Y_AXIS));
             JLabel eyebrow = label("—  CROSS-PLATFORM AI ACCESS", 12, Font.BOLD, new Color(171, 187, 255)); eyebrow.setAlignmentX(Component.LEFT_ALIGNMENT); copy.add(eyebrow); copy.add(Box.createVerticalStrut(27));
-            JLabel titleLine = label("连接每一颗", 52, Font.BOLD, TEXT); titleLine.setAlignmentX(Component.LEFT_ALIGNMENT); titleLine.setPreferredSize(new Dimension(620, 72)); titleLine.setMinimumSize(new Dimension(460, 72)); titleLine.setMaximumSize(new Dimension(Integer.MAX_VALUE, 72)); copy.add(titleLine);
-            JLabel titleSecondLine = label("AI 星辰", 52, Font.BOLD, TEXT); titleSecondLine.setAlignmentX(Component.LEFT_ALIGNMENT); titleSecondLine.setPreferredSize(new Dimension(620, 72)); titleSecondLine.setMinimumSize(new Dimension(460, 72)); titleSecondLine.setMaximumSize(new Dimension(Integer.MAX_VALUE, 72)); copy.add(titleSecondLine); copy.add(Box.createVerticalStrut(18));
+            JLabel titleLine = label("连接每一颗 AI 星辰", 50, Font.BOLD, TEXT); titleLine.setAlignmentX(Component.LEFT_ALIGNMENT); titleLine.setPreferredSize(new Dimension(650, 72)); titleLine.setMinimumSize(new Dimension(500, 72)); titleLine.setMaximumSize(new Dimension(Integer.MAX_VALUE, 72)); copy.add(titleLine); copy.add(Box.createVerticalStrut(14));
             JLabel lead = label("<html>连接主流与新兴 AI 模型，一个入口，跨平台启航。<br>模型宇宙实时同步，并持续扩展。</html>", 15, Font.PLAIN, MUTED); lead.setAlignmentX(Component.LEFT_ALIGNMENT); copy.add(lead);
             add(copy, BorderLayout.NORTH); add(new VortexCanvas(), BorderLayout.CENTER);
         }

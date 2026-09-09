@@ -51,7 +51,7 @@ cp ../Resources/PlusLucide.png build/classes/assets/PlusLucide.png
 cat > build/manifest.mf <<'EOF'
 Main-Class: work.tokenpro.client.Main
 Implementation-Title: TokenPro
-Implementation-Version: 1.1.4
+Implementation-Version: 1.1.5
 
 EOF
 "$JAVA_HOME/bin/jar" --create --file build/TokenPro.jar --manifest build/manifest.mf -C build/classes .
