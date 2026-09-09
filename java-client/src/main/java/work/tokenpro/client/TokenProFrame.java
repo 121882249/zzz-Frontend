@@ -306,7 +306,12 @@ final class TokenProFrame extends JFrame {
     }
 
     private void restoreCodex() {
-        try { codex.restore(); store.delete("codex-selected.json"); homeCodexStatus.setText("请先选择模型"); if (codexLaunch != null) codexLaunch.setEnabled(false); status("Codex 已恢复官方配置"); }
+        try {
+            codex.restore(); store.delete("codex-selected.json"); homeCodexStatus.setText("请先选择模型");
+            if (codexLaunch != null) codexLaunch.setEnabled(false);
+            status("Codex 已恢复官方配置，正在重启…");
+            openApp("Codex");
+        }
         catch (Exception ex) { error(ex); }
     }
 
@@ -390,7 +395,12 @@ final class TokenProFrame extends JFrame {
     }
 
     private void restoreClaude() {
-        try { ClaudeDesktopConfig.restoreOfficial(store); bridgeStatus.setText("桥接状态：Claude 已恢复官方配置"); homeClaudeStatus.setText("请先选择模型"); if (claudeLaunch != null) claudeLaunch.setEnabled(false); status("Claude 已恢复官方配置"); }
+        try {
+            ClaudeDesktopConfig.restoreOfficial(store); bridgeStatus.setText("桥接状态：Claude 已恢复官方配置");
+            homeClaudeStatus.setText("请先选择模型"); if (claudeLaunch != null) claudeLaunch.setEnabled(false);
+            status("Claude 已恢复官方配置，正在重启…");
+            openApp("Claude");
+        }
         catch (Exception ex) { error(ex); }
     }
 
