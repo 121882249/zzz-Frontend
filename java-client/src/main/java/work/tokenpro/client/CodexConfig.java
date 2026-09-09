@@ -57,7 +57,10 @@ final class CodexConfig {
         out.append("model_catalog_json = ").append(toml(catalog.toAbsolutePath().toString())).append("\n\n");
         out.append("[model_providers.custom]\n");
         out.append("name = \"Codex\"\n");
-        out.append("base_url = ").append(toml(url.replaceFirst("/v1$", ""))).append('\n');
+        // Keep /v1 in the provider URL. Codex appends /responses to this value;
+        // dropping /v1 sends traffic through TokenPro's legacy generic endpoint,
+        // which bypasses the OpenAI image-only model normalization path.
+        out.append("base_url = ").append(toml(providerBaseUrl(url))).append('\n');
         out.append("wire_api = \"responses\"\n");
         out.append("requires_openai_auth = false\n");
         out.append("experimental_bearer_token = ").append(toml(key)).append('\n');
@@ -65,6 +68,10 @@ final class CodexConfig {
         out.append("supports_websockets = false\n\n");
         out.append(END).append('\n');
         return out.toString();
+    }
+
+    static String providerBaseUrl(String url) {
+        return url;
     }
 
     private Path writeModelCatalog(List<PricedModel> models) throws Exception {
