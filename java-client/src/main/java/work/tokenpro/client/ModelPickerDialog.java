@@ -71,7 +71,7 @@ final class ModelPickerDialog extends JDialog {
             group.setLayout(new BoxLayout(group, BoxLayout.Y_AXIS));
             group.setBorder(new EmptyBorder(14, 16, 12, 16));
             group.setAlignmentX(Component.LEFT_ALIGNMENT);
-            JLabel groupName = new JLabel(first.groupName());
+            JLabel groupName = new JLabel(first.displayGroupName());
             groupName.setFont(font(13, Font.BOLD));
             groupName.setForeground(new Color(172, 183, 255));
             groupName.setAlignmentX(Component.LEFT_ALIGNMENT);

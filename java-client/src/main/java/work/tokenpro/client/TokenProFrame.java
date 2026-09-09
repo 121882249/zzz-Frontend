@@ -717,7 +717,7 @@ final class TokenProFrame extends JFrame {
         int count = 0;
         for (PricedModel item : models) {
             DefaultMutableTreeNode group = groups.computeIfAbsent(item.groupId(), ignored -> {
-                DefaultMutableTreeNode node = new DefaultMutableTreeNode(new ModelGroupLabel(item.groupName(), item.platform())); root.add(node); return node;
+                DefaultMutableTreeNode node = new DefaultMutableTreeNode(new ModelGroupLabel(item.displayGroupName(), item.displayPlatform())); root.add(node); return node;
             });
             group.add(new DefaultMutableTreeNode(item)); count++;
         }
