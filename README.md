@@ -13,7 +13,7 @@ TokenPro 现在只有一套 Java 21/Swing 客户端源码，支持 Windows、mac
 - API Key 保存在当前系统用户的 TokenPro 私有配置目录，不写入 `config.toml`。
 - 桌面客户端提供“选择模型 / 恢复官方配置 / 打开应用”；命令行客户端提供下载入口和打开命令行。
 - 在 TokenPro 内置浏览器中打开后台管理、使用文档、充值页和版本下载页。
-- 检查 GitHub Releases 更新，支持启动 Codex、Claude、Codex CLI 与 Claude Code。
+- 启动后自动检查更新并提醒，也可手动检查；支持启动 Codex、Claude、Codex CLI 与 Claude Code。
 
 ## 构建
 

@@ -143,7 +143,7 @@ final class Platform {
         Optional<Path> gh = candidates.filter(Files::isExecutable).findFirst();
         if (gh.isEmpty()) return Optional.empty();
         try {
-            Process process = new ProcessBuilder(gh.get().toString(), "api", "repos/121882249/TokenPro-Frontend/releases/latest").redirectErrorStream(true).start();
+            Process process = new ProcessBuilder(gh.get().toString(), "api", "repositories/1360196661/releases/latest").redirectErrorStream(true).start();
             if (!process.waitFor(20, TimeUnit.SECONDS) || process.exitValue() != 0) { process.destroyForcibly(); return Optional.empty(); }
             return Optional.of(new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8));
         } catch (Exception ignored) { return Optional.empty(); }

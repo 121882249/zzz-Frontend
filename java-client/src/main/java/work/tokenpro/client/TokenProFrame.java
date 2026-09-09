@@ -17,11 +17,14 @@ import java.net.URL;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.*;
+import java.security.MessageDigest;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.Callable;
 
 final class TokenProFrame extends JFrame {
+    record ReleaseInfo(String version, String downloadUrl, String sha256) {}
     private static final Color PURPLE = new Color(102, 82, 240);
     private static final Color CANVAS = new Color(4, 7, 22);
     private static final Color SIDEBAR = new Color(7, 11, 29);
@@ -55,6 +58,7 @@ final class TokenProFrame extends JFrame {
     private final JLabel homeCodexStatus = new JLabel("请先选择模型");
     private JButton codexLaunch;
     private JButton claudeLaunch;
+    private JButton updateButton;
     private JComponent dashboardHeader;
     private final CardLayout views = new CardLayout();
     private final JPanel viewHost = new JPanel(views);
@@ -81,6 +85,9 @@ final class TokenProFrame extends JFrame {
         setLocationRelativeTo(null);
         setContentPane(content());
         restoreSession();
+        javax.swing.Timer updateTimer = new javax.swing.Timer(2500, e -> checkForUpdates(null, true));
+        updateTimer.setRepeats(false);
+        updateTimer.start();
     }
 
     private JComponent content() {
@@ -127,7 +134,7 @@ final class TokenProFrame extends JFrame {
         GradientPanel panel = new GradientPanel(); panel.setLayout(new BorderLayout(0, 16)); panel.setBorder(new EmptyBorder(23, 28, 20, 28));
         JPanel title = transparent(new BorderLayout()); headerTitle.setFont(appFont(23, Font.BOLD)); title.add(headerTitle, BorderLayout.WEST);
         JPanel right = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        JButton update = soft("检查更新"); update.setIcon(resourceIconContained("RefreshCwLucide.png", 15, 15, true)); update.addActionListener(e -> checkForUpdates(update)); right.add(update);
+        updateButton = soft("检查更新"); updateButton.setIcon(resourceIconContained("RefreshCwLucide.png", 15, 15, true)); updateButton.addActionListener(e -> checkForUpdates(updateButton)); right.add(updateButton);
         JButton user = soft("登录账户"); user.setIcon(resourceIconContained("CircleUserLucide.png", 17, 17, true)); user.addActionListener(e -> openAccount()); headerUser.addPropertyChangeListener("text", e -> user.setText(headerUser.getText())); right.add(user);
         title.add(right, BorderLayout.EAST); panel.add(title, BorderLayout.NORTH);
         RoundedPanel wallet = new RoundedPanel(20, new Color(10, 18, 44, 214)); wallet.setLayout(new FlowLayout(FlowLayout.LEFT, 14, 10)); wallet.setBorder(new EmptyBorder(0, 7, 0, 7));
@@ -573,37 +580,126 @@ final class TokenProFrame extends JFrame {
     }
 
     private void checkForUpdates(JButton button) {
-        button.setEnabled(false); button.setText("检查中…");
-        status("正在检查更新…");
-        new SwingWorker<String[], Void>() {
-            protected String[] doInBackground() throws Exception {
+        checkForUpdates(button, false);
+    }
+
+    private void checkForUpdates(JButton button, boolean automatic) {
+        if (button != null) { button.setEnabled(false); button.setText("检查中…"); }
+        if (!automatic) status("正在检查更新…");
+        new SwingWorker<ReleaseInfo, Void>() {
+            protected ReleaseInfo doInBackground() throws Exception {
                 String payload = "";
                 try {
-                    HttpRequest request = HttpRequest.newBuilder(URI.create("https://api.github.com/repos/121882249/TokenPro-Frontend/releases/latest"))
-                        .header("Accept", "application/vnd.github+json").timeout(java.time.Duration.ofSeconds(20)).GET().build();
+                    HttpRequest request = HttpRequest.newBuilder(URI.create("https://tokenpro.work/downloads/latest/release.json"))
+                        .header("Accept", "application/json").timeout(java.time.Duration.ofSeconds(12)).GET().build();
                     HttpResponse<String> response = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build().send(request, HttpResponse.BodyHandlers.ofString());
                     if (response.statusCode() == 200) payload = response.body();
                 } catch (Exception ignored) {}
+                if (payload.isBlank()) {
+                    try {
+                        HttpRequest request = HttpRequest.newBuilder(URI.create("https://api.github.com/repositories/1360196661/releases/latest"))
+                            .header("Accept", "application/vnd.github+json").timeout(java.time.Duration.ofSeconds(20)).GET().build();
+                        HttpResponse<String> response = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build().send(request, HttpResponse.BodyHandlers.ofString());
+                        if (response.statusCode() == 200) payload = response.body();
+                    } catch (Exception ignored) {}
+                }
                 if (payload.isBlank()) payload = Platform.githubLatestReleaseJson().orElse("");
-                if (payload.isBlank()) return new String[]{"", "https://github.com/121882249/TokenPro-Frontend/releases"};
-                Map<String, Object> release = Json.object(Json.parse(payload));
-                return new String[]{string(release.get("tag_name")).replaceFirst("^v", ""), string(release.get("html_url"))};
+                return payload.isBlank() ? new ReleaseInfo("", "", "") : releaseForPlatform(payload, Updater.platformKey());
             }
             protected void done() {
-                button.setEnabled(true); button.setText("检查更新");
+                if (button != null) { button.setEnabled(true); button.setText("检查更新"); }
                 try {
-                    String[] release = get();
-                    if (release[0].isBlank()) {
-                        int choice = JOptionPane.showConfirmDialog(TokenProFrame.this, "暂时无法自动读取版本信息，是否打开下载页面？", "检查更新", JOptionPane.YES_NO_OPTION);
-                        if (choice == JOptionPane.YES_OPTION) browse(release[1]);
-                    } else if (compareVersions(release[0], Main.VERSION) > 0) {
-                        int choice = JOptionPane.showConfirmDialog(TokenProFrame.this, "发现 TokenPro " + release[0] + "，现在打开下载页面吗？", "发现新版本", JOptionPane.YES_NO_OPTION);
-                        if (choice == JOptionPane.YES_OPTION) browse(release[1]);
-                    } else JOptionPane.showMessageDialog(TokenProFrame.this, "当前已是最新版本 " + Main.VERSION, "检查更新", JOptionPane.INFORMATION_MESSAGE);
-                    status("更新检查完成");
-                } catch (Exception ex) { error(ex.getCause() == null ? ex : ex.getCause()); }
+                    ReleaseInfo release = get();
+                    if (release.version().isBlank()) {
+                        if (!automatic) {
+                            JOptionPane.showMessageDialog(TokenProFrame.this, "暂时无法读取版本信息，请稍后重试。", "检查更新", JOptionPane.WARNING_MESSAGE);
+                        }
+                    } else if (compareVersions(release.version(), Main.VERSION) > 0) {
+                        if (updateButton != null) updateButton.setText("发现 " + release.version());
+                        int choice = JOptionPane.showConfirmDialog(TokenProFrame.this, "发现 TokenPro " + release.version() + "，是否立即自动更新？", "发现新版本", JOptionPane.YES_NO_OPTION);
+                        if (choice == JOptionPane.YES_OPTION) installUpdate(release);
+                    } else if (!automatic) JOptionPane.showMessageDialog(TokenProFrame.this, "当前已是最新版本 " + Main.VERSION, "检查更新", JOptionPane.INFORMATION_MESSAGE);
+                    if (!automatic) status("更新检查完成");
+                } catch (Exception ex) { if (!automatic) error(ex.getCause() == null ? ex : ex.getCause()); }
             }
         }.execute();
+    }
+
+    static ReleaseInfo releaseForPlatform(String payload, String platformKey) {
+        Map<String, Object> release = Json.object(Json.parse(payload));
+        String version = string(release.get("tag_name")).replaceFirst("^v", "");
+        String downloadUrl = "", sha256 = "";
+        if (release.get("downloads") instanceof Map<?, ?> rawDownloads) {
+            Map<String, Object> downloads = Json.object(rawDownloads);
+            if (downloads.get(platformKey) instanceof Map<?, ?> rawDownload) {
+                Map<String, Object> download = Json.object(rawDownload);
+                downloadUrl = string(download.get("url"));
+                sha256 = string(download.get("sha256"));
+            }
+        }
+        if (downloadUrl.isBlank() && release.get("assets") instanceof List<?> assets) {
+            String marker = switch (platformKey) {
+                case "macos-arm64" -> "macOS-arm64.dmg";
+                case "macos-x64" -> "macOS-x64.dmg";
+                case "windows-x64" -> "Windows-x64.exe";
+                case "linux-x64" -> "Linux-x64.deb";
+                default -> "";
+            };
+            if (!marker.isBlank()) for (Object raw : assets) {
+                Map<String, Object> asset = Json.object(raw);
+                if (string(asset.get("name")).endsWith(marker)) { downloadUrl = string(asset.get("browser_download_url")); break; }
+            }
+        }
+        return new ReleaseInfo(version, downloadUrl, sha256);
+    }
+
+    private void installUpdate(ReleaseInfo release) {
+        if (release.downloadUrl().isBlank()) {
+            JOptionPane.showMessageDialog(this, "当前系统暂未提供自动更新包。", "自动更新", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        if (updateButton != null) { updateButton.setEnabled(false); updateButton.setText("正在下载…"); }
+        status("正在下载 TokenPro " + release.version() + "…");
+        new SwingWorker<Path, Void>() {
+            protected Path doInBackground() throws Exception {
+                URI uri = URI.create(release.downloadUrl());
+                if (!"https".equalsIgnoreCase(uri.getScheme())) throw new IllegalStateException("更新地址不是安全的 HTTPS 链接");
+                String suffix = uri.getPath().replaceFirst("^.*(?=\\.)", "");
+                Path target = Files.createTempFile("TokenPro-" + release.version() + "-", suffix);
+                HttpRequest request = HttpRequest.newBuilder(uri).timeout(java.time.Duration.ofMinutes(8)).GET().build();
+                HttpResponse<Path> response = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build().send(request, HttpResponse.BodyHandlers.ofFile(target));
+                if (response.statusCode() != 200 || Files.size(target) < 1_000_000) {
+                    Files.deleteIfExists(target);
+                    throw new IllegalStateException("更新包下载失败（HTTP " + response.statusCode() + "）");
+                }
+                if (!release.sha256().isBlank() && !release.sha256().equalsIgnoreCase(sha256(target))) {
+                    Files.deleteIfExists(target);
+                    throw new IllegalStateException("更新包校验失败，已停止安装");
+                }
+                return target;
+            }
+            protected void done() {
+                try {
+                    Path installer = get();
+                    status("正在安装 TokenPro " + release.version() + "，程序即将重启…");
+                    Updater.install(installer);
+                    dispose();
+                    System.exit(0);
+                } catch (Exception ex) {
+                    if (updateButton != null) { updateButton.setEnabled(true); updateButton.setText("重新更新"); }
+                    error(ex.getCause() == null ? ex : ex.getCause());
+                }
+            }
+        }.execute();
+    }
+
+    private static String sha256(Path file) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        try (InputStream input = Files.newInputStream(file)) {
+            byte[] buffer = new byte[1024 * 1024];
+            for (int read; (read = input.read(buffer)) >= 0;) if (read > 0) digest.update(buffer, 0, read);
+        }
+        return HexFormat.of().formatHex(digest.digest());
     }
 
     private static int compareVersions(String left, String right) {
