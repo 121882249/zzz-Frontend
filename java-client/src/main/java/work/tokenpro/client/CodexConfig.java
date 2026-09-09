@@ -48,11 +48,18 @@ final class CodexConfig {
         out.append(START).append('\n');
         out.append("model = ").append(toml(model)).append('\n');
         out.append("model_provider = \"tokenpro_direct\"\n\n");
+        // Keep the TokenPro route on the Responses API without invoking Codex's
+        // first-party OpenAI login path. That path replaces the supplied key and
+        // loses the account's model-group routing, which especially breaks Gemini.
+        out.append("model_reasoning_effort = \"high\"\n");
+        out.append("model_context_window = 372000\n");
+        out.append("model_auto_compact_token_limit = 372000\n\n");
         out.append("model_catalog_json = ").append(toml(catalog.toAbsolutePath().toString())).append("\n\n");
         out.append("[model_providers.tokenpro_direct]\n");
         out.append("name = \"TokenPro\"\n");
         out.append("base_url = ").append(toml(url)).append('\n');
         out.append("wire_api = \"responses\"\n");
+        out.append("requires_openai_auth = false\n");
         out.append("supports_websockets = false\n\n");
         out.append("[model_providers.tokenpro_direct.auth]\n");
         out.append("command = ").append(toml(helper.command())).append('\n');
@@ -158,7 +165,7 @@ final class CodexConfig {
         }
         StringBuilder out = new StringBuilder();
         boolean root = true;
-        Pattern managedKey = Pattern.compile("^(model|model_provider|model_catalog_json)\\s*=.*$");
+        Pattern managedKey = Pattern.compile("^(model|model_provider|model_catalog_json|model_reasoning_effort|model_context_window|model_auto_compact_token_limit)\\s*=.*$");
         for (String line : text.split("(?<=\\n)", -1)) {
             String trimmed = line.stripLeading();
             if (trimmed.startsWith("[")) root = false;
