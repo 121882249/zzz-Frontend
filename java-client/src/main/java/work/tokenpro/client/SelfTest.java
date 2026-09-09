@@ -24,6 +24,9 @@ final class SelfTest {
         check("Claude-3.7-Sonnet".equals(new PricedModel("claude-3.7-sonnet", "anthropic", "claude models", 17).displayName()), "model title case"); passed++;
         check("Claude Models".equals(new PricedModel("claude", "anthropic", "claude models", 17).displayGroupName()), "vendor group title case"); passed++;
         check("Gemini".equals(new PricedModel("Gemini", "google", "Google", 17).displayName()), "non-GPT model display name"); passed++;
+        check(CodexConfig.inferredReasoningEfforts(priced).equals(List.of("low", "medium", "high", "xhigh", "max")), "GPT five reasoning levels"); passed++;
+        check(CodexConfig.inferredReasoningEfforts(new PricedModel("gemini-3-pro", "google", "Google", 17)).size() == 3, "compatible reasoning fallback"); passed++;
+        check(CodexConfig.inferredReasoningEfforts(new PricedModel("gpt-image-2.5", "openai", "GPT", 17)).isEmpty(), "image model omits reasoning"); passed++;
         ClaudeBridgeConfig.Route route = ClaudeBridgeConfig.Route.from(priced);
         check(route.alias().matches("claude-tokenpro-[0-9a-f]{24}"), "Claude alias"); passed++;
         Map<String, Object> request = new LinkedHashMap<>();

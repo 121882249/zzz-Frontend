@@ -9,6 +9,7 @@ import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 import java.awt.*;
 import java.awt.geom.RoundRectangle2D;
+import java.awt.image.BaseMultiResolutionImage;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
 import java.net.URI;
@@ -643,12 +644,34 @@ final class TokenProFrame extends JFrame {
 
     private static ImageIcon resourceIconContained(String name, int maxWidth, int maxHeight, boolean tintWhite) {
         BufferedImage source = resourceImage(name); if (source == null) return null;
+        if (tintWhite) source = tinted(source, new Color(244, 246, 255));
         double scale = Math.min(maxWidth / (double) source.getWidth(), maxHeight / (double) source.getHeight());
         int width = Math.max(1, (int) Math.round(source.getWidth() * scale)), height = Math.max(1, (int) Math.round(source.getHeight() * scale));
+        BufferedImage oneX = scaled(source, width, height);
+        BufferedImage twoX = scaled(source, width * 2, height * 2);
+        BufferedImage threeX = scaled(source, width * 3, height * 3);
+        return new ImageIcon(new BaseMultiResolutionImage(oneX, twoX, threeX));
+    }
+
+    private static BufferedImage scaled(BufferedImage source, int width, int height) {
         BufferedImage output = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g = output.createGraphics(); g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC); g.drawImage(source, 0, 0, width, height, null); g.dispose();
-        if (tintWhite) for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) { int alpha = output.getRGB(x, y) >>> 24; output.setRGB(x, y, (alpha << 24) | 0xF4F6FF); }
-        return new ImageIcon(output);
+        Graphics2D g = output.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g.drawImage(source, 0, 0, width, height, null);
+        g.dispose();
+        return output;
+    }
+
+    private static BufferedImage tinted(BufferedImage source, Color color) {
+        BufferedImage output = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_INT_ARGB);
+        int rgb = color.getRGB() & 0x00FFFFFF;
+        for (int y = 0; y < source.getHeight(); y++) for (int x = 0; x < source.getWidth(); x++) {
+            int alpha = source.getRGB(x, y) >>> 24;
+            output.setRGB(x, y, (alpha << 24) | rgb);
+        }
+        return output;
     }
 
     private static ImageIcon providerMark(String name, int size) {

@@ -16,14 +16,15 @@ final class CodexConfig {
     void apply(String baseUrl, List<PricedModel> models, String key) throws Exception {
         String url = validateUrl(baseUrl);
         if (models.isEmpty()) throw new IllegalArgumentException("请至少选择一个 Codex 模型");
-        String modelId = required(models.getFirst().name(), "模型 ID");
+        PricedModel primaryModel = models.getFirst();
+        String modelId = required(primaryModel.name(), "模型 ID");
         Path target = Platform.codexConfig();
         Files.createDirectories(target.getParent());
         String current = Files.exists(target) ? Files.readString(target) : "";
         if (store.read("codex-original.toml").isEmpty()) store.write("codex-original.toml", current);
         String clean = stripRootOverrides(stripManaged(current));
         Path catalog = writeModelCatalog(models);
-        String block = managedBlock(url, modelId, catalog, key.trim());
+        String block = managedBlock(url, primaryModel, catalog, key.trim());
         writeAtomic(target, block + (clean.isBlank() ? "" : "\n" + clean.stripLeading()));
     }
 
@@ -41,16 +42,16 @@ final class CodexConfig {
         store.delete("codex-model-catalog.json");
     }
 
-    private String managedBlock(String url, String model, Path catalog, String key) {
+    private String managedBlock(String url, PricedModel model, Path catalog, String key) {
         StringBuilder out = new StringBuilder();
         out.append(START).append('\n');
-        out.append("model = ").append(toml(model)).append('\n');
+        out.append("model = ").append(toml(model.name())).append('\n');
         out.append("model_provider = \"custom\"\n");
-        out.append("review_model = ").append(toml(model)).append("\n\n");
+        out.append("review_model = ").append(toml(model.name())).append("\n\n");
         // Keep the TokenPro route on the Responses API without invoking Codex's
         // first-party OpenAI login path. That path replaces the supplied key and
         // loses the account's model-group routing, which especially breaks Gemini.
-        out.append("model_reasoning_effort = \"high\"\n");
+        if (!inferredReasoningEfforts(model).isEmpty()) out.append("model_reasoning_effort = \"high\"\n");
         out.append("model_context_window = 372000\n");
         out.append("model_auto_compact_token_limit = 372000\n\n");
         out.append("model_catalog_json = ").append(toml(catalog.toAbsolutePath().toString())).append("\n\n");
@@ -92,8 +93,10 @@ final class CodexConfig {
         List<Map<String, Object>> entries = new ArrayList<>();
         int priority = 1;
         for (PricedModel model : models) {
-            Map<String, Object> closest = bySlug.get(model.name());
-            if (closest == null) closest = bySlug.values().stream().filter(item -> String.valueOf(item.get("slug")).startsWith("gpt-")).findFirst().orElse(bySlug.values().iterator().next());
+            Map<String, Object> exact = bySlug.get(model.name());
+            Map<String, Object> closest = exact;
+            if (closest == null) closest = bySlug.get("gpt-5.6-sol");
+            if (closest == null) closest = bySlug.values().stream().min(Comparator.comparing(item -> String.valueOf(item.get("slug")))).orElseThrow();
             Map<String, Object> entry = deepCopy(closest);
             entry.put("slug", model.name());
             entry.put("display_name", model.displayName());
@@ -103,6 +106,7 @@ final class CodexConfig {
             entry.put("priority", priority++);
             entry.put("availability_nux", null);
             entry.put("upgrade", null);
+            applyReasoningProfile(entry, model, exact != null);
             entries.add(entry);
         }
         Path target = store.root().resolve("codex-model-catalog.json");
@@ -114,6 +118,48 @@ final class CodexConfig {
         catch (AtomicMoveNotSupportedException e) { Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING); }
         Platform.privateFile(target);
         return target;
+    }
+
+    private static void applyReasoningProfile(Map<String, Object> entry, PricedModel model, boolean exactMatch) {
+        List<Map<String, Object>> levels = new ArrayList<>();
+        if (exactMatch && entry.get("supported_reasoning_levels") instanceof List<?> nativeLevels) {
+            for (Object raw : nativeLevels) {
+                Map<String, Object> level = Json.object(raw);
+                String effort = String.valueOf(level.getOrDefault("effort", ""));
+                if (!effort.equals("ultra") && levels.size() < 5) levels.add(new LinkedHashMap<>(level));
+            }
+        } else {
+            for (String effort : inferredReasoningEfforts(model)) levels.add(reasoningLevel(effort));
+        }
+        entry.put("supported_reasoning_levels", levels);
+        if (levels.isEmpty()) {
+            entry.put("default_reasoning_level", null);
+            return;
+        }
+        Set<String> supported = new LinkedHashSet<>();
+        for (Map<String, Object> level : levels) supported.add(String.valueOf(level.get("effort")));
+        String current = String.valueOf(entry.getOrDefault("default_reasoning_level", "medium"));
+        entry.put("default_reasoning_level", supported.contains(current) ? current : supported.contains("medium") ? "medium" : supported.iterator().next());
+    }
+
+    static List<String> inferredReasoningEfforts(PricedModel model) {
+        String value = (model.name() + " " + model.platform()).toLowerCase(Locale.ROOT);
+        if (value.contains("image") || value.contains("dall-e") || value.contains("imagen") || value.contains("flux")) return List.of();
+        if (model.usesResponses() || value.contains("gpt") || value.matches(".*\\bo[134](?:[-.].*)?")) return List.of("low", "medium", "high", "xhigh", "max");
+        if (value.contains("claude")) return List.of("low", "medium", "high", "xhigh");
+        return List.of("low", "medium", "high");
+    }
+
+    private static Map<String, Object> reasoningLevel(String effort) {
+        String description = switch (effort) {
+            case "low" -> "Fast responses with lighter reasoning";
+            case "medium" -> "Balances speed and reasoning depth";
+            case "high" -> "Greater reasoning depth for complex problems";
+            case "xhigh" -> "Extra high reasoning depth";
+            case "max" -> "Maximum reasoning depth";
+            default -> effort;
+        };
+        return new LinkedHashMap<>(Map.of("effort", effort, "description", description));
     }
 
     private static Map<String, Object> deepCopy(Map<String, Object> value) {

@@ -5,6 +5,7 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.ActionListener;
+import java.awt.geom.AffineTransform;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
@@ -62,6 +63,8 @@ final class CosmosLoginPanel extends JPanel {
         loginButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
         loginButton.setPreferredSize(new Dimension(352, 44));
         loginButton.addActionListener(loginAction);
+        email.addActionListener(loginAction);
+        password.addActionListener(loginAction);
         card.add(loginButton); card.add(Box.createVerticalStrut(14));
 
         JLabel divider = label("────────  端到端安全连接  ────────", 10, Font.PLAIN, new Color(102, 112, 148));
@@ -76,6 +79,8 @@ final class CosmosLoginPanel extends JPanel {
         field.setToolTipText(tooltip);
         field.setFont(font(14, Font.PLAIN));
         field.setForeground(TEXT); field.setCaretColor(TEXT);
+        field.setSelectionColor(new Color(4, 8, 25));
+        field.setSelectedTextColor(TEXT);
         field.setOpaque(false);
         field.setBorder(new EmptyBorder(0, 14, 0, 14));
         RoundedInput input = new RoundedInput(field);
@@ -185,18 +190,31 @@ final class CosmosLoginPanel extends JPanel {
     }
 
     private static final class VortexCanvas extends JComponent {
+        private final BufferedImage cosmos = image("LoginCosmos-v2.png");
         private final BufferedImage vortex = image("ModelUniverseVortex.png");
-        private final BufferedImage gpt = white(image("OpenAIBlossomRuntime.png"));
-        private final BufferedImage claude = image("ClaudeSparkRuntime.png");
-        private final BufferedImage gemini = image("GeminiSparkTransparent.png");
-        private final BufferedImage grok = image("GrokMarkTransparent.png");
-        private final BufferedImage unknown = white(image("UnknownModelRuntime.png"));
+        private final BufferedImage gpt = orbitIcon(white(image("OpenAIBlossomRuntime.png")));
+        private final BufferedImage claude = orbitIcon(image("ClaudeSparkRuntime.png"));
+        private final BufferedImage gemini = orbitIcon(image("GeminiSparkTransparent.png"));
+        private final BufferedImage grok = orbitIcon(image("GrokMarkTransparent.png"));
+        private final BufferedImage unknown = orbitIcon(white(image("UnknownModelRuntime.png")));
         private double phase;
         private double strip;
+        private long lastTick = System.nanoTime();
+        private BufferedImage cachedScene;
+        private String cachedSceneKey = "";
 
         VortexCanvas() {
-            setOpaque(false);
-            Timer timer = new Timer(40, e -> { phase += .035; strip = (strip + .7) % 500; repaint(); });
+            setOpaque(true);
+            Timer timer = new Timer(200, e -> {
+                long now = System.nanoTime();
+                if (!isShowing()) { lastTick = now; return; }
+                double elapsed = Math.min((now - lastTick) / 1_000_000_000.0, .25);
+                lastTick = now;
+                phase = (phase + elapsed * .025) % (Math.PI * 2);
+                strip += elapsed * 3;
+                repaint();
+            });
+            timer.setCoalesce(true);
             timer.start();
         }
 
@@ -207,15 +225,18 @@ final class CosmosLoginPanel extends JPanel {
             int available = Math.max(210, getHeight() - 112);
             int vw = Math.min(getWidth() - 8, 590), vh = Math.min(available, vw / 2);
             int vx = (getWidth() - vw) / 2, vy = Math.max(4, (available - vh) / 2);
-            if (vortex != null) {
-                g.setComposite(AlphaComposite.SrcOver.derive(.82f));
-                g.drawImage(vortex, vx, vy, vw, vh, null); g.setComposite(AlphaComposite.SrcOver);
+            BufferedImage background = sceneFrame(vx, vy, vw, vh);
+            if (background != null) g.drawImage(background, 0, 0, null);
+            else { g.setColor(new Color(2, 5, 16)); g.fillRect(0, 0, getWidth(), getHeight()); }
+            double centerX = vx + .50 * vw, centerY = vy + .51 * vh;
+            double radiusX = .31 * vw, radiusY = .29 * vh;
+            BufferedImage[] models = {gpt, claude, gemini, grok, unknown};
+            int[] sizes = {34, 31, 29, 31, 25};
+            for (int index = 0; index < models.length; index++) {
+                double angle = phase + index * Math.PI * 2 / models.length;
+                drawModel(g, models[index], centerX + Math.cos(angle) * radiusX,
+                    centerY + Math.sin(angle) * radiusY, sizes[index], .94f);
             }
-            drawModel(g, gpt, vx + .22 * vw, vy + .56 * vh, 31, 0);
-            drawModel(g, claude, vx + .41 * vw, vy + .34 * vh, 28, 1.2);
-            drawModel(g, gemini, vx + .64 * vw, vy + .47 * vh, 25, 2.5);
-            drawModel(g, grok, vx + .51 * vw, vy + .69 * vh, 28, 3.8);
-            drawModel(g, unknown, vx + .76 * vw, vy + .34 * vh, 21, 5.1);
 
             int labelY = getHeight() - 101;
             g.setFont(font(10, Font.PLAIN)); g.setColor(new Color(184, 196, 230, 140));
@@ -225,17 +246,63 @@ final class CosmosLoginPanel extends JPanel {
             g.setColor(new Color(178, 195, 255, 35)); g.drawRoundRect(0, barY, getWidth() - 4, barH, 18, 18);
             List<ModelChip> chips = List.of(new ModelChip("GPT", gpt), new ModelChip("Claude", claude), new ModelChip("Gemini", gemini), new ModelChip("Grok", grok), new ModelChip("更多模型持续接入", null));
             int total = chips.stream().mapToInt(ModelChip::width).sum() + chips.size() * 10;
-            int x = (int) -strip;
+            int x = -(int) (strip % total);
             while (x < getWidth()) { for (ModelChip chip : chips) { drawChip(g, chip, x, barY + 14); x += chip.width() + 10; } }
-            if (total < 1) strip = 0;
             g.dispose();
         }
 
-        private void drawModel(Graphics2D g, BufferedImage image, double x, double y, int size, double offset) {
+        private BufferedImage sceneFrame(int vortexX, int vortexY, int vortexWidth, int vortexHeight) {
+            Backdrop backdrop = (Backdrop) SwingUtilities.getAncestorOfClass(Backdrop.class, this);
+            if (backdrop == null || getWidth() <= 0 || getHeight() <= 0) return null;
+            Point location = SwingUtilities.convertPoint(this, 0, 0, backdrop);
+            String key = getWidth() + ":" + getHeight() + ":" + backdrop.getWidth() + ":" + backdrop.getHeight()
+                + ":" + location.x + ":" + location.y + ":" + vortexX + ":" + vortexY + ":" + vortexWidth + ":" + vortexHeight;
+            if (cachedScene != null && cachedSceneKey.equals(key)) return cachedScene;
+            BufferedImage output = new BufferedImage(getWidth(), getHeight(), BufferedImage.TYPE_INT_RGB);
+            Graphics2D g = output.createGraphics();
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+            g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            g.setColor(new Color(2, 5, 16));
+            g.fillRect(0, 0, output.getWidth(), output.getHeight());
+            if (cosmos != null) {
+                double scale = Math.max(backdrop.getWidth() / (double) cosmos.getWidth(), backdrop.getHeight() / (double) cosmos.getHeight());
+                int width = (int) Math.ceil(cosmos.getWidth() * scale), height = (int) Math.ceil(cosmos.getHeight() * scale);
+                int x = (backdrop.getWidth() - width) / 2 - location.x, y = (backdrop.getHeight() - height) / 2 - location.y;
+                g.drawImage(cosmos, x, y, width, height, null);
+            }
+            g.setPaint(new GradientPaint(-location.x, 0, new Color(1, 4, 15, 45), backdrop.getWidth() - location.x, 0, new Color(1, 3, 12, 175)));
+            g.fillRect(0, 0, output.getWidth(), output.getHeight());
+            if (vortex != null) {
+                g.setComposite(AlphaComposite.SrcOver.derive(.82f));
+                g.drawImage(vortex, vortexX, vortexY, vortexWidth, vortexHeight, null);
+            }
+            g.dispose();
+            cachedScene = output;
+            cachedSceneKey = key;
+            return output;
+        }
+
+        private static BufferedImage orbitIcon(BufferedImage source) {
+            if (source == null) return null;
+            int size = 96;
+            BufferedImage output = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g = output.createGraphics();
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+            g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.drawImage(source, 0, 0, size, size, null);
+            g.dispose();
+            return output;
+        }
+
+        private void drawModel(Graphics2D g, BufferedImage image, double x, double y, double size, float opacity) {
             if (image == null) return;
-            int driftX = (int) Math.round(Math.cos(phase + offset) * 2.2), driftY = (int) Math.round(Math.sin(phase + offset) * 3.2);
-            g.setComposite(AlphaComposite.SrcOver.derive(offset > 5 ? .52f : .9f));
-            g.drawImage(image, (int) x + driftX - size / 2, (int) y + driftY - size / 2, size, size, null);
+            double scale = size / Math.max(image.getWidth(), image.getHeight());
+            AffineTransform transform = new AffineTransform();
+            transform.translate(x - image.getWidth() * scale / 2, y - image.getHeight() * scale / 2);
+            transform.scale(scale, scale);
+            g.setComposite(AlphaComposite.SrcOver.derive(opacity));
+            g.drawImage(image, transform, null);
             g.setComposite(AlphaComposite.SrcOver);
         }
 
