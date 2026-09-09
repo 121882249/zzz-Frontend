@@ -5,6 +5,8 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.util.List;
 import java.util.*;
 import java.util.function.Consumer;
@@ -19,11 +21,24 @@ final class ModelPickerDialog extends JDialog {
     ModelPickerDialog(JFrame owner, String client, List<PricedModel> models,
                       Set<String> selectedIds, Consumer<List<PricedModel>> onApply) {
         super(owner, "选择 " + client + " 模型", true);
+        setUndecorated(true);
+        setBackground(new Color(7, 11, 29));
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
+        setContentPane(content(client, models, selectedIds, onApply));
         setSize(680, 650);
         setMinimumSize(new Dimension(560, 480));
+        applyShape();
+        addComponentListener(new ComponentAdapter() {
+            public void componentResized(ComponentEvent event) { applyShape(); }
+        });
+        getRootPane().registerKeyboardAction(event -> dispose(),
+            KeyStroke.getKeyStroke("ESCAPE"), JComponent.WHEN_IN_FOCUSED_WINDOW);
         setLocationRelativeTo(owner);
-        setContentPane(content(client, models, selectedIds, onApply));
+    }
+
+    private void applyShape() {
+        try { setShape(new java.awt.geom.RoundRectangle2D.Double(0, 0, getWidth(), getHeight(), 24, 24)); }
+        catch (UnsupportedOperationException ignored) {}
     }
 
     private JComponent content(String client, List<PricedModel> models, Set<String> selectedIds,
@@ -163,6 +178,8 @@ final class ModelPickerDialog extends JDialog {
             Graphics2D g = (Graphics2D) graphics.create();
             g.setPaint(new GradientPaint(0, 0, new Color(12, 20, 51), getWidth(), getHeight(), new Color(9, 8, 35)));
             g.fillRect(0, 0, getWidth(), getHeight());
+            g.setColor(new Color(184, 199, 255, 45));
+            g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 24, 24);
             g.dispose();
         }
     }

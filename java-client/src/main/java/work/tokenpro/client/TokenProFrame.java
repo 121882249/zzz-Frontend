@@ -765,12 +765,14 @@ final class TokenProFrame extends JFrame {
 
     private static final class CosmosPopup extends JPopupMenu {
         CosmosPopup() {
-            setOpaque(false);
+            setOpaque(true);
+            setBackground(new Color(8, 13, 32));
             setLightWeightPopupEnabled(true);
             setBorder(new EmptyBorder(6, 6, 6, 6));
         }
 
         protected void paintComponent(Graphics graphics) {
+            super.paintComponent(graphics);
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g.setColor(new Color(8, 13, 32, 248));
@@ -778,7 +780,6 @@ final class TokenProFrame extends JFrame {
             g.setColor(new Color(144, 164, 235, 58));
             g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 16, 16);
             g.dispose();
-            super.paintComponent(graphics);
         }
     }
 
