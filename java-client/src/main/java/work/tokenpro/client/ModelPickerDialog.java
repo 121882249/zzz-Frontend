@@ -153,7 +153,7 @@ final class ModelPickerDialog extends JDialog {
     private static final class ModelCheckBox extends JCheckBox {
         private final PricedModel model;
         ModelCheckBox(PricedModel model) {
-            super(model.name());
+            super(model.displayName());
             this.model = model;
             setFont(font(13, Font.PLAIN));
             setForeground(TEXT);

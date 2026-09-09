@@ -96,7 +96,7 @@ final class CodexConfig {
             if (closest == null) closest = bySlug.values().stream().filter(item -> String.valueOf(item.get("slug")).startsWith("gpt-")).findFirst().orElse(bySlug.values().iterator().next());
             Map<String, Object> entry = deepCopy(closest);
             entry.put("slug", model.name());
-            entry.put("display_name", model.name());
+            entry.put("display_name", model.displayName());
             entry.put("description", model.groupName() + " · TokenPro");
             entry.put("visibility", "list");
             entry.put("supported_in_api", true);

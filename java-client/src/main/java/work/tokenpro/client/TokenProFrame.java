@@ -716,7 +716,6 @@ final class TokenProFrame extends JFrame {
         Map<Long, DefaultMutableTreeNode> groups = new LinkedHashMap<>();
         int count = 0;
         for (PricedModel item : models) {
-            if (item.name().toLowerCase(Locale.ROOT).contains("image")) continue;
             DefaultMutableTreeNode group = groups.computeIfAbsent(item.groupId(), ignored -> {
                 DefaultMutableTreeNode node = new DefaultMutableTreeNode(new ModelGroupLabel(item.groupName(), item.platform())); root.add(node); return node;
             });
@@ -754,7 +753,7 @@ final class TokenProFrame extends JFrame {
             JLabel label = (JLabel) super.getTreeCellRendererComponent(tree, value, selected, expanded, leaf, row, focus);
             Object item = value instanceof DefaultMutableTreeNode node ? node.getUserObject() : value;
             boolean group = item instanceof ModelGroupLabel;
-            if (item instanceof PricedModel model) label.setText(model.name());
+            if (item instanceof PricedModel model) label.setText(model.displayName());
             label.setIcon(null);
             label.setBorder(new EmptyBorder(4, group ? 8 : 14, 4, 10)); label.setFont(appFont(group ? 13 : 12, group ? Font.BOLD : Font.PLAIN));
             label.setBackground(selected ? new Color(56, 50, 116) : new Color(8, 13, 31));

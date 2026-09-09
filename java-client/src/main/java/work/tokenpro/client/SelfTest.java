@@ -19,6 +19,8 @@ final class SelfTest {
         check(CodexConfig.stripRootOverrides(config).equals("[features]\napps = true\n"), "root override removal"); passed++;
         check(Platform.dataDirectory().endsWith("TokenPro"), "platform data directory"); passed++;
         PricedModel priced = new PricedModel("gpt-test", "openai", "GPT", 16);
+        check("GPT-test".equals(priced.displayName()), "GPT model display name"); passed++;
+        check("Gemini".equals(new PricedModel("Gemini", "google", "Google", 17).displayName()), "non-GPT model display name"); passed++;
         ClaudeBridgeConfig.Route route = ClaudeBridgeConfig.Route.from(priced);
         check(route.alias().matches("claude-tokenpro-[0-9a-f]{24}"), "Claude alias"); passed++;
         Map<String, Object> request = new LinkedHashMap<>();
