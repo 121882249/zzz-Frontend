@@ -148,7 +148,7 @@ final class TokenProFrame extends JFrame {
         JLabel badge = new JLabel(clientIcon(iconName, 48)); badge.setHorizontalAlignment(SwingConstants.CENTER); badge.setPreferredSize(new Dimension(52, 52)); card.add(badge, BorderLayout.WEST);
         JPanel words = transparent(); words.setLayout(new BoxLayout(words, BoxLayout.Y_AXIS)); JPanel nameLine = transparent(new FlowLayout(FlowLayout.LEFT, 10, 0)); nameLine.setAlignmentX(Component.LEFT_ALIGNMENT); nameLine.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24)); JLabel heading = new JLabel(title); heading.setFont(appFont(17, Font.BOLD)); JLabel installedLabel = new JLabel(installed ? "已安装" : "未安装"); installedLabel.setFont(appFont(11, Font.BOLD)); installedLabel.setForeground(installed ? new Color(97, 222, 165) : MUTED); nameLine.add(heading); nameLine.add(installedLabel); JLabel detail = new JLabel(subtitle); detail.setAlignmentX(Component.LEFT_ALIGNMENT); detail.setFont(appFont(11, Font.PLAIN)); detail.setForeground(MUTED); words.add(Box.createVerticalStrut(3)); words.add(nameLine); words.add(Box.createVerticalStrut(6)); words.add(detail); card.add(words, BorderLayout.CENTER);
         JPanel actions = transparent(); actions.setLayout(new BoxLayout(actions, BoxLayout.Y_AXIS)); JPanel buttons = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        JButton menu = soft("模型设置  ▾");
+        JButton menu = soft("模型选择  ▾");
         CosmosPopup popup = new CosmosPopup();
         JMenuItem choose = new CosmosMenuItem("选择模型", false); choose.addActionListener(e -> chooseModel.run());
         JMenuItem official = new CosmosMenuItem("恢复官方配置", true); official.addActionListener(e -> restore.run());
@@ -764,14 +764,16 @@ final class TokenProFrame extends JFrame {
 
     private static final class CosmosPopup extends JPopupMenu {
         CosmosPopup() {
-            setOpaque(true);
+            // Do not let the platform popup UI paint its default (white) background first.
+            // This popup is composited directly onto the dark dashboard instead.
+            setOpaque(false);
             setBackground(new Color(8, 13, 32));
             setLightWeightPopupEnabled(true);
+            setDoubleBuffered(true);
             setBorder(new EmptyBorder(6, 6, 6, 6));
         }
 
         protected void paintComponent(Graphics graphics) {
-            super.paintComponent(graphics);
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g.setColor(new Color(8, 13, 32, 248));
@@ -790,6 +792,12 @@ final class TokenProFrame extends JFrame {
             this.restore = restore;
             setOpaque(false);
             setContentAreaFilled(false);
+            setDoubleBuffered(true);
+            setUI(new javax.swing.plaf.basic.BasicMenuItemUI() {
+                @Override protected void paintBackground(Graphics g, JMenuItem item, Color color) {
+                    // Hover feedback is painted by CosmosMenuItem; suppress the LAF's white fill.
+                }
+            });
             setFont(appFont(12, Font.BOLD));
             setForeground(restore ? new Color(184, 194, 226) : new Color(241, 244, 255));
             setBorder(new EmptyBorder(0, 14, 0, 14));
