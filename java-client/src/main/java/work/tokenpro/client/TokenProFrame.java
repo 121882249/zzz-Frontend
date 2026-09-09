@@ -2,6 +2,11 @@ package work.tokenpro.client;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.tree.DefaultMutableTreeNode;
+import javax.swing.tree.DefaultTreeCellRenderer;
+import javax.swing.tree.DefaultTreeModel;
+import javax.swing.tree.TreePath;
+import javax.swing.tree.TreeSelectionModel;
 import java.awt.*;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
@@ -34,10 +39,8 @@ final class TokenProFrame extends JFrame {
     private final JTextField model = new JTextField();
     private final JPasswordField apiKey = new JPasswordField();
     private final JLabel status = new JLabel("就绪");
-    private final DefaultListModel<PricedModel> claudeModels = new DefaultListModel<>();
-    private final JList<PricedModel> claudeModelList = new JList<>(claudeModels);
-    private final DefaultListModel<PricedModel> codexModels = new DefaultListModel<>();
-    private final JList<PricedModel> codexModelList = new JList<>(codexModels);
+    private final JTree claudeModelTree = modelTree(true);
+    private final JTree codexModelTree = modelTree(false);
     private final JLabel bridgeStatus = new JLabel("桥接状态：未检测");
     private final CardLayout pages = new CardLayout();
     private final JPanel pageHost = new JPanel(pages);
@@ -56,6 +59,9 @@ final class TokenProFrame extends JFrame {
     private final JPanel viewHost = new JPanel(views);
     private CosmosLoginPanel loginView;
     private String accessToken;
+    private String refreshToken = "";
+    private long tokenExpiresAt;
+    private Map<String, Object> sessionUser = Map.of();
     private String accountId = "";
 
     TokenProFrame(SecureStore store) {
@@ -131,8 +137,8 @@ final class TokenProFrame extends JFrame {
 
     private JComponent homePanel() {
         JPanel panel = vertical(); JLabel title = new JLabel("我的客户端"); title.setFont(appFont(15, Font.BOLD)); panel.add(title); panel.add(Box.createVerticalStrut(13));
-        panel.add(desktopClientCard("Codex 客户端", "桌面应用 · 独立登录", Platform.applicationInstalled("Codex"), "Codex", () -> showPage("Codex 连接"), this::restoreCodex, () -> openApp("Codex"), homeCodexStatus)); panel.add(Box.createVerticalStrut(12));
-        panel.add(desktopClientCard("Claude 客户端", "桌面应用 · 独立登录", Platform.applicationInstalled("Claude"), "Claude", () -> showPage("Claude 连接"), this::restoreClaude, this::openClaude, homeClaudeStatus)); panel.add(Box.createVerticalStrut(12));
+        panel.add(desktopClientCard("Codex 客户端", "桌面应用 · 独立登录", Platform.applicationInstalled("Codex"), "Codex", () -> chooseModels("Codex"), this::restoreCodex, () -> openApp("Codex"), homeCodexStatus)); panel.add(Box.createVerticalStrut(12));
+        panel.add(desktopClientCard("Claude 客户端", "桌面应用 · 独立登录", Platform.applicationInstalled("Claude"), "Claude", () -> chooseModels("Claude"), this::restoreClaude, this::openClaude, homeClaudeStatus)); panel.add(Box.createVerticalStrut(12));
         panel.add(commandClientCard("Codex 命令行", "命令行工具 · Codex CLI", "Codex", "codex", "https://learn.chatgpt.com/docs/codex/cli")); panel.add(Box.createVerticalStrut(12));
         panel.add(commandClientCard("Claude 命令行", "命令行工具 · Claude Code", "Claude", "claude", "https://docs.anthropic.com/en/docs/claude-code/getting-started")); panel.add(Box.createVerticalGlue()); return panel;
     }
@@ -143,7 +149,11 @@ final class TokenProFrame extends JFrame {
         JPanel words = transparent(); words.setLayout(new BoxLayout(words, BoxLayout.Y_AXIS)); JPanel nameLine = transparent(new FlowLayout(FlowLayout.LEFT, 10, 0)); nameLine.setAlignmentX(Component.LEFT_ALIGNMENT); nameLine.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24)); JLabel heading = new JLabel(title); heading.setFont(appFont(17, Font.BOLD)); JLabel installedLabel = new JLabel(installed ? "已安装" : "未安装"); installedLabel.setFont(appFont(11, Font.BOLD)); installedLabel.setForeground(installed ? new Color(97, 222, 165) : MUTED); nameLine.add(heading); nameLine.add(installedLabel); JLabel detail = new JLabel(subtitle); detail.setAlignmentX(Component.LEFT_ALIGNMENT); detail.setFont(appFont(11, Font.PLAIN)); detail.setForeground(MUTED); words.add(Box.createVerticalStrut(3)); words.add(nameLine); words.add(Box.createVerticalStrut(6)); words.add(detail); card.add(words, BorderLayout.CENTER);
         JPanel actions = transparent(); actions.setLayout(new BoxLayout(actions, BoxLayout.Y_AXIS)); JPanel buttons = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         JButton menu = soft("模型设置  ▾");
-        JPopupMenu popup = new JPopupMenu(); JMenuItem choose = new JMenuItem("选择模型"); choose.addActionListener(e -> chooseModel.run()); JMenuItem official = new JMenuItem("恢复官方配置"); official.addActionListener(e -> restore.run()); popup.add(choose); popup.add(official); menu.addActionListener(e -> popup.show(menu, 0, menu.getHeight()));
+        CosmosPopup popup = new CosmosPopup();
+        JMenuItem choose = new CosmosMenuItem("选择模型", false); choose.addActionListener(e -> chooseModel.run());
+        JMenuItem official = new CosmosMenuItem("恢复官方配置", true); official.addActionListener(e -> restore.run());
+        popup.add(choose); popup.add(official);
+        menu.addActionListener(e -> popup.show(menu, 0, menu.getHeight() + 6));
         JButton launch = primary("打开应用"); launch.addActionListener(e -> open.run()); launch.setEnabled(false);
         if (iconName.equals("Codex")) codexLaunch = launch; else claudeLaunch = launch;
         buttons.add(menu); buttons.add(launch); actions.add(buttons); state.setFont(appFont(11, Font.BOLD)); state.setForeground(PURPLE); state.setAlignmentX(Component.RIGHT_ALIGNMENT); actions.add(Box.createVerticalStrut(7)); actions.add(state); card.add(actions, BorderLayout.EAST); return card;
@@ -197,8 +207,12 @@ final class TokenProFrame extends JFrame {
                 Map<String, Object> result = api.login(emailValue, passwordValue);
                 accessToken = string(result.get("access_token"));
                 if (accessToken.isBlank()) throw new IllegalStateException("登录响应缺少 access_token");
-                store.write("java-session.json", Json.stringify(Map.of("access_token", accessToken)));
-                return result.containsKey("user") ? Json.object(result.get("user")) : api.me(accessToken);
+                refreshToken = string(result.get("refresh_token"));
+                Number expiresIn = result.get("expires_in") instanceof Number number ? number : null;
+                tokenExpiresAt = expiresIn == null ? 0 : System.currentTimeMillis() + expiresIn.longValue() * 1000L;
+                Map<String, Object> user = result.containsKey("user") ? Json.object(result.get("user")) : api.me(accessToken);
+                saveSession(user);
+                return user;
             }
             protected void done() {
                 try {
@@ -223,7 +237,7 @@ final class TokenProFrame extends JFrame {
 
     private void logout() {
         try {
-            store.delete("java-session.json"); accessToken = null; accountId = ""; keys.clear();
+            store.delete("java-session.json"); accessToken = null; refreshToken = ""; tokenExpiresAt = 0; sessionUser = Map.of(); accountId = ""; keys.clear();
             account.setText("尚未登录"); headerUser.setText("登录账户"); accountEmail.setText("登录账户"); headerBalance.setText("—"); accountBalance.setText("—");
             homeCodexStatus.setText("请先选择模型"); homeClaudeStatus.setText("请先选择模型"); if (codexLaunch != null) codexLaunch.setEnabled(false); if (claudeLaunch != null) claudeLaunch.setEnabled(false);
             showPage("首页"); showLoginScreen(); status("已退出账户");
@@ -232,12 +246,11 @@ final class TokenProFrame extends JFrame {
 
     private JComponent connectionPanel() {
         JPanel panel = vertical();
-        panel.add(pageHeading("选择 Codex 模型", "选择一个模型后，TokenPro 会自动创建专用连接并写入 Codex 配置。"));
+        panel.add(pageHeading("选择 Codex 模型", "按你的可用分组展示模型；选择分组下的一个模型后写入 Codex 配置。"));
         panel.add(Box.createVerticalStrut(15));
         JLabel hint = new JLabel("专用 Key 保存在当前系统账户的 TokenPro 安全目录中，可随时恢复官方配置。"); hint.setForeground(MUTED); panel.add(hint); panel.add(Box.createVerticalStrut(10));
-        JButton load = soft("加载可用模型"); load.setAlignmentX(Component.LEFT_ALIGNMENT); load.addActionListener(e -> loadCodexModels()); panel.add(load);
-        codexModelList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION); codexModelList.setVisibleRowCount(7); codexModelList.setFixedCellHeight(46); codexModelList.setCellRenderer(new ModelRenderer());
-        JScrollPane modelScroll = new JScrollPane(codexModelList); modelScroll.setPreferredSize(new Dimension(640, 260)); modelScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, 280)); panel.add(modelScroll); panel.add(Box.createVerticalStrut(10));
+        JButton load = soft("刷新可用分组与模型"); load.setAlignmentX(Component.LEFT_ALIGNMENT); load.addActionListener(e -> loadCodexModels()); panel.add(load);
+        JScrollPane modelScroll = modelScroll(codexModelTree, 300); panel.add(modelScroll); panel.add(Box.createVerticalStrut(10));
         JButton apply = primary("应用到 Codex"); apply.addActionListener(e -> applyCodex()); JButton restore = soft("恢复 Codex 官方配置"); restore.addActionListener(e -> restoreCodex());
         JPanel buttons = transparent(new FlowLayout(FlowLayout.LEFT)); buttons.add(apply); buttons.add(restore); panel.add(buttons);
         return panel;
@@ -246,24 +259,49 @@ final class TokenProFrame extends JFrame {
     private void loadCodexModels() {
         if (accessToken == null) { error(new IllegalStateException("请先登录 TokenPro")); return; }
         async("正在加载模型广场…", () -> api.pricedModels(accessToken), models -> {
-            codexModels.clear();
-            for (PricedModel item : models) if (!item.name().toLowerCase(Locale.ROOT).contains("image")) codexModels.addElement(item);
-            status("已加载 " + codexModels.size() + " 个可用模型");
+            int count = populateModelTree(codexModelTree, models);
+            status("已加载你的可用分组，共 " + count + " 个模型");
+        });
+    }
+
+    private void chooseModels(String client) {
+        if (accessToken == null || accountId.isBlank()) { error(new IllegalStateException("请先登录 TokenPro")); return; }
+        async("正在加载可用分组与模型…", () -> api.pricedModels(accessToken), models -> {
+            if (models.isEmpty()) { error(new IllegalStateException("当前账户没有可用模型")); return; }
+            Set<String> selected = selectedModelIds(client);
+            ModelPickerDialog dialog = new ModelPickerDialog(this, client, models, selected,
+                chosen -> { if ("Codex".equals(client)) applyCodex(chosen); else applyClaude(chosen); });
+            status("已加载 " + models.size() + " 个可用模型");
+            dialog.setVisible(true);
         });
     }
 
     private void applyCodex() {
         if (accessToken == null || accountId.isBlank()) { error(new IllegalStateException("请先登录 TokenPro")); return; }
-        PricedModel selected = codexModelList.getSelectedValue();
+        PricedModel selected = selectedModel(codexModelTree);
         if (selected == null) { error(new IllegalStateException("请选择一个模型")); return; }
-        async("正在创建 Codex 专用连接…", () -> {
-            ApiClient.ManagedKey managed = api.codexManagedKey(accessToken, selected.groupId());
-            codex.apply("https://tokenpro.work/v1", selected.name(), managed.key());
-            store.write("codex-selected.json", Json.stringify(Map.of("model", selected.name(), "group_id", selected.groupId(), "key_id", managed.id())));
-            return selected;
-        }, selectedModel -> {
-            homeCodexStatus.setText(selectedModel.name()); if (codexLaunch != null) codexLaunch.setEnabled(true);
-            status("Codex 已接入 " + selectedModel.name() + "，重新打开 Codex 后生效"); showPage("首页");
+        applyCodex(List.of(selected));
+    }
+
+    private void applyCodex(List<PricedModel> selected) {
+        if (accessToken == null || accountId.isBlank()) { error(new IllegalStateException("请先登录 TokenPro")); return; }
+        selected = uniqueModels(selected);
+        if (selected.isEmpty()) { error(new IllegalStateException("请至少选择一个模型")); return; }
+        List<PricedModel> chosen = selected;
+        async("正在使用全局 Key 配置 Codex…", () -> {
+            ApiClient.ManagedKey managed = api.globalKey(accessToken);
+            codex.apply("https://tokenpro.work/v1", chosen, managed.key());
+            Map<String, Object> saved = new LinkedHashMap<>();
+            saved.put("default_model", chosen.getFirst().name());
+            saved.put("models", modelRows(chosen));
+            saved.put("key_id", managed.id());
+            store.write("codex-selected.json", Json.stringify(saved));
+            return chosen;
+        }, configured -> {
+            homeCodexStatus.setText("已选 " + configured.size() + " 个模型");
+            if (codexLaunch != null) codexLaunch.setEnabled(true);
+            status("Codex 已配置 " + configured.size() + " 个模型");
+            openApp("Codex");
         });
     }
 
@@ -293,15 +331,13 @@ final class TokenProFrame extends JFrame {
 
     private JComponent claudePanel() {
         JPanel panel = vertical();
-        panel.add(pageHeading("选择 Claude 桌面模型", "勾选后直接在 Claude 桌面版内切换，无需反复配置。")); panel.add(Box.createVerticalStrut(15));
+        panel.add(pageHeading("选择 Claude 桌面模型", "按你的可用分组展示模型；可在一个或多个分组下选择模型。")); panel.add(Box.createVerticalStrut(15));
         JLabel hint = new JLabel("共用一把专用 Key，TokenPro 会按模型自动切换分组并维护本地连接。");
         hint.setForeground(Color.GRAY); panel.add(hint); panel.add(Box.createVerticalStrut(10));
-        JButton load = new JButton("加载可用模型");
+        JButton load = new JButton("刷新可用分组与模型");
         soft(load);
         load.setAlignmentX(Component.LEFT_ALIGNMENT); load.addActionListener(e -> loadClaudeModels()); panel.add(load);
-        claudeModelList.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
-        claudeModelList.setVisibleRowCount(6); claudeModelList.setFixedCellHeight(46); claudeModelList.setCellRenderer(new ModelRenderer());
-        JScrollPane modelScroll = new JScrollPane(claudeModelList); modelScroll.setPreferredSize(new Dimension(640, 230)); modelScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, 250)); panel.add(modelScroll);
+        JScrollPane modelScroll = modelScroll(claudeModelTree, 280); panel.add(modelScroll);
         panel.add(Box.createVerticalStrut(8)); panel.add(bridgeStatus);
         JButton apply = new JButton("应用并启动 Claude 桥接"); apply.addActionListener(e -> applyClaude());
         primary(apply);
@@ -318,21 +354,34 @@ final class TokenProFrame extends JFrame {
     private void loadClaudeModels() {
         if (accessToken == null) { error(new IllegalStateException("请先登录 TokenPro")); return; }
         async("正在加载模型广场…", () -> api.pricedModels(accessToken), models -> {
-            claudeModels.clear();
-            for (PricedModel item : models) if (!item.name().toLowerCase(Locale.ROOT).contains("image")) claudeModels.addElement(item);
-            status("已加载 " + claudeModels.size() + " 个可用模型，可按 Ctrl/Cmd 或 Shift 多选");
+            int count = populateModelTree(claudeModelTree, models);
+            status("已加载你的可用分组，共 " + count + " 个模型；可按 Ctrl/Cmd 或 Shift 多选");
         });
     }
 
     private void applyClaude() {
         if (accessToken == null || accountId.isBlank()) { error(new IllegalStateException("请先登录 TokenPro")); return; }
-        List<PricedModel> selected = claudeModelList.getSelectedValuesList();
+        List<PricedModel> selected = selectedModels(claudeModelTree);
         if (selected.isEmpty()) { error(new IllegalStateException("请至少选择一个模型")); return; }
-        async("正在创建 Claude 专用连接…", () -> {
-            ApiClient.ManagedKey managed = api.claudeManagedKey(accessToken, selected.getFirst().groupId());
-            ClaudeBridgeConfig config = ClaudeBridgeConfig.create(accountId, accessToken, managed, selected);
+        applyClaude(selected);
+    }
+
+    private void applyClaude(List<PricedModel> selected) {
+        if (accessToken == null || accountId.isBlank()) { error(new IllegalStateException("请先登录 TokenPro")); return; }
+        selected = uniqueModels(selected);
+        if (selected.isEmpty()) { error(new IllegalStateException("请至少选择一个模型")); return; }
+        List<PricedModel> chosen = selected;
+        async("正在使用全局 Key 配置 Claude…", () -> {
+            ApiClient.ManagedKey managed = api.globalKey(accessToken);
+            ClaudeBridgeConfig config = ClaudeBridgeConfig.create(accountId, accessToken, managed, chosen);
             config.save(store); ClaudeDesktopConfig.install(store, config); ClaudeBridgeManager.ensureRunning(store); return config;
-        }, config -> { bridgeStatus.setText("桥接状态：运行中 · " + config.routes().size() + " 个模型 · " + config.baseUrl()); homeClaudeStatus.setText("已选 " + config.routes().size() + " 个模型"); if (claudeLaunch != null) claudeLaunch.setEnabled(true); status("Claude 桥接已应用，重新打开 Claude 后生效"); showPage("首页"); });
+        }, config -> {
+            bridgeStatus.setText("桥接状态：运行中 · " + config.routes().size() + " 个模型 · " + config.baseUrl());
+            homeClaudeStatus.setText("已选 " + config.routes().size() + " 个模型");
+            if (claudeLaunch != null) claudeLaunch.setEnabled(true);
+            status("Claude 已配置 " + config.routes().size() + " 个模型");
+            openClaude();
+        });
     }
 
     private void updateBridgeStatus() {
@@ -354,8 +403,15 @@ final class TokenProFrame extends JFrame {
         async("正在恢复登录…", () -> {
             Optional<String> raw = store.read("java-session.json");
             if (raw.isEmpty()) return null;
-            accessToken = string(Json.object(Json.parse(raw.get())).get("access_token"));
-            return accessToken.isBlank() ? null : api.me(accessToken);
+            Map<String, Object> saved = Json.object(Json.parse(raw.get()));
+            accessToken = string(saved.get("access_token"));
+            refreshToken = string(saved.get("refresh_token"));
+            tokenExpiresAt = saved.get("token_expires_at") instanceof Number number ? number.longValue() : 0;
+            sessionUser = saved.get("user") instanceof Map<?, ?> ? Json.object(saved.get("user")) : Map.of();
+            if (accessToken.isBlank()) return null;
+            Map<String, Object> user = api.me(accessToken);
+            saveSession(user);
+            return user;
         }, value -> {
             if (value == null) { status("就绪"); showLoginScreen(); }
             else { showAccount(value); updateCodexStatus(); updateBridgeStatus(); showPage("首页"); showDashboardScreen(); }
@@ -366,9 +422,53 @@ final class TokenProFrame extends JFrame {
         try {
             Optional<String> raw = store.read("codex-selected.json");
             if (raw.isEmpty()) throw new IllegalStateException("未选择");
-            String selected = string(Json.object(Json.parse(raw.get())).get("model")); if (selected.isBlank()) throw new IllegalStateException("未选择");
-            homeCodexStatus.setText(selected); if (codexLaunch != null) codexLaunch.setEnabled(true);
+            Map<String, Object> saved = Json.object(Json.parse(raw.get()));
+            if (saved.get("models") instanceof List<?> models && !models.isEmpty()) homeCodexStatus.setText("已选 " + models.size() + " 个模型");
+            else {
+                String selected = string(saved.get("model")); if (selected.isBlank()) throw new IllegalStateException("未选择");
+                homeCodexStatus.setText(selected);
+            }
+            if (codexLaunch != null) codexLaunch.setEnabled(true);
         } catch (Exception ignored) { homeCodexStatus.setText("请先选择模型"); if (codexLaunch != null) codexLaunch.setEnabled(false); }
+    }
+
+    private Set<String> selectedModelIds(String client) {
+        Set<String> ids = new HashSet<>();
+        try {
+            if ("Claude".equals(client)) {
+                for (ClaudeBridgeConfig.Route route : ClaudeBridgeConfig.load(store).routes()) {
+                    ids.add(route.groupId() + "\u0000" + route.name());
+                }
+            } else {
+                Optional<String> raw = store.read("codex-selected.json");
+                if (raw.isPresent()) {
+                    Map<String, Object> root = Json.object(Json.parse(raw.get()));
+                    if (root.get("models") instanceof List<?> rows) for (Object value : rows) {
+                        Map<String, Object> row = Json.object(value);
+                        if (row.get("group_id") instanceof Number groupId) ids.add(groupId.longValue() + "\u0000" + string(row.get("name")));
+                    }
+                    if (ids.isEmpty() && root.get("group_id") instanceof Number groupId) ids.add(groupId.longValue() + "\u0000" + string(root.get("model")));
+                }
+            }
+        } catch (Exception ignored) {}
+        return ids;
+    }
+
+    private static List<Map<String, Object>> modelRows(List<PricedModel> models) {
+        return models.stream().map(model -> {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("name", model.name());
+            row.put("platform", model.platform());
+            row.put("group_name", model.groupName());
+            row.put("group_id", model.groupId());
+            return row;
+        }).toList();
+    }
+
+    private static List<PricedModel> uniqueModels(List<PricedModel> models) {
+        Map<String, PricedModel> unique = new LinkedHashMap<>();
+        for (PricedModel model : models) unique.putIfAbsent(model.name(), model);
+        return List.copyOf(unique.values());
     }
 
     private void loadKeys() {
@@ -396,6 +496,7 @@ final class TokenProFrame extends JFrame {
     }
 
     private void showAccount(Map<String, Object> user) {
+        sessionUser = new LinkedHashMap<>(user);
         String emailValue = string(user.get("email"));
         Object rawBalance = user.get("balance");
         String balance = rawBalance instanceof Number number ? String.format(Locale.ROOT, "$%.2f", number.doubleValue()) : "—";
@@ -406,7 +507,16 @@ final class TokenProFrame extends JFrame {
         accountBalance.setText(balance);
         accountId = string(user.get("id"));
         password.setText("");
-        status("登录成功");
+        status("就绪");
+    }
+
+    private void saveSession(Map<String, Object> user) throws Exception {
+        Map<String, Object> saved = new LinkedHashMap<>();
+        saved.put("access_token", accessToken);
+        if (!refreshToken.isBlank()) saved.put("refresh_token", refreshToken);
+        if (tokenExpiresAt > 0) saved.put("token_expires_at", tokenExpiresAt);
+        saved.put("user", user);
+        store.write("java-session.json", Json.stringify(saved));
     }
 
     private JPanel vertical() {
@@ -548,20 +658,144 @@ final class TokenProFrame extends JFrame {
     }
 
     private void browse(String url) {
-        SwingUtilities.invokeLater(() -> new InAppBrowserDialog(this, url).setVisible(true));
+        if (accessToken == null || accessToken.isBlank()) {
+            try { Platform.browse(url); } catch (Exception e) { error(e); }
+            return;
+        }
+        async("正在打开网页…", () -> {
+            try { return api.browserLoginUrl(accessToken, url); }
+            catch (Exception ignored) { return url; }
+        }, target -> {
+            try { Platform.browse(target); status("已在系统浏览器打开 TokenPro"); }
+            catch (Exception e) { error(e); }
+        });
     }
-    private void openApp(String app) { try { Platform.openApplication(app); } catch (Exception e) { error(e); } }
+    private void openApp(String app) {
+        status("正在重启 " + app + "…");
+        new SwingWorker<Boolean, Void>() {
+            protected Boolean doInBackground() throws Exception { return Platform.restartApplication(app); }
+            protected void done() {
+                try {
+                    if (!get()) throw new IllegalStateException("无法重新打开 " + app);
+                    status(app + " 已重新打开");
+                } catch (Exception e) { error(e.getCause() == null ? e : e.getCause()); }
+            }
+        }.execute();
+    }
     private void openTerminal(String command) { try { Platform.openTerminalCommand(command); } catch (Exception e) { error(e); } }
     private void status(String value) { status.setText(value); }
     private void error(Throwable error) { status("错误：" + error.getMessage()); JOptionPane.showMessageDialog(this, error.getMessage(), "TokenPro", JOptionPane.ERROR_MESSAGE); }
     private static String string(Object value) { return value == null ? "" : String.valueOf(value); }
     private record KeyItem(long id, String name, String status) { public String toString() { return name + "  [" + status + "]"; } }
 
-    private static final class ModelRenderer extends DefaultListCellRenderer {
-        public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean selected, boolean focus) {
-            JLabel label = (JLabel) super.getListCellRendererComponent(list, value, index, selected, focus);
-            label.setBorder(new EmptyBorder(5, 12, 5, 12)); label.setFont(appFont(13, selected ? Font.BOLD : Font.PLAIN));
-            label.setBackground(selected ? new Color(44, 40, 91) : new Color(8, 13, 31)); label.setForeground(selected ? new Color(188, 196, 255) : new Color(222, 228, 249)); return label;
+    private static JTree modelTree(boolean multiple) {
+        JTree tree = new JTree(new DefaultMutableTreeNode("可用分组"));
+        tree.setRootVisible(false); tree.setShowsRootHandles(true); tree.setRowHeight(34); tree.setOpaque(true);
+        tree.setBackground(new Color(8, 13, 31)); tree.setForeground(TEXT); tree.setCellRenderer(new ModelTreeRenderer());
+        tree.getSelectionModel().setSelectionMode(multiple ? TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION : TreeSelectionModel.SINGLE_TREE_SELECTION);
+        return tree;
+    }
+
+    private static JScrollPane modelScroll(JTree tree, int height) {
+        JScrollPane scroll = new JScrollPane(tree); scroll.setPreferredSize(new Dimension(640, height)); scroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, height));
+        scroll.getViewport().setBackground(new Color(8, 13, 31)); scroll.setBorder(BorderFactory.createLineBorder(new Color(134, 151, 214, 55))); return scroll;
+    }
+
+    private static int populateModelTree(JTree tree, List<PricedModel> models) {
+        DefaultMutableTreeNode root = new DefaultMutableTreeNode("可用分组");
+        Map<Long, DefaultMutableTreeNode> groups = new LinkedHashMap<>();
+        int count = 0;
+        for (PricedModel item : models) {
+            if (item.name().toLowerCase(Locale.ROOT).contains("image")) continue;
+            DefaultMutableTreeNode group = groups.computeIfAbsent(item.groupId(), ignored -> {
+                DefaultMutableTreeNode node = new DefaultMutableTreeNode(new ModelGroupLabel(item.groupName(), item.platform())); root.add(node); return node;
+            });
+            group.add(new DefaultMutableTreeNode(item)); count++;
+        }
+        tree.setModel(new DefaultTreeModel(root));
+        if (tree.getRowCount() > 0) tree.expandRow(0);
+        return count;
+    }
+
+    private static PricedModel selectedModel(JTree tree) {
+        TreePath path = tree.getSelectionPath();
+        if (path == null) return null;
+        Object value = ((DefaultMutableTreeNode) path.getLastPathComponent()).getUserObject();
+        return value instanceof PricedModel model ? model : null;
+    }
+
+    private static List<PricedModel> selectedModels(JTree tree) {
+        TreePath[] paths = tree.getSelectionPaths(); if (paths == null) return List.of();
+        List<PricedModel> result = new ArrayList<>();
+        for (TreePath path : paths) {
+            Object value = ((DefaultMutableTreeNode) path.getLastPathComponent()).getUserObject();
+            if (value instanceof PricedModel model) result.add(model);
+        }
+        return result;
+    }
+
+    private record ModelGroupLabel(String name, String platform) {
+        public String toString() { return name; }
+    }
+
+    private static final class ModelTreeRenderer extends DefaultTreeCellRenderer {
+        ModelTreeRenderer() { setOpaque(true); setBorderSelectionColor(null); setBackgroundNonSelectionColor(new Color(8, 13, 31)); setTextNonSelectionColor(new Color(222, 228, 249)); }
+        public Component getTreeCellRendererComponent(JTree tree, Object value, boolean selected, boolean expanded, boolean leaf, int row, boolean focus) {
+            JLabel label = (JLabel) super.getTreeCellRendererComponent(tree, value, selected, expanded, leaf, row, focus);
+            Object item = value instanceof DefaultMutableTreeNode node ? node.getUserObject() : value;
+            boolean group = item instanceof ModelGroupLabel;
+            if (item instanceof PricedModel model) label.setText(model.name());
+            label.setIcon(null);
+            label.setBorder(new EmptyBorder(4, group ? 8 : 14, 4, 10)); label.setFont(appFont(group ? 13 : 12, group ? Font.BOLD : Font.PLAIN));
+            label.setBackground(selected ? new Color(56, 50, 116) : new Color(8, 13, 31));
+            label.setForeground(group ? new Color(161, 174, 255) : selected ? Color.WHITE : new Color(222, 228, 249));
+            return label;
+        }
+    }
+
+    private static final class CosmosPopup extends JPopupMenu {
+        CosmosPopup() {
+            setOpaque(false);
+            setLightWeightPopupEnabled(true);
+            setBorder(new EmptyBorder(6, 6, 6, 6));
+        }
+
+        protected void paintComponent(Graphics graphics) {
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(new Color(8, 13, 32, 248));
+            g.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 16, 16);
+            g.setColor(new Color(144, 164, 235, 58));
+            g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 16, 16);
+            g.dispose();
+            super.paintComponent(graphics);
+        }
+    }
+
+    private static final class CosmosMenuItem extends JMenuItem {
+        private final boolean restore;
+
+        CosmosMenuItem(String text, boolean restore) {
+            super(text);
+            this.restore = restore;
+            setOpaque(false);
+            setContentAreaFilled(false);
+            setFont(appFont(12, Font.BOLD));
+            setForeground(restore ? new Color(184, 194, 226) : new Color(241, 244, 255));
+            setBorder(new EmptyBorder(0, 14, 0, 14));
+            setPreferredSize(new Dimension(174, 36));
+        }
+
+        protected void paintComponent(Graphics graphics) {
+            ButtonModel model = getModel();
+            if (model.isArmed() || model.isSelected()) {
+                Graphics2D g = (Graphics2D) graphics.create();
+                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g.setColor(restore ? new Color(91, 70, 104, 115) : new Color(93, 103, 220, 105));
+                g.fillRoundRect(2, 2, getWidth() - 4, getHeight() - 4, 10, 10);
+                g.dispose();
+            }
+            super.paintComponent(graphics);
         }
     }
 

@@ -38,6 +38,24 @@ final class Platform {
         return root.resolve("config.toml");
     }
 
+    static Optional<Path> codexExecutable() {
+        String home = System.getProperty("user.home");
+        Stream<Path> candidates = switch (OS_KIND) {
+            case MAC -> Stream.of(
+                Path.of("/Applications", "Codex.app", "Contents", "Resources", "codex"),
+                Path.of(home, "Applications", "Codex.app", "Contents", "Resources", "codex"),
+                Path.of("/Applications", "ChatGPT.app", "Contents", "Resources", "codex"),
+                Path.of(home, "Applications", "ChatGPT.app", "Contents", "Resources", "codex"),
+                Path.of("/opt/homebrew/bin/codex"), Path.of("/usr/local/bin/codex"));
+            case WINDOWS -> Stream.of(
+                Path.of(System.getenv().getOrDefault("LOCALAPPDATA", home), "Programs", "Codex", "resources", "codex.exe"),
+                Path.of(System.getenv().getOrDefault("LOCALAPPDATA", home), "Programs", "ChatGPT", "resources", "codex.exe"),
+                Path.of(System.getenv().getOrDefault("APPDATA", home), "npm", "codex.cmd"));
+            case LINUX -> Stream.of(Path.of("/usr/local/bin/codex"), Path.of("/usr/bin/codex"), Path.of(home, ".local", "bin", "codex"));
+        };
+        return candidates.filter(Files::isRegularFile).findFirst();
+    }
+
     static void browse(String url) throws Exception {
         if (Desktop.isDesktopSupported()) Desktop.getDesktop().browse(URI.create(url));
         else new ProcessBuilder(OS_KIND == OS.WINDOWS ? new String[]{"cmd", "/c", "start", "", url} : new String[]{"xdg-open", url}).start();
@@ -52,6 +70,30 @@ final class Platform {
         else if (OS_KIND == OS.WINDOWS) process = new ProcessBuilder("cmd", "/c", "start", "", name).start();
         else process = new ProcessBuilder(name.toLowerCase(Locale.ROOT)).start();
         return process.isAlive() || process.exitValue() == 0;
+    }
+
+    static boolean restartApplication(String name) throws Exception {
+        if (OS_KIND == OS.MAC) {
+            String target = macApplicationTarget(name);
+            Process quit = new ProcessBuilder("osascript", "-e", "tell application \"" + target + "\" to quit").start();
+            quit.waitFor(5, TimeUnit.SECONDS);
+            Thread.sleep(450);
+            Process open = new ProcessBuilder("open", "-a", target).start();
+            return open.waitFor(5, TimeUnit.SECONDS) && open.exitValue() == 0;
+        }
+        if (OS_KIND == OS.WINDOWS) {
+            new ProcessBuilder("taskkill", "/IM", name + ".exe", "/F").start().waitFor(5, TimeUnit.SECONDS);
+            Thread.sleep(350);
+            return openApplication(name);
+        }
+        new ProcessBuilder("pkill", "-x", name.toLowerCase(Locale.ROOT)).start().waitFor(3, TimeUnit.SECONDS);
+        Thread.sleep(350);
+        return openApplication(name);
+    }
+
+    private static String macApplicationTarget(String name) {
+        return name.equals("Codex") && !applicationPath("Codex").map(Files::exists).orElse(false)
+            && applicationPath("ChatGPT").map(Files::exists).orElse(false) ? "ChatGPT" : name;
     }
 
     static void openTerminalCommand(String command) throws IOException {

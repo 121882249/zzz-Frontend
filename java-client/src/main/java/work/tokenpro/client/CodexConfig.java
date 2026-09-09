@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 final class CodexConfig {
@@ -12,9 +13,10 @@ final class CodexConfig {
     private final SecureStore store;
     CodexConfig(SecureStore store) { this.store = store; }
 
-    void apply(String baseUrl, String model, String key) throws Exception {
+    void apply(String baseUrl, List<PricedModel> models, String key) throws Exception {
         String url = validateUrl(baseUrl);
-        String modelId = required(model, "模型 ID");
+        if (models.isEmpty()) throw new IllegalArgumentException("请至少选择一个 Codex 模型");
+        String modelId = required(models.getFirst().name(), "模型 ID");
         String credentialId = store.createCredential(key.trim());
         Path target = Platform.codexConfig();
         Files.createDirectories(target.getParent());
@@ -22,8 +24,13 @@ final class CodexConfig {
         if (store.read("codex-original.toml").isEmpty()) store.write("codex-original.toml", current);
         String clean = stripRootOverrides(stripManaged(current));
         Helper helper = installHelper();
-        String block = managedBlock(url, modelId, credentialId, helper);
+        Path catalog = writeModelCatalog(models);
+        String block = managedBlock(url, modelId, catalog, credentialId, helper);
         writeAtomic(target, block + (clean.isBlank() ? "" : "\n" + clean.stripLeading()));
+    }
+
+    void apply(String baseUrl, String model, String key) throws Exception {
+        apply(baseUrl, List.of(new PricedModel(model, "openai", "TokenPro", 0)), key);
     }
 
     void restore() throws Exception {
@@ -33,13 +40,15 @@ final class CodexConfig {
         Files.createDirectories(target.getParent());
         writeAtomic(target, original.get());
         store.delete("codex-original.toml");
+        store.delete("codex-model-catalog.json");
     }
 
-    private String managedBlock(String url, String model, String credentialId, Helper helper) {
+    private String managedBlock(String url, String model, Path catalog, String credentialId, Helper helper) {
         StringBuilder out = new StringBuilder();
         out.append(START).append('\n');
         out.append("model = ").append(toml(model)).append('\n');
         out.append("model_provider = \"tokenpro_direct\"\n\n");
+        out.append("model_catalog_json = ").append(toml(catalog.toAbsolutePath().toString())).append("\n\n");
         out.append("[model_providers.tokenpro_direct]\n");
         out.append("name = \"TokenPro\"\n");
         out.append("base_url = ").append(toml(url)).append('\n');
@@ -59,11 +68,77 @@ final class CodexConfig {
         return out.toString();
     }
 
+    private Path writeModelCatalog(List<PricedModel> models) throws Exception {
+        Path executable = Platform.codexExecutable().orElseThrow(() -> new IllegalStateException("没有找到 Codex 程序，无法生成兼容的模型列表"));
+        Path output = Files.createTempFile("tokenpro-codex-models-", ".json");
+        Map<String, Object> bundled;
+        try {
+            Process process = new ProcessBuilder(executable.toString(), "debug", "models", "--bundled")
+                .redirectOutput(output.toFile()).redirectError(ProcessBuilder.Redirect.DISCARD).start();
+            if (!process.waitFor(20, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                throw new IllegalStateException("读取 Codex 模型格式超时");
+            }
+            if (process.exitValue() != 0) throw new IllegalStateException("Codex 无法提供本机模型格式");
+            bundled = Json.object(Json.parse(Files.readString(output, StandardCharsets.UTF_8)));
+        } finally {
+            Files.deleteIfExists(output);
+        }
+        Object raw = bundled.get("models");
+        if (!(raw instanceof List<?> templates) || templates.isEmpty()) throw new IllegalStateException("Codex 模型格式为空");
+        Map<String, Map<String, Object>> bySlug = new HashMap<>();
+        for (Object item : templates) {
+            Map<String, Object> template = Json.object(item);
+            bySlug.put(String.valueOf(template.getOrDefault("slug", "")), template);
+        }
+        List<Map<String, Object>> entries = new ArrayList<>();
+        int priority = 1;
+        for (PricedModel model : models) {
+            Map<String, Object> closest = bySlug.get(model.name());
+            if (closest == null) closest = bySlug.values().stream().filter(item -> String.valueOf(item.get("slug")).startsWith("gpt-")).findFirst().orElse(bySlug.values().iterator().next());
+            Map<String, Object> entry = deepCopy(closest);
+            entry.put("slug", model.name());
+            entry.put("display_name", model.name());
+            entry.put("description", model.groupName() + " · TokenPro");
+            entry.put("visibility", "list");
+            entry.put("supported_in_api", true);
+            entry.put("priority", priority++);
+            entry.put("availability_nux", null);
+            entry.put("upgrade", null);
+            entries.add(entry);
+        }
+        Path target = store.root().resolve("codex-model-catalog.json");
+        Files.createDirectories(target.getParent());
+        Path temp = Files.createTempFile(target.getParent(), ".tokenpro-models-", ".json");
+        Files.writeString(temp, Json.stringify(Map.of("models", entries)), StandardCharsets.UTF_8, StandardOpenOption.TRUNCATE_EXISTING);
+        Platform.privateFile(temp);
+        try { Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE); }
+        catch (AtomicMoveNotSupportedException e) { Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING); }
+        Platform.privateFile(target);
+        return target;
+    }
+
+    private static Map<String, Object> deepCopy(Map<String, Object> value) {
+        Map<String, Object> copy = new LinkedHashMap<>();
+        value.forEach((key, item) -> copy.put(key, normalized(item)));
+        return copy;
+    }
+
+    private static Object normalized(Object value) {
+        if (value instanceof Double number && Double.isFinite(number) && number == Math.rint(number)
+            && number >= Long.MIN_VALUE && number <= Long.MAX_VALUE) return number.longValue();
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> copy = new LinkedHashMap<>();
+            map.forEach((key, item) -> copy.put(String.valueOf(key), normalized(item)));
+            return copy;
+        }
+        if (value instanceof List<?> list) return list.stream().map(CodexConfig::normalized).toList();
+        return value;
+    }
+
     private Helper installHelper() throws Exception {
-        Path jar = Path.of(Main.class.getProtectionDomain().getCodeSource().getLocation().toURI()).toAbsolutePath();
-        Path java = Path.of(System.getProperty("java.home"), "bin", Platform.OS_KIND == Platform.OS.WINDOWS ? "java.exe" : "java");
-        if (Files.isDirectory(jar)) throw new IllegalStateException("请先运行 build 脚本并从 TokenPro.jar 启动，才能接入 Codex");
-        return new Helper(java.toString(), List.of("-jar", jar.toString(), "--route-token"));
+        List<String> command = RuntimeCommand.withArgs("--route-token");
+        return new Helper(command.getFirst(), List.copyOf(command.subList(1, command.size())));
     }
 
     static String stripManaged(String text) {

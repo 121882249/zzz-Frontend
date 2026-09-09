@@ -7,11 +7,10 @@ import java.net.http.*;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.Executors;
 
 final class ClaudeBridgeServer implements AutoCloseable {
     private static final int MAX_BODY = 32 * 1024 * 1024;
-    private static final Semaphore KEY_GATE = new Semaphore(1, true);
     private final SecureStore store;
     private final HttpServer server;
     private final HttpClient upstream = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(20)).followRedirects(HttpClient.Redirect.NEVER).build();
@@ -41,29 +40,26 @@ final class ClaudeBridgeServer implements AutoCloseable {
             Map<String, Object> input = Json.object(Json.parse(new String(body, StandardCharsets.UTF_8))); String alias = ClaudeAdapter.text(input.get("model"));
             ClaudeBridgeConfig.Route route = config.route(alias); if (route == null) { error(exchange, 404, "not_found_error", "该模型未在 TokenPro 中选择，请更新模型列表"); return; }
             if (path.endsWith("count_tokens")) { json(exchange, 200, Map.of("input_tokens", ClaudeAdapter.estimateTokens(input), "tokenpro_estimated", true)); return; }
-            KEY_GATE.acquire();
-            try {
-                ClaudeBridgeConfig latest = ClaudeBridgeConfig.load(store);
-                if (latest.keyId() != config.keyId() || latest.route(alias) == null) throw new IllegalStateException("模型配置已变化，请重试");
-                verifyAccountAndGroup(latest, route);
-                Map<String, Object> prepared = ClaudeAdapter.prepareHistory(input, route); prepared.put("model", route.name());
-                Map<String, Object> payload = route.usesResponses() ? ClaudeAdapter.responsesRequest(prepared) : prepared;
-                HttpRequest.Builder request = HttpRequest.newBuilder(URI.create("https://tokenpro.work" + (route.usesResponses() ? "/v1/responses" : "/v1/messages")))
-                    .timeout(Duration.ofSeconds(90)).header("Authorization", "Bearer " + latest.key()).header("Content-Type", "application/json")
-                    .header("anthropic-version", Optional.ofNullable(exchange.getRequestHeaders().getFirst("anthropic-version")).orElse("2023-06-01"))
-                    .POST(HttpRequest.BodyPublishers.ofString(Json.stringify(payload)));
-                if (!route.usesResponses() && exchange.getRequestHeaders().getFirst("anthropic-beta") != null) request.header("anthropic-beta", exchange.getRequestHeaders().getFirst("anthropic-beta"));
-                if (!Boolean.TRUE.equals(input.get("stream"))) handleBuffered(exchange, request.build(), route); else { streaming = true; handleStream(exchange, request.build(), route); }
-            } finally { KEY_GATE.release(); }
-        } catch (InterruptedException e) { Thread.currentThread().interrupt(); if (!streaming) error(exchange, 503, "api_error", "请求已取消"); }
-        catch (Exception e) { String message = Optional.ofNullable(e.getMessage()).orElse("Claude 桥接请求失败"); if (!secret.isBlank()) message = message.replace(secret, "[redacted]"); if (!streaming) error(exchange, 502, "api_error", message); }
+            ClaudeBridgeConfig latest = ClaudeBridgeConfig.load(store);
+            if (latest.keyId() != config.keyId() || latest.route(alias) == null) throw new IllegalStateException("模型配置已变化，请重试");
+            verifyAccountAndKey(latest);
+            Map<String, Object> prepared = ClaudeAdapter.prepareHistory(input, route); prepared.put("model", route.name());
+            Map<String, Object> payload = route.usesResponses() ? ClaudeAdapter.responsesRequest(prepared) : prepared;
+            HttpRequest.Builder request = HttpRequest.newBuilder(URI.create("https://tokenpro.work" + (route.usesResponses() ? "/v1/responses" : "/v1/messages")))
+                .timeout(Duration.ofSeconds(90)).header("Authorization", "Bearer " + latest.key()).header("Content-Type", "application/json")
+                .header("anthropic-version", Optional.ofNullable(exchange.getRequestHeaders().getFirst("anthropic-version")).orElse("2023-06-01"))
+                .POST(HttpRequest.BodyPublishers.ofString(Json.stringify(payload)));
+            if (!route.usesResponses() && exchange.getRequestHeaders().getFirst("anthropic-beta") != null) request.header("anthropic-beta", exchange.getRequestHeaders().getFirst("anthropic-beta"));
+            if (!Boolean.TRUE.equals(input.get("stream"))) handleBuffered(exchange, request.build(), route); else { streaming = true; handleStream(exchange, request.build(), route); }
+        } catch (Exception e) { String message = Optional.ofNullable(e.getMessage()).orElse("Claude 桥接请求失败"); if (!secret.isBlank()) message = message.replace(secret, "[redacted]"); if (!streaming) error(exchange, 502, "api_error", message); }
         finally { exchange.close(); }
     }
 
-    private void verifyAccountAndGroup(ClaudeBridgeConfig config, ClaudeBridgeConfig.Route route) throws Exception {
+    private void verifyAccountAndKey(ClaudeBridgeConfig config) throws Exception {
         Map<String, Object> user = api.me(config.accessToken());
         if (!config.accountId().equals(String.valueOf(user.get("id")))) throw new IllegalStateException("TokenPro 登录账户已变化，请重新应用 Claude 连接");
-        api.switchClaudeGroup(config.accessToken(), config.keyId(), route.groupId());
+        ApiClient.ManagedKey key = api.globalKey(config.accessToken());
+        if (key.id() != config.keyId()) throw new IllegalStateException("TokenPro 全局 Key 已变化，请重新应用 Claude 连接");
     }
 
     private void handleBuffered(HttpExchange exchange, HttpRequest request, ClaudeBridgeConfig.Route route) throws Exception {

@@ -1,21 +1,11 @@
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 if (-not $env:JAVA_HOME) { throw "JDK 21 is required. Set JAVA_HOME first." }
-$fxVersion = "21.0.2"
-$fxHome = "build/javafx-$fxVersion-windows-x64"
-if (-not (Test-Path "$fxHome/lib/javafx.web.jar")) {
-  New-Item -ItemType Directory -Force build | Out-Null
-  $archive = "build/openjfx-$fxVersion-windows-x64.zip"
-  Invoke-WebRequest "https://download2.gluonhq.com/openjfx/$fxVersion/openjfx-${fxVersion}_windows-x64_bin-sdk.zip" -OutFile $archive
-  Expand-Archive $archive -DestinationPath build/javafx-unpack -Force
-  New-Item -ItemType Directory -Force $fxHome | Out-Null
-  Copy-Item "build/javafx-unpack/javafx-sdk-$fxVersion/*" $fxHome -Recurse -Force
-}
 Remove-Item -Recurse -Force build/classes -ErrorAction SilentlyContinue
 Remove-Item -Force build/TokenPro.jar -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force build/classes | Out-Null
 $sources = Get-ChildItem -Recurse src/main/java -Filter *.java | ForEach-Object FullName
-& "$env:JAVA_HOME/bin/javac.exe" --release 21 --module-path "$fxHome/lib" --add-modules javafx.controls,javafx.web,javafx.swing,jdk.httpserver -encoding UTF-8 -d build/classes $sources
+& "$env:JAVA_HOME/bin/javac.exe" --release 21 --add-modules jdk.httpserver -encoding UTF-8 -d build/classes $sources
 New-Item -ItemType Directory -Force build/classes/assets | Out-Null
 Copy-Item ../Resources/TokenProCosmosIcon.png build/classes/assets/TokenProCosmosIcon.png
 Copy-Item ../Resources/LoginCosmos-v2.png build/classes/assets/LoginCosmos-v2.png
@@ -37,9 +27,9 @@ Copy-Item ../Resources/PlusLucide.png build/classes/assets/PlusLucide.png
 @"
 Main-Class: work.tokenpro.client.Main
 Implementation-Title: TokenPro
-Implementation-Version: 1.1.5
+Implementation-Version: 1.1.6
 
 "@ | Set-Content -Encoding ascii build/manifest.mf
 & "$env:JAVA_HOME/bin/jar.exe" --create --file build/TokenPro.jar --manifest build/manifest.mf -C build/classes .
-& "$env:JAVA_HOME/bin/java.exe" --module-path "$fxHome/lib" --add-modules javafx.controls,javafx.web,javafx.swing -jar build/TokenPro.jar --self-test
+& "$env:JAVA_HOME/bin/java.exe" -jar build/TokenPro.jar --self-test
 Write-Host "Built java-client/build/TokenPro.jar"

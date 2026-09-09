@@ -1,7 +1,9 @@
 package work.tokenpro.client;
 
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.*;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.*;
 
@@ -16,6 +18,19 @@ final class ApiClient {
     }
 
     Map<String, Object> me(String token) throws Exception { return request("/auth/me", "GET", null, token); }
+
+    String browserLoginUrl(String token, String targetUrl) throws Exception {
+        URI target = URI.create(targetUrl);
+        if (!"https".equalsIgnoreCase(target.getScheme()) || !"tokenpro.work".equalsIgnoreCase(target.getHost())) {
+            throw new IllegalArgumentException("只允许打开 TokenPro 网页");
+        }
+        Map<String, Object> result = request("/auth/desktop-ticket", "POST", Map.of(), token);
+        String ticket = text(result.get("ticket"));
+        if (!ticket.matches("dt_[0-9a-f]{64}")) throw new IllegalStateException("服务器没有返回有效的网页登录票据");
+        String redirect = target.getRawPath() == null || target.getRawPath().isBlank() ? "/dashboard" : target.getRawPath();
+        if (target.getRawQuery() != null && !target.getRawQuery().isBlank()) redirect += "?" + target.getRawQuery();
+        return "https://tokenpro.work/auth/desktop?redirect=" + encode(redirect) + "#ticket=" + encode(ticket);
+    }
 
     Map<String, Object> keys(String token) throws Exception { return request("/keys?page=1&page_size=100", "GET", null, token); }
 
@@ -57,6 +72,27 @@ final class ApiClient {
         return result;
     }
 
+    ManagedKey globalKey(String token) throws Exception {
+        for (int page = 1; page <= 100; page++) {
+            Map<String, Object> result = request("/keys?page=" + page + "&page_size=100", "GET", null, token);
+            List<?> items = result.get("items") instanceof List<?> list ? list : List.of();
+            for (Object raw : items) {
+                Map<String, Object> item = Json.object(raw);
+                if (!"global".equalsIgnoreCase(text(item.get("key_type")))) continue;
+                if (!"active".equals(text(item.get("status")))) throw new IllegalStateException("TokenPro 全局 Key 已停用");
+                Long id = integer(item.get("id"));
+                if (id == null) throw new IllegalStateException("TokenPro 全局 Key 缺少编号");
+                Map<String, Object> detail = key(token, id);
+                if (!"global".equalsIgnoreCase(text(detail.get("key_type")))) throw new IllegalStateException("TokenPro 全局 Key 类型异常");
+                String key = text(detail.get("key"));
+                validateKey(key, "全局 Key");
+                return new ManagedKey(id, key);
+            }
+            if (items.size() < 100) break;
+        }
+        throw new IllegalStateException("当前账户还没有全局 Key，请稍后刷新后重试");
+    }
+
     ManagedKey claudeManagedKey(String token, long initialGroupId) throws Exception {
         return managedKey(token, "TokenPro · Claude", initialGroupId);
     }
@@ -77,7 +113,7 @@ final class ApiClient {
                 if (id == null) throw new IllegalStateException(keyName + " 专用 Key 缺少编号");
                 switchManagedGroup(token, id, initialGroupId, keyName);
                 String key = text(key(token, id).get("key"));
-                validateKey(key);
+                validateKey(key, "专用 Key");
                 return new ManagedKey(id, key);
             }
             if (items.size() < 100) break;
@@ -86,7 +122,7 @@ final class ApiClient {
         Long id = integer(created.get("id"));
         String key = text(created.get("key"));
         if (id == null) throw new IllegalStateException("TokenPro 未返回专用 Key 编号");
-        validateKey(key);
+        validateKey(key, "专用 Key");
         return new ManagedKey(id, key);
     }
 
@@ -133,9 +169,10 @@ final class ApiClient {
 
     private static Long integer(Object value) { return value instanceof Number number ? number.longValue() : null; }
     private static String text(Object value) { return value == null ? "" : String.valueOf(value); }
-    private static void validateKey(String key) {
+    private static String encode(String value) { return URLEncoder.encode(value, StandardCharsets.UTF_8); }
+    private static void validateKey(String key, String label) {
         if (key.length() < 8 || key.contains("*") || key.contains("…") || key.contains("...") || key.chars().anyMatch(Character::isWhitespace)) {
-            throw new IllegalStateException("服务器没有返回完整的专用 Key");
+            throw new IllegalStateException("服务器没有返回完整的" + label);
         }
     }
 
