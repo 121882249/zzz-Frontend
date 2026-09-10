@@ -299,7 +299,7 @@ final class TokenProFrame extends JFrame {
 
     private JComponent connectionPanel() {
         JPanel panel = vertical();
-        panel.add(pageHeading("选择 Codex 模型", "按你的可用分组展示模型；选择分组下的一个模型后写入 Codex 配置。"));
+        panel.add(pageHeading("选择 Codex 模型", "Image Model 必选 1 个；LLM Model 至少选择 1 个，可同时选择多个。"));
         panel.add(Box.createVerticalStrut(15));
         JLabel hint = new JLabel("专用 Key 保存在当前系统账户的 TokenPro 安全目录中，可随时恢复官方配置。"); hint.setForeground(MUTED); panel.add(hint); panel.add(Box.createVerticalStrut(10));
         JButton load = soft("刷新可用分组与模型"); load.setAlignmentX(Component.LEFT_ALIGNMENT); load.addActionListener(e -> loadCodexModels()); panel.add(load);
@@ -365,7 +365,7 @@ final class TokenProFrame extends JFrame {
         try {
             codex.restore(); store.delete("codex-selected.json"); homeCodexStatus.setText("请先选择模型");
             if (codexLaunch != null) codexLaunch.setEnabled(false);
-            status("Codex 已恢复官方配置，正在重启…");
+            status("Codex 已恢复官方配置，正在切回应用…");
             openApp("Codex");
         }
         catch (Exception ex) { error(ex); }
@@ -454,7 +454,7 @@ final class TokenProFrame extends JFrame {
         try {
             ClaudeDesktopConfig.restoreOfficial(store); bridgeStatus.setText("桥接状态：Claude 已恢复官方配置");
             homeClaudeStatus.setText("请先选择模型"); if (claudeLaunch != null) claudeLaunch.setEnabled(false);
-            status("Claude 已恢复官方配置，正在重启…");
+            status("Claude 已恢复官方配置，正在切回应用…");
             openApp("Claude");
         }
         catch (Exception ex) { error(ex); }
@@ -854,13 +854,17 @@ final class TokenProFrame extends JFrame {
         });
     }
     private void openApp(String app) {
-        status("正在重启 " + app + "…");
+        status("正在打开 " + app + "…");
         new SwingWorker<Boolean, Void>() {
-            protected Boolean doInBackground() throws Exception { return Platform.restartApplication(app); }
+            // Never terminate a running client here. Codex may still be
+            // checkpointing the active turn, and restarting it can reopen an
+            // older history snapshot. `openApplication` raises the existing
+            // single-instance app or starts it when it is not running.
+            protected Boolean doInBackground() throws Exception { return Platform.openApplication(app); }
             protected void done() {
                 try {
-                    if (!get()) throw new IllegalStateException("无法重新打开 " + app);
-                    status(app + " 已重新打开");
+                    if (!get()) throw new IllegalStateException("无法打开 " + app);
+                    status(app + " 已打开，当前聊天记录不会被中断");
                 } catch (Exception e) { error(e.getCause() == null ? e : e.getCause()); }
             }
         }.execute();
