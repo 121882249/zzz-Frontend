@@ -10,7 +10,6 @@ import javax.swing.tree.TreeSelectionModel;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.event.WindowEvent;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BaseMultiResolutionImage;
 import java.awt.image.BufferedImage;
@@ -108,33 +107,14 @@ final class TokenProFrame extends JFrame {
     }
 
     private JComponent windowStage() {
-        JComponent controls = mainWindowControls();
         JLayeredPane stage = new JLayeredPane() {
             public void doLayout() {
                 viewHost.setBounds(0, 0, getWidth(), getHeight());
-                controls.setBounds(0, 0, 70, 30);
             }
         };
         stage.setOpaque(false);
         stage.add(viewHost, JLayeredPane.DEFAULT_LAYER);
-        stage.add(controls, JLayeredPane.PALETTE_LAYER);
         return stage;
-    }
-
-    private JComponent mainWindowControls() {
-        JPanel bar = transparent();
-        bar.setLayout(null);
-        AppleWindowButton close = new AppleWindowButton(new Color(255, 95, 86), true);
-        close.setToolTipText("关闭");
-        close.addActionListener(event -> dispatchEvent(new WindowEvent(this, WindowEvent.WINDOW_CLOSING)));
-        AppleWindowButton minimize = new AppleWindowButton(new Color(255, 189, 46), false);
-        minimize.setToolTipText("最小化");
-        minimize.addActionListener(event -> setState(Frame.ICONIFIED));
-        close.setBounds(13, 7, 16, 16);
-        minimize.setBounds(35, 7, 16, 16);
-        bar.add(close);
-        bar.add(minimize);
-        return bar;
     }
 
     private JComponent dashboard() {
@@ -255,10 +235,11 @@ final class TokenProFrame extends JFrame {
 
     private JComponent accountPanel() {
         JPanel panel = vertical();
-        JPanel identity = transparent(new BorderLayout(18, 0)); identity.setAlignmentX(Component.LEFT_ALIGNMENT); identity.setMaximumSize(new Dimension(Integer.MAX_VALUE, 64));
-        JLabel avatar = new JLabel(resourceIconContained("CircleUserPurple.png", 48, 48, false)); avatar.setHorizontalAlignment(SwingConstants.CENTER); avatar.setPreferredSize(new Dimension(52, 52)); identity.add(avatar, BorderLayout.WEST);
+        JPanel identity = transparent(new BorderLayout(18, 0)); identity.setAlignmentX(Component.LEFT_ALIGNMENT); identity.setMaximumSize(new Dimension(Integer.MAX_VALUE, 68));
+        JLabel avatar = new JLabel(new MarsAvatarIcon(56)); avatar.setHorizontalAlignment(SwingConstants.CENTER); avatar.setPreferredSize(new Dimension(58, 58)); identity.add(avatar, BorderLayout.WEST);
         JPanel identityWords = transparent(); identityWords.setLayout(new BoxLayout(identityWords, BoxLayout.Y_AXIS)); accountEmail.setFont(appFont(14, Font.BOLD)); accountEmail.setAlignmentX(Component.LEFT_ALIGNMENT); JLabel accountType = new JLabel("TokenPro 云端账户"); accountType.setFont(appFont(11, Font.PLAIN)); accountType.setForeground(MUTED); accountType.setAlignmentX(Component.LEFT_ALIGNMENT); identityWords.add(Box.createVerticalStrut(7)); identityWords.add(accountEmail); identityWords.add(Box.createVerticalStrut(5)); identityWords.add(accountType); identity.add(identityWords, BorderLayout.CENTER);
-        JButton logout = soft("退出登录"); logout.addActionListener(e -> logout()); identity.add(logout, BorderLayout.EAST); panel.add(identity); panel.add(Box.createVerticalStrut(18));
+        JButton logout = soft("退出登录"); logout.setIcon(new SignOutIcon(15)); logout.setIconTextGap(8); logout.setPreferredSize(new Dimension(108, 40)); logout.setMaximumSize(logout.getPreferredSize()); logout.addActionListener(e -> logout());
+        JPanel logoutSlot = transparent(new GridBagLayout()); logoutSlot.setPreferredSize(new Dimension(118, 68)); logoutSlot.add(logout); identity.add(logoutSlot, BorderLayout.EAST); panel.add(identity); panel.add(Box.createVerticalStrut(18));
         JSeparator divider = new JSeparator(); divider.setForeground(new Color(164, 181, 236, 35)); divider.setMaximumSize(new Dimension(Integer.MAX_VALUE, 1)); divider.setAlignmentX(Component.LEFT_ALIGNMENT); panel.add(divider); panel.add(Box.createVerticalStrut(18));
         JLabel balanceTitle = new JLabel("账户余额");
         balanceTitle.setFont(appFont(12, Font.PLAIN));
@@ -1031,37 +1012,73 @@ final class TokenProFrame extends JFrame {
         protected void paintComponent(Graphics g) { if (selected) { Graphics2D g2 = (Graphics2D) g.create(); g2.setColor(new Color(108, 92, 255, 48)); g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12); g2.dispose(); } super.paintComponent(g); }
     }
 
-    private static final class AppleWindowButton extends JButton {
-        private final Color color;
-        private final boolean close;
-        AppleWindowButton(Color color, boolean close) {
-            super("");
-            this.color = color;
-            this.close = close;
-            setOpaque(false);
-            setContentAreaFilled(false);
-            setBorderPainted(false);
-            setFocusPainted(false);
-            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        }
-        protected void paintComponent(Graphics graphics) {
+    private static final class MarsAvatarIcon implements Icon {
+        private final int size;
+        MarsAvatarIcon(int size) { this.size = size; }
+        public int getIconWidth() { return size; }
+        public int getIconHeight() { return size; }
+        public void paintIcon(Component component, Graphics graphics, int x, int y) {
             Graphics2D g = (Graphics2D) graphics.create();
+            g.translate(x, y);
+            double scale = size / 56d;
+            g.scale(scale, scale);
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g.setColor(color);
-            g.fillOval(1, 1, getWidth() - 2, getHeight() - 2);
-            g.setColor(new Color(close ? 125 : 135, close ? 24 : 91, close ? 20 : 8, 130));
-            g.drawOval(1, 1, getWidth() - 2, getHeight() - 2);
-            if (getModel().isRollover()) {
-                g.setColor(new Color(72, 46, 34, 205));
-                g.setStroke(new BasicStroke(1.15f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-                int cx = getWidth() / 2, cy = getHeight() / 2;
-                if (close) {
-                    g.drawLine(cx - 3, cy - 3, cx + 3, cy + 3);
-                    g.drawLine(cx + 3, cy - 3, cx - 3, cy + 3);
-                } else {
-                    g.drawLine(cx - 3, cy, cx + 3, cy);
-                }
-            }
+            g.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
+
+            g.setPaint(new RadialGradientPaint(28, 28, 27, new float[]{0f, .72f, 1f},
+                    new Color[]{new Color(43, 42, 108), new Color(16, 29, 69), new Color(7, 15, 40)}));
+            g.fillOval(1, 1, 54, 54);
+            g.setColor(new Color(116, 112, 255, 190));
+            g.setStroke(new BasicStroke(1.5f));
+            g.drawOval(1, 1, 54, 54);
+
+            g.setColor(new Color(142, 126, 255, 185));
+            g.setStroke(new BasicStroke(1.25f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g.drawArc(7, 20, 42, 22, 197, 142);
+            g.setColor(new Color(255, 202, 154, 225));
+            g.fillOval(45, 31, 3, 3);
+
+            g.setPaint(new RadialGradientPaint(23, 20, 25, new float[]{0f, .62f, 1f},
+                    new Color[]{new Color(255, 174, 112), new Color(224, 91, 67), new Color(120, 43, 55)}));
+            g.fillOval(12, 11, 33, 33);
+            g.setColor(new Color(255, 190, 135, 180));
+            g.setStroke(new BasicStroke(1f));
+            g.drawOval(12, 11, 33, 33);
+
+            g.setColor(new Color(140, 51, 57, 150));
+            g.fillOval(20, 18, 7, 5);
+            g.fillOval(31, 29, 8, 6);
+            g.fillOval(18, 33, 5, 4);
+            g.setColor(new Color(255, 202, 151, 115));
+            g.fillOval(22, 19, 3, 2);
+            g.fillOval(33, 30, 4, 2);
+
+            g.setColor(new Color(197, 185, 255, 235));
+            g.setStroke(new BasicStroke(1.6f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g.drawArc(6, 20, 43, 22, 17, 145);
+            g.fillOval(8, 17, 3, 3);
+            g.dispose();
+        }
+    }
+
+    private static final class SignOutIcon implements Icon {
+        private final int size;
+        SignOutIcon(int size) { this.size = size; }
+        public int getIconWidth() { return size; }
+        public int getIconHeight() { return size; }
+        public void paintIcon(Component component, Graphics graphics, int x, int y) {
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.translate(x, y);
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(component.isEnabled() ? new Color(235, 240, 255) : new Color(137, 145, 177));
+            g.setStroke(new BasicStroke(1.6f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            int middle = size / 2;
+            g.drawLine(1, 2, 1, size - 3);
+            g.drawLine(1, 2, size / 2, 2);
+            g.drawLine(1, size - 3, size / 2, size - 3);
+            g.drawLine(size / 3, middle, size - 2, middle);
+            g.drawLine(size - 5, middle - 3, size - 2, middle);
+            g.drawLine(size - 5, middle + 3, size - 2, middle);
             g.dispose();
         }
     }
