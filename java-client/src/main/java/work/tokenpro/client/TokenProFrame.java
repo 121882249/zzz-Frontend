@@ -475,6 +475,8 @@ final class TokenProFrame extends JFrame {
                         Map<String, Object> row = Json.object(value);
                         if (row.get("group_id") instanceof Number groupId) ids.add(groupId.longValue() + "\u0000" + string(row.get("name")));
                     }
+                    String imageModel = string(root.get("image_model"));
+                    if (!imageModel.isBlank()) ids.add(ModelPickerDialog.imageNameId(imageModel));
                     if (ids.isEmpty() && root.get("group_id") instanceof Number groupId) ids.add(groupId.longValue() + "\u0000" + string(root.get("model")));
                 }
             }

@@ -114,7 +114,7 @@ final class ModelPickerDialog extends JDialog {
                 boolean restored = false;
                 for (PricedModel model : imageModels) {
                     ModelCheckBox choice = new ModelCheckBox(model);
-                    boolean selected = !restored && selectedIds.contains(id(model));
+                    boolean selected = !restored && matchesSelectedImage(model, selectedIds);
                     choice.setSelected(selected);
                     restored |= selected;
                     imageChoices.add(choice);
@@ -181,6 +181,10 @@ final class ModelPickerDialog extends JDialog {
     }
 
     static String id(PricedModel model) { return model.groupId() + "\u0000" + model.name(); }
+    static String imageNameId(String name) { return "\u0000" + name; }
+    static boolean matchesSelectedImage(PricedModel model, Set<String> selectedIds) {
+        return selectedIds.contains(id(model)) || selectedIds.contains(imageNameId(model.name()));
+    }
     private static String groupKey(PricedModel model) { return model.groupId() + "\u0000" + model.groupName(); }
 
     private static JPanel transparent() { JPanel panel = new JPanel(); panel.setOpaque(false); return panel; }
