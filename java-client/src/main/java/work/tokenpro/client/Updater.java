@@ -166,13 +166,14 @@ final class Updater {
               mkdir "$lock"
             fi
             echo $$ > "$lock/pid"
-            trap 'rm -rf "$lock"' EXIT
+            backup_dir=$(mktemp -d "${TMPDIR:-/tmp}/tokenpro-update-backup.XXXXXX")
+            trap 'rm -rf "$lock" "$backup_dir"' EXIT
             while kill -0 "$pid" 2>/dev/null; do sleep 0.2; done
             /usr/bin/pkill -f "$application/Contents/MacOS/TokenPro" 2>/dev/null || true
             while /usr/bin/pgrep -f "$application/Contents/MacOS/TokenPro" >/dev/null 2>&1; do sleep 0.2; done
-            backup="${target}.update-backup"
+            backup="$backup_dir/TokenPro.jar"
             plist="$application/Contents/Info.plist"
-            plist_backup="${plist}.update-backup"
+            plist_backup="$backup_dir/Info.plist"
             cp "$target" "$backup"
             cp "$plist" "$plist_backup"
             if mv "$source" "$target"; then

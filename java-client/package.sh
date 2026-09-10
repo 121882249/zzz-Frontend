@@ -8,7 +8,7 @@ fi
 if [ -z "$JAVA_HOME" ] && [ -d /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ]; then
   JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
 fi
-VERSION="1.2.42"
+VERSION="1.2.43"
 OS="$(uname -s)"
 ARCH="$(uname -m)"
 rm -rf dist
