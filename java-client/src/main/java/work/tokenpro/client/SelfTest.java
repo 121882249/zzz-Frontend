@@ -46,6 +46,8 @@ final class SelfTest {
         CodexConfig.applyReasoningProfile(shortNativeProfile, priced);
         check(((List<?>) shortNativeProfile.get("supported_reasoning_levels")).size() == 5 && "high".equals(shortNativeProfile.get("default_reasoning_level")), "short native profile expands to five levels"); passed++;
         check(CodexConfig.inferredReasoningEfforts(new PricedModel("gpt-image-2.5", "openai", "GPT", 17)).isEmpty(), "image model omits reasoning"); passed++;
+        check("Image Model · GPT⁠-Image-2.5-Sunburst".equals(CodexConfig.catalogDisplayName(new PricedModel("gpt-image-2.5-sunburst", "openai", "GPT", 17))), "image catalog role label"); passed++;
+        check("LLM Model · Claude-Sonnet-5".equals(CodexConfig.catalogDisplayName(new PricedModel("claude-sonnet-5", "anthropic", "Claude", 17))), "LLM catalog role label"); passed++;
         Map<String, Object> customModel = new LinkedHashMap<>(Map.of("use_responses_lite", true));
         CodexConfig.disableResponsesLite(customModel);
         check(Boolean.FALSE.equals(customModel.get("use_responses_lite")), "custom provider disables Responses Lite"); passed++;
@@ -58,9 +60,9 @@ final class SelfTest {
         check(ApiClient.compareModelPriceDescending(premium, standard) < 0, "models sort by output price descending"); passed++;
         check(ApiClient.compareModelPriceDescending(standard, image) < 0, "token models sort before non-token models"); passed++;
         check(ModuleLayer.boot().findModule("jdk.crypto.ec").isPresent(), "packaged runtime supports ECDSA TLS certificates"); passed++;
-        String releasePayload = "{\"tag_name\":\"v1.2.16\",\"downloads\":{\"windows-x64\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe\",\"sha256\":\"abc\"}}}";
+        String releasePayload = "{\"tag_name\":\"v1.2.17\",\"downloads\":{\"windows-x64\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe\",\"sha256\":\"abc\"}}}";
         TokenProFrame.ReleaseInfo release = TokenProFrame.releaseForPlatform(releasePayload, "windows-x64");
-        check("1.2.16".equals(release.version()) && release.downloadUrl().endsWith(".exe") && "abc".equals(release.sha256()), "automatic update manifest"); passed++;
+        check("1.2.17".equals(release.version()) && release.downloadUrl().endsWith(".exe") && "abc".equals(release.sha256()), "automatic update manifest"); passed++;
         check(Updater.platformKey().startsWith(Platform.OS_KIND == Platform.OS.MAC ? "macos-" : Platform.OS_KIND == Platform.OS.WINDOWS ? "windows-" : "linux-"), "automatic update platform mapping"); passed++;
         ClaudeBridgeConfig.Route route = ClaudeBridgeConfig.Route.from(priced);
         check(route.alias().matches("claude-tokenpro-[0-9a-f]{24}"), "Claude alias"); passed++;

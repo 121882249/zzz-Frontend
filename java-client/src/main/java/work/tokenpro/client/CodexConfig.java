@@ -18,8 +18,10 @@ final class CodexConfig {
         String url = validateUrl(baseUrl);
         if (models.isEmpty()) throw new IllegalArgumentException("请至少选择一个 Codex 模型");
         List<PricedModel> chatModels = models.stream().filter(model -> !model.isImageGeneration()).toList();
-        PricedModel imageModel = models.stream().filter(PricedModel::isImageGeneration).findFirst().orElse(null);
-        if (chatModels.isEmpty()) throw new IllegalArgumentException("请至少选择一个可对话模型");
+        List<PricedModel> imageModels = models.stream().filter(PricedModel::isImageGeneration).toList();
+        if (chatModels.size() != 1) throw new IllegalArgumentException("请选择 1 个 LLM Model");
+        if (imageModels.size() != 1) throw new IllegalArgumentException("请选择 1 个 Image Model");
+        PricedModel imageModel = imageModels.getFirst();
         PricedModel primaryModel = chatModels.getFirst();
         String modelId = required(primaryModel.name(), "模型 ID");
         Path target = Platform.codexConfig();
@@ -27,7 +29,9 @@ final class CodexConfig {
         String current = Files.exists(target) ? Files.readString(target) : "";
         if (store.read("codex-original.toml").isEmpty()) store.write("codex-original.toml", current);
         String clean = stripRootOverrides(stripManaged(current));
-        Path catalog = writeModelCatalog(chatModels);
+        // Codex's picker is flat and cannot render custom section headings. Put
+        // the two required roles directly in the row labels, with Image first.
+        Path catalog = writeModelCatalog(List.of(imageModel, primaryModel));
         String block = managedBlock(url, primaryModel, imageModel, catalog, key.trim());
         writeAtomic(target, block + (clean.isBlank() ? "" : "\n" + clean.stripLeading()));
     }
@@ -113,8 +117,9 @@ final class CodexConfig {
             if (closest == null) closest = bySlug.values().stream().min(Comparator.comparing(item -> String.valueOf(item.get("slug")))).orElseThrow();
             Map<String, Object> entry = deepCopy(closest);
             entry.put("slug", model.name());
-            entry.put("display_name", model.codexDisplayName());
-            entry.put("description", model.groupName() + " · TokenPro");
+            String role = model.isImageGeneration() ? "Image Model" : "LLM Model";
+            entry.put("display_name", catalogDisplayName(model));
+            entry.put("description", role + " · " + model.groupName() + " · TokenPro");
             entry.put("visibility", "list");
             entry.put("supported_in_api", true);
             entry.put("priority", priority++);
@@ -171,6 +176,10 @@ final class CodexConfig {
         String value = (model.name() + " " + model.platform()).toLowerCase(Locale.ROOT);
         if (value.contains("image") || value.contains("dall-e") || value.contains("imagen") || value.contains("flux")) return List.of();
         return List.of("low", "medium", "high", "xhigh", "max");
+    }
+
+    static String catalogDisplayName(PricedModel model) {
+        return (model.isImageGeneration() ? "Image Model" : "LLM Model") + " · " + model.codexDisplayName();
     }
 
     private static Map<String, Object> reasoningLevel(String effort) {

@@ -330,34 +330,29 @@ final class TokenProFrame extends JFrame {
     }
 
     private void applyCodex() {
-        if (accessToken == null || accountId.isBlank()) { error(new IllegalStateException("请先登录 TokenPro")); return; }
-        PricedModel selected = selectedModel(codexModelTree);
-        if (selected == null) { error(new IllegalStateException("请选择一个模型")); return; }
-        applyCodex(List.of(selected));
+        chooseModels("Codex");
     }
 
     private void applyCodex(List<PricedModel> selected) {
         if (accessToken == null || accountId.isBlank()) { error(new IllegalStateException("请先登录 TokenPro")); return; }
         selected = uniqueModels(selected);
-        if (selected.isEmpty()) { error(new IllegalStateException("请至少选择一个模型")); return; }
         List<PricedModel> chatModels = selected.stream().filter(model -> !model.isImageGeneration()).toList();
-        PricedModel imageModel = selected.stream().filter(PricedModel::isImageGeneration).findFirst().orElse(null);
-        if (chatModels.isEmpty()) { error(new IllegalStateException("请至少选择一个可对话模型")); return; }
-        List<PricedModel> chosen = new ArrayList<>(chatModels);
-        if (imageModel != null) chosen.add(imageModel);
+        List<PricedModel> imageModels = selected.stream().filter(PricedModel::isImageGeneration).toList();
+        if (chatModels.size() != 1 || imageModels.size() != 1) { error(new IllegalStateException("请分别选择 1 个 LLM Model 和 1 个 Image Model")); return; }
+        PricedModel imageModel = imageModels.getFirst();
+        List<PricedModel> chosen = List.of(chatModels.getFirst(), imageModel);
         async("正在使用全局 Key 配置 Codex…", () -> {
             ApiClient.ManagedKey managed = api.globalKey(accessToken);
             codex.apply("https://tokenpro.work/v1", chosen, managed.key());
             Map<String, Object> saved = new LinkedHashMap<>();
             saved.put("default_model", chosen.getFirst().name());
             saved.put("models", modelRows(chosen));
-            if (imageModel != null) saved.put("image_model", imageModel.name());
+            saved.put("image_model", imageModel.name());
             saved.put("key_id", managed.id());
             store.write("codex-selected.json", Json.stringify(saved));
             return chosen;
         }, configured -> {
-            long imageCount = configured.stream().filter(PricedModel::isImageGeneration).count();
-            homeCodexStatus.setText("已选 " + (configured.size() - imageCount) + " 个模型" + (imageCount > 0 ? " · 生图已启用" : ""));
+            homeCodexStatus.setText("LLM + Image 已配置");
             if (codexLaunch != null) codexLaunch.setEnabled(true);
             status("Codex 已配置 " + configured.size() + " 个模型");
             openApp("Codex");
@@ -495,7 +490,7 @@ final class TokenProFrame extends JFrame {
             if (saved.get("models") instanceof List<?> models && !models.isEmpty()) {
                 boolean imageEnabled = !string(saved.get("image_model")).isBlank();
                 int chatCount = imageEnabled ? Math.max(0, models.size() - 1) : models.size();
-                homeCodexStatus.setText("已选 " + chatCount + " 个模型" + (imageEnabled ? " · 生图已启用" : ""));
+                homeCodexStatus.setText(chatCount == 1 && imageEnabled ? "LLM + Image 已配置" : "请重新选择两个模型");
             }
             else {
                 String selected = string(saved.get("model")); if (selected.isBlank()) throw new IllegalStateException("未选择");
