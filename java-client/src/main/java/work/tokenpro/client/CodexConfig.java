@@ -16,15 +16,18 @@ final class CodexConfig {
     void apply(String baseUrl, List<PricedModel> models, String key) throws Exception {
         String url = validateUrl(baseUrl);
         if (models.isEmpty()) throw new IllegalArgumentException("请至少选择一个 Codex 模型");
-        PricedModel primaryModel = models.getFirst();
+        List<PricedModel> chatModels = models.stream().filter(model -> !model.isImageGeneration()).toList();
+        PricedModel imageModel = models.stream().filter(PricedModel::isImageGeneration).findFirst().orElse(null);
+        if (chatModels.isEmpty()) throw new IllegalArgumentException("请至少选择一个可对话模型");
+        PricedModel primaryModel = chatModels.getFirst();
         String modelId = required(primaryModel.name(), "模型 ID");
         Path target = Platform.codexConfig();
         Files.createDirectories(target.getParent());
         String current = Files.exists(target) ? Files.readString(target) : "";
         if (store.read("codex-original.toml").isEmpty()) store.write("codex-original.toml", current);
         String clean = stripRootOverrides(stripManaged(current));
-        Path catalog = writeModelCatalog(models);
-        String block = managedBlock(url, primaryModel, catalog, key.trim());
+        Path catalog = writeModelCatalog(chatModels);
+        String block = managedBlock(url, primaryModel, imageModel, catalog, key.trim());
         writeAtomic(target, block + (clean.isBlank() ? "" : "\n" + clean.stripLeading()));
     }
 
@@ -42,7 +45,7 @@ final class CodexConfig {
         store.delete("codex-model-catalog.json");
     }
 
-    private String managedBlock(String url, PricedModel model, Path catalog, String key) {
+    private String managedBlock(String url, PricedModel model, PricedModel imageModel, Path catalog, String key) {
         StringBuilder out = new StringBuilder();
         out.append(START).append('\n');
         out.append("model = ").append(toml(model.name())).append('\n');
@@ -64,7 +67,9 @@ final class CodexConfig {
         out.append("wire_api = \"responses\"\n");
         out.append("requires_openai_auth = false\n");
         out.append("experimental_bearer_token = ").append(toml(key)).append('\n');
-        out.append("http_headers = { \"x-openai-actor-authorization\" = \"Codex\" }\n");
+        out.append("http_headers = { \"x-openai-actor-authorization\" = \"Codex\"");
+        if (imageModel != null) out.append(", \"x-tokenpro-image-model\" = ").append(toml(imageModel.name()));
+        out.append(" }\n");
         out.append("supports_websockets = false\n\n");
         out.append(END).append('\n');
         return out.toString();

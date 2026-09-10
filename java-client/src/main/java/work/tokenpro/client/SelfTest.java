@@ -29,6 +29,8 @@ final class SelfTest {
         check("Claude-Fable-5.1".equals(new PricedModel("claude-fable-5-1", "anthropic", "claude", 17).displayName()), "minor model version punctuation"); passed++;
         check("Claude Models".equals(new PricedModel("claude", "anthropic", "claude models", 17).displayGroupName()), "vendor group title case"); passed++;
         check("Gemini".equals(new PricedModel("Gemini", "google", "Google", 17).displayName()), "non-GPT model display name"); passed++;
+        check(new PricedModel("gpt-image-2.5-sunburst", "openai", "GPT", 17).isImageGeneration(), "image model classification"); passed++;
+        check(!new PricedModel("gpt-5.6-sol", "openai", "GPT", 17).isImageGeneration(), "chat model classification"); passed++;
         check(CodexConfig.inferredReasoningEfforts(priced).equals(List.of("low", "medium", "high", "xhigh", "max")), "GPT five reasoning levels"); passed++;
         check(CodexConfig.inferredReasoningEfforts(new PricedModel("gemini-3-pro", "google", "Google", 17)).size() == 3, "compatible reasoning fallback"); passed++;
         check(CodexConfig.inferredReasoningEfforts(new PricedModel("gpt-image-2.5", "openai", "GPT", 17)).isEmpty(), "image model omits reasoning"); passed++;
@@ -36,9 +38,9 @@ final class SelfTest {
         CodexConfig.disableResponsesLite(customModel);
         check(Boolean.FALSE.equals(customModel.get("use_responses_lite")), "custom provider disables Responses Lite"); passed++;
         check(ApiClient.compareNaturalDescending("gpt-5.10", "gpt-5.9") < 0, "model versions sort descending"); passed++;
-        String releasePayload = "{\"tag_name\":\"v1.2.9\",\"downloads\":{\"windows-x64\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe\",\"sha256\":\"abc\"}}}";
+        String releasePayload = "{\"tag_name\":\"v1.2.10\",\"downloads\":{\"windows-x64\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe\",\"sha256\":\"abc\"}}}";
         TokenProFrame.ReleaseInfo release = TokenProFrame.releaseForPlatform(releasePayload, "windows-x64");
-        check("1.2.9".equals(release.version()) && release.downloadUrl().endsWith(".exe") && "abc".equals(release.sha256()), "automatic update manifest"); passed++;
+        check("1.2.10".equals(release.version()) && release.downloadUrl().endsWith(".exe") && "abc".equals(release.sha256()), "automatic update manifest"); passed++;
         check(Updater.platformKey().startsWith(Platform.OS_KIND == Platform.OS.MAC ? "macos-" : Platform.OS_KIND == Platform.OS.WINDOWS ? "windows-" : "linux-"), "automatic update platform mapping"); passed++;
         ClaudeBridgeConfig.Route route = ClaudeBridgeConfig.Route.from(priced);
         check(route.alias().matches("claude-tokenpro-[0-9a-f]{24}"), "Claude alias"); passed++;

@@ -17,6 +17,7 @@ final class ModelPickerDialog extends JDialog {
     private static final Color MUTED = new Color(145, 154, 185);
     private static final Color PANEL = new Color(8, 14, 35);
     private final List<ModelCheckBox> choices = new ArrayList<>();
+    private final List<ModelCheckBox> imageChoices = new ArrayList<>();
 
     ModelPickerDialog(JFrame owner, String client, List<PricedModel> models,
                       Set<String> selectedIds, Consumer<List<PricedModel>> onApply) {
@@ -63,8 +64,12 @@ final class ModelPickerDialog extends JDialog {
 
         JPanel groups = transparent();
         groups.setLayout(new BoxLayout(groups, BoxLayout.Y_AXIS));
+        boolean codex = "Codex".equals(client);
         Map<String, List<PricedModel>> grouped = new LinkedHashMap<>();
-        for (PricedModel model : models) grouped.computeIfAbsent(groupKey(model), ignored -> new ArrayList<>()).add(model);
+        for (PricedModel model : models) {
+            if (codex && model.isImageGeneration()) continue;
+            grouped.computeIfAbsent(groupKey(model), ignored -> new ArrayList<>()).add(model);
+        }
         for (List<PricedModel> groupModels : grouped.values()) {
             PricedModel first = groupModels.getFirst();
             JPanel group = new GroupPanel();
@@ -87,6 +92,44 @@ final class ModelPickerDialog extends JDialog {
             groups.add(group);
             groups.add(Box.createVerticalStrut(10));
         }
+        if (codex) {
+            List<PricedModel> imageModels = models.stream().filter(PricedModel::isImageGeneration).toList();
+            if (!imageModels.isEmpty()) {
+                JPanel imageGroup = new GroupPanel();
+                imageGroup.setLayout(new BoxLayout(imageGroup, BoxLayout.Y_AXIS));
+                imageGroup.setBorder(new EmptyBorder(14, 16, 12, 16));
+                imageGroup.setAlignmentX(Component.LEFT_ALIGNMENT);
+                JLabel imageTitle = new JLabel("生图模型（可选一个）");
+                imageTitle.setFont(font(13, Font.BOLD));
+                imageTitle.setForeground(new Color(105, 220, 194));
+                imageTitle.setAlignmentX(Component.LEFT_ALIGNMENT);
+                JLabel imageHint = new JLabel("画图时自动使用，无需在 Codex 中来回切换模型");
+                imageHint.setFont(font(11, Font.PLAIN));
+                imageHint.setForeground(MUTED);
+                imageHint.setAlignmentX(Component.LEFT_ALIGNMENT);
+                imageGroup.add(imageTitle);
+                imageGroup.add(Box.createVerticalStrut(4));
+                imageGroup.add(imageHint);
+                imageGroup.add(Box.createVerticalStrut(8));
+                boolean restored = false;
+                for (PricedModel model : imageModels) {
+                    ModelCheckBox choice = new ModelCheckBox(model);
+                    boolean selected = !restored && selectedIds.contains(id(model));
+                    choice.setSelected(selected);
+                    restored |= selected;
+                    imageChoices.add(choice);
+                    choices.add(choice);
+                    choice.addActionListener(event -> {
+                        if (!choice.isSelected()) return;
+                        for (ModelCheckBox other : imageChoices) if (other != choice) other.setSelected(false);
+                    });
+                    imageGroup.add(choice);
+                }
+                imageGroup.setMaximumSize(new Dimension(Integer.MAX_VALUE, imageGroup.getPreferredSize().height));
+                groups.add(imageGroup);
+                groups.add(Box.createVerticalStrut(10));
+            }
+        }
         if (models.isEmpty()) {
             JLabel empty = new JLabel("当前账户没有可用模型");
             empty.setForeground(MUTED);
@@ -104,7 +147,11 @@ final class ModelPickerDialog extends JDialog {
         JLabel count = new JLabel();
         count.setFont(font(12, Font.BOLD));
         count.setForeground(new Color(105, 220, 194));
-        Runnable updateCount = () -> count.setText("已选择 " + selected().size() + " 个模型");
+        Runnable updateCount = () -> {
+            long imageCount = selected().stream().filter(PricedModel::isImageGeneration).count();
+            long chatCount = selected().size() - imageCount;
+            count.setText(codex ? "已选 " + chatCount + " 个对话模型" + (imageCount > 0 ? " · 1 个生图模型" : "") : "已选择 " + selected().size() + " 个模型");
+        };
         choices.forEach(choice -> choice.addActionListener(event -> updateCount.run()));
         updateCount.run();
         footer.add(count, BorderLayout.WEST);
@@ -114,8 +161,8 @@ final class ModelPickerDialog extends JDialog {
         JButton apply = button("应用并打开 " + client, true);
         apply.addActionListener(event -> {
             List<PricedModel> selected = selected();
-            if (selected.isEmpty()) {
-                JOptionPane.showMessageDialog(this, "请至少选择一个模型", "TokenPro", JOptionPane.WARNING_MESSAGE);
+            if (selected.isEmpty() || codex && selected.stream().noneMatch(model -> !model.isImageGeneration())) {
+                JOptionPane.showMessageDialog(this, codex ? "请至少选择一个可对话模型" : "请至少选择一个模型", "TokenPro", JOptionPane.WARNING_MESSAGE);
                 return;
             }
             dispose();

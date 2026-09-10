@@ -295,18 +295,24 @@ final class TokenProFrame extends JFrame {
         if (accessToken == null || accountId.isBlank()) { error(new IllegalStateException("请先登录 TokenPro")); return; }
         selected = uniqueModels(selected);
         if (selected.isEmpty()) { error(new IllegalStateException("请至少选择一个模型")); return; }
-        List<PricedModel> chosen = selected;
+        List<PricedModel> chatModels = selected.stream().filter(model -> !model.isImageGeneration()).toList();
+        PricedModel imageModel = selected.stream().filter(PricedModel::isImageGeneration).findFirst().orElse(null);
+        if (chatModels.isEmpty()) { error(new IllegalStateException("请至少选择一个可对话模型")); return; }
+        List<PricedModel> chosen = new ArrayList<>(chatModels);
+        if (imageModel != null) chosen.add(imageModel);
         async("正在使用全局 Key 配置 Codex…", () -> {
             ApiClient.ManagedKey managed = api.globalKey(accessToken);
             codex.apply("https://tokenpro.work/v1", chosen, managed.key());
             Map<String, Object> saved = new LinkedHashMap<>();
             saved.put("default_model", chosen.getFirst().name());
             saved.put("models", modelRows(chosen));
+            if (imageModel != null) saved.put("image_model", imageModel.name());
             saved.put("key_id", managed.id());
             store.write("codex-selected.json", Json.stringify(saved));
             return chosen;
         }, configured -> {
-            homeCodexStatus.setText("已选 " + configured.size() + " 个模型");
+            long imageCount = configured.stream().filter(PricedModel::isImageGeneration).count();
+            homeCodexStatus.setText("已选 " + (configured.size() - imageCount) + " 个模型" + (imageCount > 0 ? " · 生图已启用" : ""));
             if (codexLaunch != null) codexLaunch.setEnabled(true);
             status("Codex 已配置 " + configured.size() + " 个模型");
             openApp("Codex");
@@ -441,7 +447,11 @@ final class TokenProFrame extends JFrame {
             Optional<String> raw = store.read("codex-selected.json");
             if (raw.isEmpty()) throw new IllegalStateException("未选择");
             Map<String, Object> saved = Json.object(Json.parse(raw.get()));
-            if (saved.get("models") instanceof List<?> models && !models.isEmpty()) homeCodexStatus.setText("已选 " + models.size() + " 个模型");
+            if (saved.get("models") instanceof List<?> models && !models.isEmpty()) {
+                boolean imageEnabled = !string(saved.get("image_model")).isBlank();
+                int chatCount = imageEnabled ? Math.max(0, models.size() - 1) : models.size();
+                homeCodexStatus.setText("已选 " + chatCount + " 个模型" + (imageEnabled ? " · 生图已启用" : ""));
+            }
             else {
                 String selected = string(saved.get("model")); if (selected.isBlank()) throw new IllegalStateException("未选择");
                 homeCodexStatus.setText(selected);

@@ -3,6 +3,13 @@ package work.tokenpro.client;
 record PricedModel(String name, String platform, String groupName, long groupId) {
     boolean usesResponses() { return "openai".equalsIgnoreCase(platform); }
 
+    boolean isImageGeneration() {
+        String value = name == null ? "" : name.trim().toLowerCase(java.util.Locale.ROOT);
+        return value.startsWith("gpt-image-") || value.startsWith("dall-e-") ||
+            value.contains("imagen") || value.contains("flux") ||
+            value.startsWith("grok-imagine");
+    }
+
     String displayName() {
         String value = name == null ? "" : name.trim();
         if (usesResponses() && !value.regionMatches(true, 0, "gpt", 0, 3)) value = "GPT-" + value;
