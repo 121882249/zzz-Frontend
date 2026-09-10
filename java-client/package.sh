@@ -8,7 +8,7 @@ fi
 if [ -z "$JAVA_HOME" ] && [ -d /opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ]; then
   JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
 fi
-VERSION="1.2.11"
+VERSION="1.2.12"
 OS="$(uname -s)"
 ARCH="$(uname -m)"
 rm -rf dist
@@ -24,6 +24,6 @@ cp build/TokenPro.jar build/input/TokenPro.jar
 "$JAVA_HOME/bin/jpackage" --type "$TYPE" --name TokenPro --app-version "$VERSION" \
   --input build/input --main-jar TokenPro.jar --main-class work.tokenpro.client.Main \
   --module-path "$JAVA_HOME/jmods" \
-  --add-modules java.base,java.desktop,java.net.http,jdk.httpserver \
+  --add-modules java.base,java.desktop,java.net.http,jdk.httpserver,jdk.crypto.ec \
   --vendor TokenPro --description "TokenPro cross-platform desktop client" "${ICON[@]}" --dest dist
 echo "Created TokenPro $VERSION for $OS/$ARCH in java-client/dist"
