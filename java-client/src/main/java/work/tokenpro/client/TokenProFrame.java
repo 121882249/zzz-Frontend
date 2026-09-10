@@ -28,6 +28,8 @@ import java.util.concurrent.Callable;
 final class TokenProFrame extends JFrame {
     record ReleaseInfo(String version, String downloadUrl, String sha256) {}
     private static final Color PURPLE = new Color(102, 82, 240);
+    private static final Color STATUS_READY = new Color(114, 230, 210);
+    private static final Color STATUS_PENDING = new Color(242, 200, 121);
     private static final Color CANVAS = new Color(11, 20, 47);
     private static final Color TEXT = new Color(242, 245, 255);
     private static final Color MUTED = new Color(181, 191, 220);
@@ -55,8 +57,8 @@ final class TokenProFrame extends JFrame {
     private final JLabel accountEmail = new JLabel("登录账户");
     private final JLabel headerBalance = new JLabel("—");
     private final JLabel accountBalance = new JLabel("—");
-    private final JLabel homeClaudeStatus = new JLabel("请先选择模型");
-    private final JLabel homeCodexStatus = new JLabel("请先选择模型");
+    private final JLabel homeClaudeStatus = new ClientStatusLabel("请先选择模型");
+    private final JLabel homeCodexStatus = new ClientStatusLabel("请先选择模型");
     private JButton codexLaunch;
     private JButton claudeLaunch;
     private JButton updateButton;
@@ -162,7 +164,7 @@ final class TokenProFrame extends JFrame {
         menu.addActionListener(e -> showModelMenu(menu, chooseModel, restore));
         JButton launch = primary("打开应用"); launch.addActionListener(e -> open.run()); launch.setEnabled(false);
         if (iconName.equals("Codex")) codexLaunch = launch; else claudeLaunch = launch;
-        buttons.add(menu); buttons.add(launch); actions.add(buttons); state.setFont(appFont(11, Font.BOLD)); state.setForeground(PURPLE); state.setAlignmentX(Component.RIGHT_ALIGNMENT); actions.add(Box.createVerticalStrut(7)); actions.add(state); card.add(actions, BorderLayout.EAST); return card;
+        buttons.add(menu); buttons.add(launch); actions.add(buttons); state.setFont(appFont(11, Font.BOLD)); state.setAlignmentX(Component.RIGHT_ALIGNMENT); actions.add(Box.createVerticalStrut(7)); actions.add(state); card.add(actions, BorderLayout.EAST); return card;
     }
 
     private void showModelMenu(JButton anchor, Runnable chooseModel, Runnable restore) {
@@ -995,6 +997,14 @@ final class TokenProFrame extends JFrame {
         NavButton(String text) { super(text); setFont(appFont(13, Font.PLAIN)); setForeground(new Color(203, 211, 238)); setHorizontalAlignment(SwingConstants.LEFT); setPreferredSize(new Dimension(200, 44)); setMinimumSize(new Dimension(160, 44)); setMaximumSize(new Dimension(Integer.MAX_VALUE, 44)); setBorder(new EmptyBorder(0, 16, 0, 16)); setFocusPainted(false); setContentAreaFilled(false); }
         public void setSelected(boolean value) { super.setSelected(value); selected = value; setFont(appFont(13, value ? Font.BOLD : Font.PLAIN)); repaint(); }
         protected void paintComponent(Graphics g) { if (selected) { Graphics2D g2 = (Graphics2D) g.create(); g2.setColor(new Color(108, 92, 255, 48)); g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12); g2.dispose(); } super.paintComponent(g); }
+    }
+
+    private static final class ClientStatusLabel extends JLabel {
+        ClientStatusLabel(String text) { super(); setText(text); }
+        public void setText(String text) {
+            super.setText(text);
+            setForeground(text != null && text.startsWith("请") ? STATUS_PENDING : STATUS_READY);
+        }
     }
 
     private static final class SidebarPanel extends JPanel {
