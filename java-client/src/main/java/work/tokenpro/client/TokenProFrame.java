@@ -14,6 +14,7 @@ import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BaseMultiResolutionImage;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URI;
 import java.net.URL;
 import java.net.http.HttpClient;
@@ -152,7 +153,7 @@ final class TokenProFrame extends JFrame {
         GradientPanel panel = new GradientPanel(); panel.setLayout(new BorderLayout(0, 16)); panel.setBorder(new EmptyBorder(23, 28, 20, 28));
         JPanel title = transparent(new BorderLayout()); headerTitle.setFont(appFont(23, Font.BOLD)); headerTitle.setIcon(new TechGlobeIcon(30)); headerTitle.setIconTextGap(10); headerTitle.setGradient(true); headerTitle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)); headerTitle.setToolTipText("打开 TokenPro 主页"); headerTitle.addMouseListener(new MouseAdapter() { @Override public void mouseClicked(MouseEvent event) { if ("https://tokenpro.work".equals(headerTitle.getText())) browse("https://tokenpro.work"); } }); title.add(headerTitle, BorderLayout.WEST);
         JPanel right = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        updateButton = soft("检查更新 v" + Main.VERSION); updateButton.setIcon(resourceIconContained("RefreshCwLucide.png", 15, 15, true)); updateButton.addActionListener(e -> checkForUpdates(updateButton)); right.add(updateButton);
+        updateButton = soft("检查更新 v" + Main.VERSION); setUpdateButtonState("check", "检查更新 v" + Main.VERSION); updateButton.setIcon(resourceIconContained("RefreshCwLucide.png", 15, 15, true)); updateButton.addActionListener(e -> checkForUpdates(updateButton)); right.add(updateButton);
         JButton user = soft("登录账户"); user.setIcon(resourceIconContained("CircleUserLucide.png", 17, 17, true)); user.addActionListener(e -> openAccount()); headerUser.addPropertyChangeListener("text", e -> user.setText(headerUser.getText())); right.add(user);
         title.add(right, BorderLayout.EAST); panel.add(title, BorderLayout.NORTH);
         Dimension headerCardSize = new Dimension(430, 64);
@@ -825,7 +826,7 @@ final class TokenProFrame extends JFrame {
     }
 
     private void checkForUpdates(JButton button, boolean automatic) {
-        if (button != null) { button.setEnabled(false); button.setText("检查中…"); }
+        if (button != null) { button.setEnabled(false); setUpdateButtonState("checking", "检查中…"); }
         if (!automatic) status("正在检查更新…");
         new SwingWorker<ReleaseInfo, Void>() {
             protected ReleaseInfo doInBackground() throws Exception {
@@ -848,22 +849,36 @@ final class TokenProFrame extends JFrame {
                 return payload.isBlank() ? new ReleaseInfo("", "", "") : releaseForPlatform(payload, Updater.platformKey());
             }
             protected void done() {
-                if (button != null) { button.setEnabled(true); button.setText("检查更新 v" + Main.VERSION); }
+                if (button != null) button.setEnabled(true);
                 try {
                     ReleaseInfo release = get();
                     if (release.version().isBlank()) {
+                        setUpdateButtonState("check", "检查更新 v" + Main.VERSION);
                         if (!automatic) {
-                            JOptionPane.showMessageDialog(TokenProFrame.this, "暂时无法读取版本信息，请稍后重试。", "检查更新", JOptionPane.WARNING_MESSAGE);
+                            status("暂时无法读取版本信息，请稍后重试");
                         }
                     } else if (compareVersions(release.version(), Main.VERSION) > 0) {
-                        if (updateButton != null) updateButton.setText("发现 " + release.version());
-                        int choice = JOptionPane.showConfirmDialog(TokenProFrame.this, "发现 TokenPro " + release.version() + "，是否立即自动更新？", "发现新版本", JOptionPane.YES_NO_OPTION);
-                        if (choice == JOptionPane.YES_OPTION) installUpdate(release);
-                    } else if (!automatic) JOptionPane.showMessageDialog(TokenProFrame.this, "当前已是最新版本 " + Main.VERSION, "检查更新", JOptionPane.INFORMATION_MESSAGE);
-                    if (!automatic) status("更新检查完成");
-                } catch (Exception ex) { if (!automatic) error(ex.getCause() == null ? ex : ex.getCause()); }
+                        setUpdateButtonState("check", "检查更新 v" + release.version());
+                        status("发现新版本 " + release.version());
+                        if (!automatic) installUpdate(release);
+                    } else {
+                        setUpdateButtonState("latest", "最新版本 v" + Main.VERSION);
+                        if (!automatic) status("当前已是最新版本 " + Main.VERSION);
+                    }
+                } catch (Exception ex) {
+                    setUpdateButtonState("check", "检查更新 v" + Main.VERSION);
+                    if (!automatic) error(ex.getCause() == null ? ex : ex.getCause());
+                }
             }
         }.execute();
+    }
+
+    private void setUpdateButtonState(String state, String text) {
+        if (updateButton == null) return;
+        updateButton.putClientProperty("tokenpro.updateState", state);
+        updateButton.setText(text);
+        updateButton.setToolTipText("latest".equals(state) ? "当前已是最新版本" : "点击检查并安装最新版本");
+        updateButton.repaint();
     }
 
     static ReleaseInfo releaseForPlatform(String payload, String platformKey) {
@@ -896,39 +911,68 @@ final class TokenProFrame extends JFrame {
 
     private void installUpdate(ReleaseInfo release) {
         if (release.downloadUrl().isBlank()) {
-            JOptionPane.showMessageDialog(this, "当前系统暂未提供自动更新包。", "自动更新", JOptionPane.WARNING_MESSAGE);
+            setUpdateButtonState("check", "检查更新 v" + Main.VERSION);
+            status("当前系统暂未提供自动更新包");
             return;
         }
-        if (updateButton != null) { updateButton.setEnabled(false); updateButton.setText("正在下载…"); }
+        UpdateProgressDialog progress = new UpdateProgressDialog(this, release.version());
+        if (updateButton != null) updateButton.setEnabled(false);
+        setUpdateButtonState("checking", "正在更新 0%");
         status("正在下载 TokenPro " + release.version() + "…");
-        new SwingWorker<Path, Void>() {
+        progress.setVisible(true);
+        new SwingWorker<Path, Integer>() {
             protected Path doInBackground() throws Exception {
                 URI uri = URI.create(release.downloadUrl());
                 if (!"https".equalsIgnoreCase(uri.getScheme())) throw new IllegalStateException("更新地址不是安全的 HTTPS 链接");
                 String suffix = uri.getPath().replaceFirst("^.*(?=\\.)", "");
                 Path target = Files.createTempFile("TokenPro-" + release.version() + "-", suffix);
                 HttpRequest request = HttpRequest.newBuilder(uri).timeout(java.time.Duration.ofMinutes(8)).GET().build();
-                HttpResponse<Path> response = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build().send(request, HttpResponse.BodyHandlers.ofFile(target));
-                if (response.statusCode() != 200 || Files.size(target) < 1_000_000) {
+                HttpResponse<InputStream> response = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build().send(request, HttpResponse.BodyHandlers.ofInputStream());
+                if (response.statusCode() != 200) {
                     Files.deleteIfExists(target);
                     throw new IllegalStateException("更新包下载失败（HTTP " + response.statusCode() + "）");
                 }
+                long total = response.headers().firstValueAsLong("Content-Length").orElse(-1L);
+                long downloaded = 0;
+                try (InputStream input = response.body(); OutputStream output = Files.newOutputStream(target, StandardOpenOption.TRUNCATE_EXISTING)) {
+                    byte[] buffer = new byte[64 * 1024];
+                    for (int read; (read = input.read(buffer)) >= 0;) {
+                        if (read == 0) continue;
+                        output.write(buffer, 0, read);
+                        downloaded += read;
+                        if (total > 0) publish((int) Math.min(99, downloaded * 100 / total));
+                    }
+                }
+                if (Files.size(target) < 1_000_000) {
+                    Files.deleteIfExists(target);
+                    throw new IllegalStateException("更新包下载不完整");
+                }
+                publish(100);
                 if (!release.sha256().isBlank() && !release.sha256().equalsIgnoreCase(sha256(target))) {
                     Files.deleteIfExists(target);
                     throw new IllegalStateException("更新包校验失败，已停止安装");
                 }
                 return target;
             }
+            protected void process(List<Integer> chunks) {
+                int value = chunks.get(chunks.size() - 1);
+                progress.updateProgress(value);
+                setUpdateButtonState("checking", "正在更新 " + value + "%");
+            }
             protected void done() {
                 try {
                     Path installer = get();
+                    progress.installing();
                     status("正在安装 TokenPro " + release.version() + "，程序即将重启…");
                     Updater.install(installer);
                     dispose();
                     System.exit(0);
                 } catch (Exception ex) {
-                    if (updateButton != null) { updateButton.setEnabled(true); updateButton.setText("重新更新"); }
-                    error(ex.getCause() == null ? ex : ex.getCause());
+                    progress.dispose();
+                    if (updateButton != null) updateButton.setEnabled(true);
+                    setUpdateButtonState("check", "更新失败，点击重试");
+                    Throwable cause = ex.getCause() == null ? ex : ex.getCause();
+                    status("自动更新失败：" + (cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage()));
                 }
             }
         }.execute();
@@ -1413,6 +1457,44 @@ final class TokenProFrame extends JFrame {
         protected void paintComponent(Graphics g) { Graphics2D g2 = (Graphics2D) g.create(); g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON); g2.setColor(fill); g2.fill(new RoundRectangle2D.Double(.5, .5, getWidth()-1, getHeight()-1, radius, radius)); g2.setColor(stroke); g2.draw(new RoundRectangle2D.Double(.5, .5, getWidth()-1, getHeight()-1, radius, radius)); g2.dispose(); super.paintComponent(g); }
     }
 
+    private static final class UpdateProgressDialog extends JDialog {
+        private final JLabel detail = new JLabel("正在安全下载更新…", SwingConstants.CENTER);
+        private final CosmosProgressBar bar = new CosmosProgressBar();
+
+        UpdateProgressDialog(JFrame owner, String version) {
+            super(owner, "TokenPro 自动更新", false);
+            setUndecorated(true);
+            setBackground(new Color(0, 0, 0, 0));
+            RoundedPanel panel = new RoundedPanel(24, new Color(17, 31, 68, 248), new Color(115, 104, 255, 145));
+            panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+            panel.setBorder(new EmptyBorder(22, 25, 22, 25));
+            JLabel title = new JLabel("正在更新 TokenPro " + version, SwingConstants.CENTER);
+            title.setFont(appFont(16, Font.BOLD)); title.setForeground(TEXT); title.setAlignmentX(Component.CENTER_ALIGNMENT);
+            detail.setFont(appFont(11, Font.PLAIN)); detail.setForeground(MUTED); detail.setAlignmentX(Component.CENTER_ALIGNMENT);
+            bar.setAlignmentX(Component.CENTER_ALIGNMENT); bar.setPreferredSize(new Dimension(370, 14)); bar.setMaximumSize(new Dimension(370, 14));
+            panel.add(title); panel.add(Box.createVerticalStrut(10)); panel.add(detail); panel.add(Box.createVerticalStrut(14)); panel.add(bar);
+            setContentPane(panel); setSize(430, 142); setLocationRelativeTo(owner); setAlwaysOnTop(true);
+        }
+
+        void updateProgress(int value) { bar.setValue(value); detail.setText("正在下载 · " + value + "%"); }
+        void installing() { bar.setValue(100); detail.setText("校验完成，正在安装并重启…"); }
+    }
+
+    private static final class CosmosProgressBar extends JProgressBar {
+        CosmosProgressBar() { super(0, 100); setOpaque(false); setBorderPainted(false); setStringPainted(false); }
+        protected void paintComponent(Graphics graphics) {
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(new Color(43, 53, 96, 220)); g.fillRoundRect(0, 0, getWidth(), getHeight(), getHeight(), getHeight());
+            int width = (int) Math.round(getWidth() * getPercentComplete());
+            if (width > 0) {
+                g.setPaint(new GradientPaint(0, 0, new Color(104, 229, 205), getWidth(), 0, new Color(153, 105, 255)));
+                g.fillRoundRect(0, 0, width, getHeight(), getHeight(), getHeight());
+            }
+            g.dispose();
+        }
+    }
+
     private static final class GradientPanel extends JPanel {
         private final BufferedImage cosmos = resourceImage("LoginCosmos-v2.png");
         GradientPanel() { setOpaque(false); }
@@ -1424,9 +1506,17 @@ final class TokenProFrame extends JFrame {
         ActionButton(String text, boolean prominent) { super(text); this.prominent = prominent; setContentAreaFilled(false); setOpaque(false); setBorderPainted(false); setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)); }
         protected void paintComponent(Graphics graphics) {
             Graphics2D g = (Graphics2D) graphics.create(); g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            if (prominent && isEnabled()) g.setPaint(new GradientPaint(0, 0, new Color(111, 91, 255), getWidth(), 0, new Color(64, 142, 255)));
+            String updateState = String.valueOf(getClientProperty("tokenpro.updateState"));
+            Color stroke = new Color(190, 205, 255, prominent ? 32 : 24);
+            if ("latest".equals(updateState)) {
+                g.setPaint(new GradientPaint(0, 0, new Color(47, 117, 104, 205), getWidth(), 0, new Color(63, 145, 119, 205)));
+                stroke = new Color(132, 230, 196, 135);
+            } else if ("check".equals(updateState)) {
+                g.setPaint(new GradientPaint(0, 0, new Color(99, 72, 24, 235), getWidth(), 0, new Color(137, 99, 30, 235)));
+                stroke = new Color(242, 200, 121, 160);
+            } else if (prominent && isEnabled()) g.setPaint(new GradientPaint(0, 0, new Color(111, 91, 255), getWidth(), 0, new Color(64, 142, 255)));
             else g.setColor(prominent ? new Color(76, 72, 132, 205) : (isEnabled() ? new Color(39, 53, 96, 235) : new Color(27, 36, 65, 210)));
-            g.fillRoundRect(0, 0, getWidth(), getHeight(), 18, 18); g.setColor(new Color(190, 205, 255, prominent ? 32 : 24)); g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 18, 18);
+            g.fillRoundRect(0, 0, getWidth(), getHeight(), 18, 18); g.setColor(stroke); g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 18, 18);
             g.setFont(getFont()); g.setColor(isEnabled() ? getForeground() : new Color(137, 145, 177)); FontMetrics fm = g.getFontMetrics(); Icon icon = getIcon(); int textWidth = fm.stringWidth(getText()); int iconWidth = icon == null ? 0 : icon.getIconWidth(); int gap = icon == null || getText().isBlank() ? 0 : getIconTextGap(); int total = iconWidth + gap + textWidth; int x = (getWidth() - total) / 2; if (icon != null) { icon.paintIcon(this, g, x, (getHeight() - icon.getIconHeight()) / 2); x += iconWidth + gap; } g.drawString(getText(), x, (getHeight() - fm.getHeight()) / 2 + fm.getAscent()); g.dispose();
         }
     }
