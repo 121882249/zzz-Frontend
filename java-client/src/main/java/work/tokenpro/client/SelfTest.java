@@ -12,6 +12,9 @@ final class SelfTest {
         Map<String, Object> value = Json.object(Json.parse("{\"name\":\"TokenPro\",\"items\":[1,true,null],\"n\":12}"));
         check("TokenPro".equals(value.get("name")), "JSON string"); passed++;
         check(value.get("items") instanceof List<?> list && list.size() == 3, "JSON array"); passed++;
+        check(value.get("n") instanceof Long && ((Long) value.get("n")) == 12L, "JSON integer remains integral"); passed++;
+        check(Json.object(Json.parse("{\"max_tokens\":8192}")).get("max_tokens") instanceof Long, "Claude integer fields remain integral"); passed++;
+        check(ClaudeBridgeServer.sameIdentifier("18.0", 18L) && !ClaudeBridgeServer.sameIdentifier("18.0", 19L), "legacy decimal account IDs remain compatible"); passed++;
         check(Json.stringify(value).contains("\"TokenPro\""), "JSON writer"); passed++;
         String sample = "before\n# >>> TokenPro managed >>>\nmanaged\n# <<< TokenPro managed <<<\nafter\n";
         check(CodexConfig.stripManaged(sample).equals("before\nafter\n"), "managed config removal"); passed++;
@@ -86,6 +89,14 @@ final class SelfTest {
         PricedModel gptGroup = new PricedModel("gpt-5.6-sol", "openai", "GPT", 12);
         check(ModelPickerDialog.compareGroups(List.of(lowSubscription), List.of(claudeGroup), "Claude") < 0, "Claude client puts subscriptions first"); passed++;
         check(ModelPickerDialog.compareGroups(List.of(claudeGroup), List.of(gptGroup), "Claude") < 0, "Claude client puts Claude before GPT"); passed++;
+        List<PricedModel> scattered = List.of(
+            new PricedModel("gpt-5.6-terra", "openai", "GPT B", 22),
+            new PricedModel("gemini-3", "gemini", "Gemini", 24),
+            new PricedModel("claude-sonnet-5", "anthropic", "Claude", 21),
+            new PricedModel("gpt-5.6-sol", "openai", "GPT A", 23),
+            new PricedModel("grok-4.5", "grok", "Grok", 25));
+        List<String> claudeOrdered = ModelPickerDialog.orderedModels(scattered, "Claude").stream().map(PricedModel::name).toList();
+        check(claudeOrdered.equals(List.of("claude-sonnet-5", "gpt-5.6-sol", "gpt-5.6-terra", "grok-4.5", "gemini-3")), "Claude export keeps vendors together in picker order"); passed++;
         check(!ModelPickerDialog.supportsClient(imagePriced, "Claude") && ModelPickerDialog.supportsClient(imagePriced, "Codex"), "Claude filters image models"); passed++;
         PricedModel datedSubscription = new PricedModel("gpt-sub", "openai", "Monthly", 10, "token", 1d, 2d, List.of(), true, 30d, "2026-10-31T08:00:00Z");
         check(datedSubscription.subscriptionExpiryLabel().matches("到期 \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}"), "subscription expiry label includes minutes"); passed++;
@@ -94,9 +105,9 @@ final class SelfTest {
         check(ModelPickerDialog.groupRank(new PricedModel("gemini-3", "google", "Gemini", 3))
             < ModelPickerDialog.groupRank(new PricedModel("mistral-large", "mistral", "Mistral", 4)), "other groups follow Gemini"); passed++;
         check(ModuleLayer.boot().findModule("jdk.crypto.ec").isPresent(), "packaged runtime supports ECDSA TLS certificates"); passed++;
-        String releasePayload = "{\"tag_name\":\"v1.2.34\",\"downloads\":{\"windows-x64\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe\",\"sha256\":\"abc\"}}}";
+        String releasePayload = "{\"tag_name\":\"v1.2.35\",\"downloads\":{\"windows-x64\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe\",\"sha256\":\"abc\"}}}";
         TokenProFrame.ReleaseInfo release = TokenProFrame.releaseForPlatform(releasePayload, "windows-x64");
-        check("1.2.34".equals(release.version()) && release.downloadUrl().endsWith(".exe") && "abc".equals(release.sha256()), "automatic update manifest"); passed++;
+        check("1.2.35".equals(release.version()) && release.downloadUrl().endsWith(".exe") && "abc".equals(release.sha256()), "automatic update manifest"); passed++;
         check(Updater.platformKey().startsWith(Platform.OS_KIND == Platform.OS.MAC ? "macos-" : Platform.OS_KIND == Platform.OS.WINDOWS ? "windows-" : "linux-"), "automatic update platform mapping"); passed++;
         ClaudeBridgeConfig.Route route = ClaudeBridgeConfig.Route.from(priced);
         check(route.alias().matches("claude-tokenpro-[0-9a-f]{24}"), "Claude alias"); passed++;

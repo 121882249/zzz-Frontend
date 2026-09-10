@@ -155,7 +155,10 @@ final class Json {
             }
             if (start == pos) throw error("不是有效的 JSON 值");
             String raw = text.substring(start, pos);
-            try { return raw.contains(".") || raw.contains("e") || raw.contains("E") ? Double.parseDouble(raw) : Long.parseLong(raw); }
+            try {
+                if (raw.contains(".") || raw.contains("e") || raw.contains("E")) return Double.parseDouble(raw);
+                return Long.parseLong(raw);
+            }
             catch (NumberFormatException e) { throw error("数字格式错误"); }
         }
         Object literal(String raw, Object value) {

@@ -42,6 +42,7 @@ final class ModelPickerDialog extends JDialog {
 
     private JComponent content(String client, List<PricedModel> models, Set<String> selectedIds,
                                Consumer<List<PricedModel>> onApply) {
+        models = orderedModels(models, client);
         JPanel root = new CosmosPanel();
         root.setLayout(new BorderLayout());
         root.setBorder(new EmptyBorder(24, 26, 22, 26));
@@ -228,6 +229,45 @@ final class ModelPickerDialog extends JDialog {
     static boolean supportsClient(PricedModel model, String client) {
         return !model.isImageGeneration() || "Codex".equals(client);
     }
+
+    static List<PricedModel> orderedModels(List<PricedModel> models, String client) {
+        Map<String, List<PricedModel>> grouped = new LinkedHashMap<>();
+        for (PricedModel model : models) {
+            if (!supportsClient(model, client) || model.isImageGeneration()) continue;
+            grouped.computeIfAbsent(groupKey(model), ignored -> new ArrayList<>()).add(model);
+        }
+        List<List<PricedModel>> orderedGroups = grouped.values().stream()
+            .sorted((left, right) -> compareGroups(left, right, client)).toList();
+        List<PricedModel> images = orderedImageModels(models);
+        List<PricedModel> result = new ArrayList<>();
+        boolean imagesAdded = false;
+        for (List<PricedModel> group : orderedGroups) {
+            List<PricedModel> sorted = new ArrayList<>(group);
+            sorted.sort(ApiClient::compareSelectablePriceDescending);
+            result.addAll(sorted);
+            PricedModel first = sorted.getFirst();
+            if ("Codex".equals(client) && !imagesAdded && !first.subscription() && isGptGroup(first)) {
+                result.addAll(images);
+                imagesAdded = true;
+            }
+        }
+        if ("Codex".equals(client) && !imagesAdded) result.addAll(images);
+        return List.copyOf(result);
+    }
+
+    private static List<PricedModel> orderedImageModels(List<PricedModel> models) {
+        List<PricedModel> images = models.stream().filter(PricedModel::isImageGeneration)
+            .sorted(ApiClient::compareSelectablePriceDescending).toList();
+        Map<String, List<PricedModel>> grouped = new LinkedHashMap<>();
+        for (PricedModel model : images) grouped.computeIfAbsent(groupKey(model), ignored -> new ArrayList<>()).add(model);
+        List<PricedModel> result = new ArrayList<>();
+        for (List<PricedModel> group : grouped.values()) {
+            group.sort(ApiClient::compareSelectablePriceDescending);
+            result.addAll(group);
+        }
+        return result;
+    }
+
     private static String groupKey(PricedModel model) { return model.groupId() + "\u0000" + model.groupName(); }
 
     static int compareGroups(List<PricedModel> left, List<PricedModel> right) {

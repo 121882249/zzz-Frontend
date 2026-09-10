@@ -93,6 +93,17 @@ final class Platform {
         }
     }
 
+    static boolean claudeThirdPartyRunning() {
+        String dataArgument = "--user-data-dir=" + Path.of(System.getProperty("user.home"), "Library", "Application Support", "Claude-3p");
+        return ProcessHandle.allProcesses().anyMatch(process -> {
+            ProcessHandle.Info info = process.info();
+            String command = info.command().orElse("").toLowerCase(Locale.ROOT);
+            if (!command.contains("claude")) return false;
+            if (OS_KIND != OS.MAC) return true;
+            return Stream.of(info.arguments().orElse(new String[0])).anyMatch(dataArgument::equals);
+        });
+    }
+
     static boolean restartApplication(String name) throws Exception {
         if (OS_KIND == OS.MAC) {
             String target = macApplicationTarget(name);

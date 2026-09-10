@@ -20,7 +20,7 @@ final class ClaudeDesktopConfig {
         ensureEntry(meta, official, "Claude 官方配置");
         ensureEntry(meta, tokenPro, "TokenPro");
         writeJson(library.resolve(official + ".json"), Map.of());
-        List<Map<String, Object>> models = bridge.routes().stream().map(route -> Map.<String, Object>of("name", route.alias(), "labelOverride", route.name())).toList();
+        List<Map<String, Object>> models = bridge.routes().stream().map(route -> Map.<String, Object>of("name", route.alias(), "labelOverride", PricedModel.displayCase(route.name()))).toList();
         Map<String, Object> profile = new LinkedHashMap<>();
         profile.put("deploymentDisplayName", deploymentDisplayName(accountLabel)); profile.put("endUserAttribution", false);
         profile.put("inferenceProvider", "gateway"); profile.put("inferenceGatewayBaseUrl", bridge.baseUrl());

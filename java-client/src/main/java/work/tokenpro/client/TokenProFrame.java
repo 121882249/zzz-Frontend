@@ -150,7 +150,7 @@ final class TokenProFrame extends JFrame {
 
     private JComponent header() {
         GradientPanel panel = new GradientPanel(); panel.setLayout(new BorderLayout(0, 16)); panel.setBorder(new EmptyBorder(23, 28, 20, 28));
-        JPanel title = transparent(new BorderLayout()); headerTitle.setFont(appFont(23, Font.BOLD)); headerTitle.setIcon(resourceIconContained("ModelUniverseVortex.png", 36, 24, false)); headerTitle.setIconTextGap(10); headerTitle.setGradient(true); headerTitle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)); headerTitle.setToolTipText("打开 TokenPro 主页"); headerTitle.addMouseListener(new MouseAdapter() { @Override public void mouseClicked(MouseEvent event) { if ("https://tokenpro.work".equals(headerTitle.getText())) browse("https://tokenpro.work"); } }); title.add(headerTitle, BorderLayout.WEST);
+        JPanel title = transparent(new BorderLayout()); headerTitle.setFont(appFont(23, Font.BOLD)); headerTitle.setIcon(new TechGlobeIcon(30)); headerTitle.setIconTextGap(10); headerTitle.setGradient(true); headerTitle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)); headerTitle.setToolTipText("打开 TokenPro 主页"); headerTitle.addMouseListener(new MouseAdapter() { @Override public void mouseClicked(MouseEvent event) { if ("https://tokenpro.work".equals(headerTitle.getText())) browse("https://tokenpro.work"); } }); title.add(headerTitle, BorderLayout.WEST);
         JPanel right = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         updateButton = soft("检查更新 v" + Main.VERSION); updateButton.setIcon(resourceIconContained("RefreshCwLucide.png", 15, 15, true)); updateButton.addActionListener(e -> checkForUpdates(updateButton)); right.add(updateButton);
         JButton user = soft("登录账户"); user.setIcon(resourceIconContained("CircleUserLucide.png", 17, 17, true)); user.addActionListener(e -> openAccount()); headerUser.addPropertyChangeListener("text", e -> user.setText(headerUser.getText())); right.add(user);
@@ -358,7 +358,7 @@ final class TokenProFrame extends JFrame {
 
     private void applyCodex(List<PricedModel> selected) {
         if (accessToken == null || accountId.isBlank()) { error(new IllegalStateException("请先登录 TokenPro")); return; }
-        selected = uniqueModels(selected);
+        selected = uniqueModels(ModelPickerDialog.orderedModels(selected, "Codex"));
         List<PricedModel> chatModels = selected.stream().filter(model -> !model.isImageGeneration()).toList();
         List<PricedModel> imageModels = selected.stream().filter(PricedModel::isImageGeneration).toList();
         if (selected.isEmpty()) { error(new IllegalStateException("请全局至少选择 1 个模型")); return; }
@@ -451,7 +451,7 @@ final class TokenProFrame extends JFrame {
 
     private void applyClaude(List<PricedModel> selected) {
         if (accessToken == null || accountId.isBlank()) { error(new IllegalStateException("请先登录 TokenPro")); return; }
-        selected = uniqueModels(selected);
+        selected = uniqueModels(ModelPickerDialog.orderedModels(selected, "Claude"));
         if (selected.isEmpty()) { error(new IllegalStateException("请至少选择一个模型")); return; }
         List<PricedModel> chosen = selected;
         String accountLabel = string(sessionUser.get("email"));
@@ -672,7 +672,7 @@ final class TokenProFrame extends JFrame {
         pages.show(pageHost, page);
         boolean homePage = page.equals("首页");
         headerTitle.setText(homePage ? "https://tokenpro.work" : page);
-        headerTitle.setIcon(homePage ? resourceIconContained("ModelUniverseVortex.png", 36, 24, false) : null);
+        headerTitle.setIcon(homePage ? new TechGlobeIcon(30) : null);
         headerTitle.setGradient(homePage);
         headerTitle.setForeground(Color.WHITE);
         headerTitle.setCursor(Cursor.getPredefinedCursor(homePage ? Cursor.HAND_CURSOR : Cursor.DEFAULT_CURSOR));
@@ -1310,6 +1310,35 @@ final class TokenProFrame extends JFrame {
             g.drawLine(size / 3, middle, size - 2, middle);
             g.drawLine(size - 5, middle - 3, size - 2, middle);
             g.drawLine(size - 5, middle + 3, size - 2, middle);
+            g.dispose();
+        }
+    }
+
+    private static final class TechGlobeIcon implements Icon {
+        private final int size;
+
+        TechGlobeIcon(int size) { this.size = size; }
+        public int getIconWidth() { return size; }
+        public int getIconHeight() { return size; }
+
+        public void paintIcon(Component component, Graphics graphics, int x, int y) {
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.translate(x, y);
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            float stroke = Math.max(1.2f, size / 18f);
+            g.setStroke(new BasicStroke(stroke, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g.setPaint(new LinearGradientPaint(2, 2, size - 2, size - 2,
+                new float[]{0f, .48f, 1f},
+                new Color[]{new Color(101, 233, 211), new Color(74, 159, 255), new Color(178, 101, 255)}));
+            int pad = Math.max(2, Math.round(stroke));
+            int diameter = size - pad * 2;
+            g.drawOval(pad, pad, diameter, diameter);
+            g.drawOval(size / 3, pad, size / 3, diameter);
+            g.drawArc(pad, size / 4, diameter, size / 2, 0, 360);
+            g.drawLine(pad + 2, size / 2, size - pad - 2, size / 2);
+            int node = Math.max(3, size / 8);
+            g.fillOval(size - pad - node, size / 2 - node / 2, node, node);
+            g.fillOval(size / 2 - node / 2, pad - node / 3, node, node);
             g.dispose();
         }
     }
