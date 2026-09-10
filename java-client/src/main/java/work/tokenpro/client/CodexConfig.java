@@ -29,12 +29,10 @@ final class CodexConfig {
         String current = Files.exists(target) ? Files.readString(target) : "";
         if (store.read("codex-original.toml").isEmpty()) store.write("codex-original.toml", current);
         String clean = stripRootOverrides(stripManaged(current));
-        // Keep the single selected image model plus every allowed LLM in the
-        // flat Codex picker. The fixed header pairs that image model with each LLM.
-        List<PricedModel> catalogModels = new ArrayList<>();
-        catalogModels.add(imageModel);
-        catalogModels.addAll(chatModels);
-        Path catalog = writeModelCatalog(catalogModels);
+        // The Codex picker only needs the allowed LLMs. The selected image
+        // model stays behind the scenes in the provider header and is paired
+        // with whichever LLM is active.
+        Path catalog = writeModelCatalog(chatModels);
         String block = managedBlock(url, primaryModel, imageModel, catalog, key.trim());
         writeAtomic(target, block + (clean.isBlank() ? "" : "\n" + clean.stripLeading()));
     }
@@ -116,9 +114,8 @@ final class CodexConfig {
             if (closest == null) closest = bySlug.values().stream().min(Comparator.comparing(item -> String.valueOf(item.get("slug")))).orElseThrow();
             Map<String, Object> entry = deepCopy(closest);
             entry.put("slug", model.name());
-            String role = model.isImageGeneration() ? "Image Model" : "LLM Model";
             entry.put("display_name", catalogDisplayName(model));
-            entry.put("description", role + " · " + model.groupName() + " · TokenPro");
+            entry.put("description", model.groupName() + " · TokenPro");
             entry.put("visibility", "list");
             entry.put("supported_in_api", true);
             entry.put("priority", priority++);
@@ -178,7 +175,7 @@ final class CodexConfig {
     }
 
     static String catalogDisplayName(PricedModel model) {
-        return (model.isImageGeneration() ? "Image Model" : "LLM Model") + " · " + model.codexDisplayName();
+        return model.codexDisplayName();
     }
 
     private static Map<String, Object> reasoningLevel(String effort) {

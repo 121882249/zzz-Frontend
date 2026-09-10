@@ -354,7 +354,7 @@ final class TokenProFrame extends JFrame {
             store.write("codex-selected.json", Json.stringify(saved));
             return chosen;
         }, configured -> {
-            homeCodexStatus.setText(chatModels.size() + " LLM + 1 Image 已配置");
+            homeCodexStatus.setText(chatModels.size() + " LLM + " + imageModel.displayName());
             if (codexLaunch != null) codexLaunch.setEnabled(true);
             status("Codex 已配置 " + configured.size() + " 个模型");
             openApp("Codex");
@@ -490,9 +490,12 @@ final class TokenProFrame extends JFrame {
             if (raw.isEmpty()) throw new IllegalStateException("未选择");
             Map<String, Object> saved = Json.object(Json.parse(raw.get()));
             if (saved.get("models") instanceof List<?> models && !models.isEmpty()) {
-                boolean imageEnabled = !string(saved.get("image_model")).isBlank();
+                String imageModel = string(saved.get("image_model"));
+                boolean imageEnabled = !imageModel.isBlank();
                 int chatCount = imageEnabled ? Math.max(0, models.size() - 1) : models.size();
-                homeCodexStatus.setText(chatCount > 0 && imageEnabled ? chatCount + " LLM + 1 Image 已配置" : "请重新选择模型");
+                homeCodexStatus.setText(chatCount > 0 && imageEnabled
+                    ? chatCount + " LLM + " + PricedModel.displayCase(imageModel)
+                    : "请重新选择模型");
             }
             else {
                 String selected = string(saved.get("model")); if (selected.isBlank()) throw new IllegalStateException("未选择");
