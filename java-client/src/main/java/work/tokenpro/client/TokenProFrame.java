@@ -838,7 +838,7 @@ final class TokenProFrame extends JFrame {
             protected ReleaseInfo doInBackground() throws Exception {
                 String payload = "";
                 try {
-                    HttpRequest request = HttpRequest.newBuilder(URI.create("https://tokenpro.work/downloads/latest/release.json"))
+                    HttpRequest request = HttpRequest.newBuilder(URI.create("https://tokenpro.work/downloads/latest/release-v2.json"))
                         .header("Accept", "application/json").timeout(java.time.Duration.ofSeconds(12)).GET().build();
                     HttpResponse<String> response = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build().send(request, HttpResponse.BodyHandlers.ofString());
                     if (response.statusCode() == 200) payload = response.body();
