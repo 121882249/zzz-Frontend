@@ -49,14 +49,18 @@ final class ModelPickerDialog extends JDialog {
 
         JPanel header = transparent();
         header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
+        JPanel titleLine = transparent(new BorderLayout());
         JLabel title = new JLabel("选择 " + client + " 模型");
         title.setFont(font(23, Font.BOLD));
         title.setForeground(TEXT);
+        title.setBorder(new EmptyBorder(0, 9, 0, 0));
+        titleLine.add(closeControl(), BorderLayout.WEST);
+        titleLine.add(title, BorderLayout.CENTER);
         boolean codex = "Codex".equals(client);
         JLabel detail = new JLabel(codex ? "Image Model 选择 1 个，LLM Model 至少选择 1 个" : "按可用分组展示，可直接点选多个模型");
         detail.setFont(font(12, Font.PLAIN));
         detail.setForeground(MUTED);
-        header.add(title);
+        header.add(titleLine);
         header.add(Box.createVerticalStrut(6));
         header.add(detail);
         header.add(Box.createVerticalStrut(18));
@@ -146,6 +150,14 @@ final class ModelPickerDialog extends JDialog {
         footer.add(actions, BorderLayout.EAST);
         root.add(footer, BorderLayout.SOUTH);
         return root;
+    }
+
+    private JComponent closeControl() {
+        JPanel controls = transparent(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        WindowControlButton close = new WindowControlButton(new Color(255, 95, 86));
+        close.addActionListener(event -> dispose());
+        controls.add(close);
+        return controls;
     }
 
     private void addImageChoices(JPanel groups, List<PricedModel> models, Set<String> selectedIds) {
@@ -356,6 +368,42 @@ final class ModelPickerDialog extends JDialog {
             g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 16, 16);
             g.dispose();
             super.paintComponent(graphics);
+        }
+    }
+
+    private static final class WindowControlButton extends JButton {
+        private final Color accent;
+        WindowControlButton(Color accent) {
+            super("");
+            this.accent = accent;
+            setToolTipText("关闭");
+            getAccessibleContext().setAccessibleName("关闭");
+            setPreferredSize(new Dimension(24, 24));
+            setFocusPainted(false);
+            setOpaque(false);
+            setContentAreaFilled(false);
+            setBorderPainted(false);
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        }
+
+        protected void paintComponent(Graphics graphics) {
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            Color fill = getModel().isRollover() ? accent.brighter() : accent;
+            g.setColor(fill);
+            int diameter = 14;
+            int x = (getWidth() - diameter) / 2, y = (getHeight() - diameter) / 2;
+            g.fillOval(x, y, diameter, diameter);
+            g.setColor(new Color(125, 24, 20, 150));
+            g.drawOval(x, y, diameter, diameter);
+            if (getModel().isRollover()) {
+                g.setColor(new Color(90, 20, 18, 220));
+                g.setStroke(new BasicStroke(1.25f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                int cx = getWidth() / 2, cy = getHeight() / 2;
+                g.drawLine(cx - 4, cy - 4, cx + 4, cy + 4);
+                g.drawLine(cx + 4, cy - 4, cx - 4, cy + 4);
+            }
+            g.dispose();
         }
     }
 

@@ -62,6 +62,8 @@ final class SelfTest {
         PricedModel inputPriced = new PricedModel("gpt-5.6-sol", "openai", "GPT", 60, "token", 0.000004, 0.00003, List.of());
         PricedModel lowerInputPriced = new PricedModel("gpt-5.6-terra", "openai", "GPT", 60, "token", 0.000002, 0.00005, List.of());
         check(ApiClient.compareSelectablePriceDescending(inputPriced, lowerInputPriced) < 0, "picker models sort by displayed input price descending"); passed++;
+        check(Math.abs(ApiClient.discountedInputPrice(0.000005, "token", 0.28) - 0.0000014) < 1e-12, "LLM picker price applies effective group discount"); passed++;
+        check(Math.abs(ApiClient.discountedInputPrice(0.000005, "image", 0.28) - 0.000005) < 1e-12, "image picker price remains unchanged"); passed++;
         check("Input ¥4.00/M".equals(inputPriced.priceLabel()), "LLM input price label"); passed++;
         PricedModel imagePriced = new PricedModel("gpt-image-2.5", "openai", "Image", 60, "image", null, null,
             List.of(new PricedModel.ImagePrice("1K", 0.03), new PricedModel.ImagePrice("2K", 0.05), new PricedModel.ImagePrice("4K", 0.10)));
@@ -74,9 +76,9 @@ final class SelfTest {
         check(ModelPickerDialog.groupRank(new PricedModel("gemini-3", "google", "Gemini", 3))
             < ModelPickerDialog.groupRank(new PricedModel("mistral-large", "mistral", "Mistral", 4)), "other groups follow Gemini"); passed++;
         check(ModuleLayer.boot().findModule("jdk.crypto.ec").isPresent(), "packaged runtime supports ECDSA TLS certificates"); passed++;
-        String releasePayload = "{\"tag_name\":\"v1.2.26\",\"downloads\":{\"windows-x64\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe\",\"sha256\":\"abc\"}}}";
+        String releasePayload = "{\"tag_name\":\"v1.2.27\",\"downloads\":{\"windows-x64\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe\",\"sha256\":\"abc\"}}}";
         TokenProFrame.ReleaseInfo release = TokenProFrame.releaseForPlatform(releasePayload, "windows-x64");
-        check("1.2.26".equals(release.version()) && release.downloadUrl().endsWith(".exe") && "abc".equals(release.sha256()), "automatic update manifest"); passed++;
+        check("1.2.27".equals(release.version()) && release.downloadUrl().endsWith(".exe") && "abc".equals(release.sha256()), "automatic update manifest"); passed++;
         check(Updater.platformKey().startsWith(Platform.OS_KIND == Platform.OS.MAC ? "macos-" : Platform.OS_KIND == Platform.OS.WINDOWS ? "windows-" : "linux-"), "automatic update platform mapping"); passed++;
         ClaudeBridgeConfig.Route route = ClaudeBridgeConfig.Route.from(priced);
         check(route.alias().matches("claude-tokenpro-[0-9a-f]{24}"), "Claude alias"); passed++;

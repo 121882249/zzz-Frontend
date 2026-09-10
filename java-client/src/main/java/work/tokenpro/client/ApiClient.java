@@ -61,19 +61,23 @@ final class ApiClient {
             Map<String, Object> allowed = available.get(groupId);
             String groupName = text(allowed.getOrDefault("name", group.getOrDefault("name", "TokenPro")));
             String groupPlatform = text(group.getOrDefault("platform", "other"));
+            Double userRate = decimal(group.get("user_rate_multiplier"));
+            Double groupRate = decimal(group.get("rate_multiplier"));
+            double effectiveRate = validRate(userRate) ? userRate : validRate(groupRate) ? groupRate : 1d;
             for (Object rawModel : models) {
                 Map<String, Object> model = Json.object(rawModel);
                 String modelName = text(model.get("name"));
                 if (modelName.isBlank() || model.get("pricing") == null) continue;
                 Map<String, Object> pricing = Json.object(model.get("pricing"));
                 Map<String, Object> officialPricing = model.get("official_pricing") instanceof Map<?, ?> value ? Json.object(value) : Map.of();
+                String billingMode = text(pricing.getOrDefault("billing_mode", "token"));
                 result.add(new PricedModel(
                     modelName,
                     text(model.getOrDefault("platform", groupPlatform)),
                     groupName,
                     groupId,
-                    text(pricing.getOrDefault("billing_mode", "token")),
-                    decimal(pricing.get("input_price")),
+                    billingMode,
+                    discountedInputPrice(decimal(pricing.get("input_price")), billingMode, effectiveRate),
                     decimal(officialPricing.get("output_price")),
                     imagePrices(pricing)
                 ));
@@ -94,6 +98,15 @@ final class ApiClient {
             if (!label.isBlank() && price != null) result.add(new PricedModel.ImagePrice(label, price));
         }
         return List.copyOf(result);
+    }
+
+    static Double discountedInputPrice(Double basePrice, String billingMode, double effectiveRate) {
+        if (basePrice == null || "image".equalsIgnoreCase(billingMode)) return basePrice;
+        return basePrice * effectiveRate;
+    }
+
+    private static boolean validRate(Double value) {
+        return value != null && Double.isFinite(value) && value >= 0;
     }
 
     static int compareModelPriceDescending(PricedModel left, PricedModel right) {

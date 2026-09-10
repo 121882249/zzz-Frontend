@@ -79,10 +79,8 @@ final class TokenProFrame extends JFrame {
         this.codex = new CodexConfig(store);
         URL iconUrl = TokenProFrame.class.getResource("/assets/TokenProCosmosIcon.png");
         if (iconUrl != null) setIconImage(new ImageIcon(iconUrl).getImage());
-        if (Platform.OS_KIND == Platform.OS.MAC) {
-            getRootPane().putClientProperty("apple.awt.fullWindowContent", true);
-            getRootPane().putClientProperty("apple.awt.transparentTitleBar", true);
-        }
+        // Keep the native macOS title bar outside the painted cosmos canvas so
+        // the system close/minimize controls cannot be covered by the artwork.
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
         setMinimumSize(new Dimension(1080, 720));
         setSize(1280, 820);
