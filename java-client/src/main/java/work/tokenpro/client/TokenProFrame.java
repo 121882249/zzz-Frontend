@@ -10,6 +10,7 @@ import javax.swing.tree.TreeSelectionModel;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.WindowEvent;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BaseMultiResolutionImage;
 import java.awt.image.BufferedImage;
@@ -79,8 +80,11 @@ final class TokenProFrame extends JFrame {
         this.codex = new CodexConfig(store);
         URL iconUrl = TokenProFrame.class.getResource("/assets/TokenProCosmosIcon.png");
         if (iconUrl != null) setIconImage(new ImageIcon(iconUrl).getImage());
-        // Keep the native macOS title bar outside the painted cosmos canvas so
-        // the system close/minimize controls cannot be covered by the artwork.
+        if (Platform.OS_KIND == Platform.OS.MAC) {
+            getRootPane().putClientProperty("apple.awt.fullWindowContent", true);
+            getRootPane().putClientProperty("apple.awt.transparentTitleBar", true);
+            getRootPane().putClientProperty("apple.awt.windowTitleVisible", false);
+        }
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
         setMinimumSize(new Dimension(1080, 720));
         setSize(1280, 820);
@@ -98,9 +102,39 @@ final class TokenProFrame extends JFrame {
         loginView = new CosmosLoginPanel(email, password, e -> authenticate());
         viewHost.add(loginView, "login");
         viewHost.add(dashboard(), "dashboard");
-        shell.add(viewHost, BorderLayout.CENTER);
+        shell.add(windowStage(), BorderLayout.CENTER);
         views.show(viewHost, "login");
         return shell;
+    }
+
+    private JComponent windowStage() {
+        JComponent controls = mainWindowControls();
+        JLayeredPane stage = new JLayeredPane() {
+            public void doLayout() {
+                viewHost.setBounds(0, 0, getWidth(), getHeight());
+                controls.setBounds(0, 0, 70, 30);
+            }
+        };
+        stage.setOpaque(false);
+        stage.add(viewHost, JLayeredPane.DEFAULT_LAYER);
+        stage.add(controls, JLayeredPane.PALETTE_LAYER);
+        return stage;
+    }
+
+    private JComponent mainWindowControls() {
+        JPanel bar = transparent();
+        bar.setLayout(null);
+        AppleWindowButton close = new AppleWindowButton(new Color(255, 95, 86), true);
+        close.setToolTipText("关闭");
+        close.addActionListener(event -> dispatchEvent(new WindowEvent(this, WindowEvent.WINDOW_CLOSING)));
+        AppleWindowButton minimize = new AppleWindowButton(new Color(255, 189, 46), false);
+        minimize.setToolTipText("最小化");
+        minimize.addActionListener(event -> setState(Frame.ICONIFIED));
+        close.setBounds(13, 7, 16, 16);
+        minimize.setBounds(35, 7, 16, 16);
+        bar.add(close);
+        bar.add(minimize);
+        return bar;
     }
 
     private JComponent dashboard() {
@@ -995,6 +1029,41 @@ final class TokenProFrame extends JFrame {
         NavButton(String text) { super(text); setFont(appFont(13, Font.PLAIN)); setForeground(new Color(203, 211, 238)); setHorizontalAlignment(SwingConstants.LEFT); setPreferredSize(new Dimension(200, 44)); setMinimumSize(new Dimension(160, 44)); setMaximumSize(new Dimension(Integer.MAX_VALUE, 44)); setBorder(new EmptyBorder(0, 16, 0, 16)); setFocusPainted(false); setContentAreaFilled(false); }
         public void setSelected(boolean value) { super.setSelected(value); selected = value; setFont(appFont(13, value ? Font.BOLD : Font.PLAIN)); repaint(); }
         protected void paintComponent(Graphics g) { if (selected) { Graphics2D g2 = (Graphics2D) g.create(); g2.setColor(new Color(108, 92, 255, 48)); g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12); g2.dispose(); } super.paintComponent(g); }
+    }
+
+    private static final class AppleWindowButton extends JButton {
+        private final Color color;
+        private final boolean close;
+        AppleWindowButton(Color color, boolean close) {
+            super("");
+            this.color = color;
+            this.close = close;
+            setOpaque(false);
+            setContentAreaFilled(false);
+            setBorderPainted(false);
+            setFocusPainted(false);
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        }
+        protected void paintComponent(Graphics graphics) {
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(color);
+            g.fillOval(1, 1, getWidth() - 2, getHeight() - 2);
+            g.setColor(new Color(close ? 125 : 135, close ? 24 : 91, close ? 20 : 8, 130));
+            g.drawOval(1, 1, getWidth() - 2, getHeight() - 2);
+            if (getModel().isRollover()) {
+                g.setColor(new Color(72, 46, 34, 205));
+                g.setStroke(new BasicStroke(1.15f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                int cx = getWidth() / 2, cy = getHeight() / 2;
+                if (close) {
+                    g.drawLine(cx - 3, cy - 3, cx + 3, cy + 3);
+                    g.drawLine(cx + 3, cy - 3, cx - 3, cy + 3);
+                } else {
+                    g.drawLine(cx - 3, cy, cx + 3, cy);
+                }
+            }
+            g.dispose();
+        }
     }
 
     private static final class ClientStatusLabel extends JLabel {

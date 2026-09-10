@@ -53,9 +53,8 @@ final class ModelPickerDialog extends JDialog {
         JLabel title = new JLabel("选择 " + client + " 模型");
         title.setFont(font(23, Font.BOLD));
         title.setForeground(TEXT);
-        title.setBorder(new EmptyBorder(0, 9, 0, 0));
-        titleLine.add(closeControl(), BorderLayout.WEST);
-        titleLine.add(title, BorderLayout.CENTER);
+        titleLine.add(title, BorderLayout.WEST);
+        titleLine.add(closeControl(), BorderLayout.EAST);
         boolean codex = "Codex".equals(client);
         JLabel detail = new JLabel(codex ? "Image Model 选择 1 个，LLM Model 至少选择 1 个" : "按可用分组展示，可直接点选多个模型");
         detail.setFont(font(12, Font.PLAIN));
@@ -378,7 +377,7 @@ final class ModelPickerDialog extends JDialog {
             this.accent = accent;
             setToolTipText("关闭");
             getAccessibleContext().setAccessibleName("关闭");
-            setPreferredSize(new Dimension(24, 24));
+            setPreferredSize(new Dimension(28, 28));
             setFocusPainted(false);
             setOpaque(false);
             setContentAreaFilled(false);
@@ -391,7 +390,7 @@ final class ModelPickerDialog extends JDialog {
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             Color fill = getModel().isRollover() ? accent.brighter() : accent;
             g.setColor(fill);
-            int diameter = 14;
+            int diameter = 17;
             int x = (getWidth() - diameter) / 2, y = (getHeight() - diameter) / 2;
             g.fillOval(x, y, diameter, diameter);
             g.setColor(new Color(125, 24, 20, 150));
