@@ -69,8 +69,28 @@ final class ApiClient {
             }
         }
         result.sort(Comparator.comparingLong(PricedModel::groupId).reversed()
-            .thenComparing(PricedModel::name, ApiClient::compareNaturalDescending));
+            .thenComparing(PricedModel::name, ApiClient::compareModelVersionDescending));
         return result;
+    }
+
+    static int compareModelVersionDescending(String left, String right) {
+        List<Integer> leftVersion = modelVersion(left);
+        List<Integer> rightVersion = modelVersion(right);
+        int length = Math.max(leftVersion.size(), rightVersion.size());
+        for (int index = 0; index < length; index++) {
+            int a = index < leftVersion.size() ? leftVersion.get(index) : 0;
+            int b = index < rightVersion.size() ? rightVersion.get(index) : 0;
+            if (a != b) return Integer.compare(b, a);
+        }
+        return compareNaturalDescending(left, right);
+    }
+
+    private static List<Integer> modelVersion(String name) {
+        String display = PricedModel.displayCase(name);
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("(?<!\\d)(\\d+(?:\\.\\d+)*)(?!\\d)").matcher(display);
+        if (!matcher.find()) return List.of();
+        return Arrays.stream(matcher.group(1).split("\\."))
+            .map(Integer::parseInt).toList();
     }
 
     static int compareNaturalDescending(String left, String right) {
