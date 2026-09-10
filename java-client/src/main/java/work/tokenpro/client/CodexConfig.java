@@ -125,7 +125,7 @@ final class CodexConfig {
             // image_generation before the gateway can normalize image-only
             // selections into a text driver plus image tool.
             disableResponsesLite(entry);
-            applyReasoningProfile(entry, model, exact != null);
+            applyReasoningProfile(entry, model);
             entries.add(entry);
         }
         Path target = store.root().resolve("codex-model-catalog.json");
@@ -143,16 +143,18 @@ final class CodexConfig {
         entry.put("use_responses_lite", false);
     }
 
-    private static void applyReasoningProfile(Map<String, Object> entry, PricedModel model, boolean exactMatch) {
+    static void applyReasoningProfile(Map<String, Object> entry, PricedModel model) {
         List<Map<String, Object>> levels = new ArrayList<>();
-        if (exactMatch && entry.get("supported_reasoning_levels") instanceof List<?> nativeLevels) {
+        Map<String, Map<String, Object>> nativeByEffort = new HashMap<>();
+        if (entry.get("supported_reasoning_levels") instanceof List<?> nativeLevels) {
             for (Object raw : nativeLevels) {
                 Map<String, Object> level = Json.object(raw);
-                String effort = String.valueOf(level.getOrDefault("effort", ""));
-                if (!effort.equals("ultra") && levels.size() < 5) levels.add(new LinkedHashMap<>(level));
+                nativeByEffort.put(String.valueOf(level.getOrDefault("effort", "")), level);
             }
-        } else {
-            for (String effort : inferredReasoningEfforts(model)) levels.add(reasoningLevel(effort));
+        }
+        for (String effort : inferredReasoningEfforts(model)) {
+            Map<String, Object> nativeLevel = nativeByEffort.get(effort);
+            levels.add(nativeLevel == null ? reasoningLevel(effort) : new LinkedHashMap<>(nativeLevel));
         }
         entry.put("supported_reasoning_levels", levels);
         if (levels.isEmpty()) {
@@ -168,9 +170,7 @@ final class CodexConfig {
     static List<String> inferredReasoningEfforts(PricedModel model) {
         String value = (model.name() + " " + model.platform()).toLowerCase(Locale.ROOT);
         if (value.contains("image") || value.contains("dall-e") || value.contains("imagen") || value.contains("flux")) return List.of();
-        if (model.usesResponses() || value.contains("gpt") || value.matches(".*\\bo[134](?:[-.].*)?")) return List.of("low", "medium", "high", "xhigh", "max");
-        if (value.contains("claude")) return List.of("low", "medium", "high", "xhigh");
-        return List.of("low", "medium", "high");
+        return List.of("low", "medium", "high", "xhigh", "max");
     }
 
     private static Map<String, Object> reasoningLevel(String effort) {

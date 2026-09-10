@@ -38,7 +38,13 @@ final class SelfTest {
         check(ModelPickerDialog.matchesSelectedImage(movedImage, Set.of(ModelPickerDialog.imageNameId(movedImage.name()))), "image selection follows model across groups"); passed++;
         check(!new PricedModel("gpt-5.6-sol", "openai", "GPT", 17).isImageGeneration(), "chat model classification"); passed++;
         check(CodexConfig.inferredReasoningEfforts(priced).equals(List.of("low", "medium", "high", "xhigh", "max")), "GPT five reasoning levels"); passed++;
-        check(CodexConfig.inferredReasoningEfforts(new PricedModel("gemini-3-pro", "google", "Google", 17)).size() == 3, "compatible reasoning fallback"); passed++;
+        check(CodexConfig.inferredReasoningEfforts(new PricedModel("gemini-3-pro", "google", "Google", 17)).equals(List.of("low", "medium", "high", "xhigh", "max")), "generic models expose five reasoning levels"); passed++;
+        check(CodexConfig.inferredReasoningEfforts(new PricedModel("claude-sonnet-5", "anthropic", "Claude", 17)).equals(List.of("low", "medium", "high", "xhigh", "max")), "Claude models expose five reasoning levels"); passed++;
+        Map<String, Object> shortNativeProfile = new LinkedHashMap<>();
+        shortNativeProfile.put("supported_reasoning_levels", List.of(Map.of("effort", "low", "description", "native low"), Map.of("effort", "high", "description", "native high")));
+        shortNativeProfile.put("default_reasoning_level", "high");
+        CodexConfig.applyReasoningProfile(shortNativeProfile, priced);
+        check(((List<?>) shortNativeProfile.get("supported_reasoning_levels")).size() == 5 && "high".equals(shortNativeProfile.get("default_reasoning_level")), "short native profile expands to five levels"); passed++;
         check(CodexConfig.inferredReasoningEfforts(new PricedModel("gpt-image-2.5", "openai", "GPT", 17)).isEmpty(), "image model omits reasoning"); passed++;
         Map<String, Object> customModel = new LinkedHashMap<>(Map.of("use_responses_lite", true));
         CodexConfig.disableResponsesLite(customModel);
@@ -52,9 +58,9 @@ final class SelfTest {
         check(ApiClient.compareModelPriceDescending(premium, standard) < 0, "models sort by output price descending"); passed++;
         check(ApiClient.compareModelPriceDescending(standard, image) < 0, "token models sort before non-token models"); passed++;
         check(ModuleLayer.boot().findModule("jdk.crypto.ec").isPresent(), "packaged runtime supports ECDSA TLS certificates"); passed++;
-        String releasePayload = "{\"tag_name\":\"v1.2.15\",\"downloads\":{\"windows-x64\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe\",\"sha256\":\"abc\"}}}";
+        String releasePayload = "{\"tag_name\":\"v1.2.16\",\"downloads\":{\"windows-x64\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe\",\"sha256\":\"abc\"}}}";
         TokenProFrame.ReleaseInfo release = TokenProFrame.releaseForPlatform(releasePayload, "windows-x64");
-        check("1.2.15".equals(release.version()) && release.downloadUrl().endsWith(".exe") && "abc".equals(release.sha256()), "automatic update manifest"); passed++;
+        check("1.2.16".equals(release.version()) && release.downloadUrl().endsWith(".exe") && "abc".equals(release.sha256()), "automatic update manifest"); passed++;
         check(Updater.platformKey().startsWith(Platform.OS_KIND == Platform.OS.MAC ? "macos-" : Platform.OS_KIND == Platform.OS.WINDOWS ? "windows-" : "linux-"), "automatic update platform mapping"); passed++;
         ClaudeBridgeConfig.Route route = ClaudeBridgeConfig.Route.from(priced);
         check(route.alias().matches("claude-tokenpro-[0-9a-f]{24}"), "Claude alias"); passed++;
