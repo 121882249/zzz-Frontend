@@ -159,7 +159,7 @@ final class TokenProFrame extends JFrame {
         GradientPanel panel = new GradientPanel(); panel.setLayout(new BorderLayout(0, 16)); panel.setBorder(new EmptyBorder(23, 28, 20, 28));
         JPanel title = transparent(new BorderLayout()); headerTitle.setFont(appFont(23, Font.BOLD)); headerTitle.setIcon(new TechGlobeIcon(30)); headerTitle.setIconTextGap(10); headerTitle.setGradient(true); headerTitle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)); headerTitle.setToolTipText("打开 TokenPro 主页"); headerTitle.addMouseListener(new MouseAdapter() { @Override public void mouseClicked(MouseEvent event) { if ("https://tokenpro.work".equals(headerTitle.getText())) browse("https://tokenpro.work"); } }); title.add(headerTitle, BorderLayout.WEST);
         JPanel right = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        updateButton = soft("检查更新 v" + Main.VERSION); setUpdateButtonState("check", "检查更新 v" + Main.VERSION); updateButton.setIcon(resourceIconContained("RefreshCwLucide.png", 15, 15, true)); updateButton.addActionListener(e -> checkForUpdates(updateButton)); right.add(updateButton);
+        updateButton = soft("正在核对版本…"); setUpdateButtonState("checking", "正在核对版本…"); updateButton.addActionListener(e -> checkForUpdates(updateButton)); right.add(updateButton);
         JButton user = soft("登录账户"); user.setIcon(resourceIconContained("CircleUserLucide.png", 17, 17, true)); user.addActionListener(e -> openAccount()); headerUser.addPropertyChangeListener("text", e -> user.setText(headerUser.getText())); right.add(user);
         title.add(right, BorderLayout.EAST); panel.add(title, BorderLayout.NORTH);
         Dimension headerCardSize = new Dimension(430, 64);
@@ -859,20 +859,20 @@ final class TokenProFrame extends JFrame {
                 try {
                     ReleaseInfo release = get();
                     if (release.version().isBlank()) {
-                        setUpdateButtonState("check", "检查更新 v" + Main.VERSION);
+                        setUpdateButtonState("check", "重新核对版本");
                         if (!automatic) {
                             status("暂时无法读取版本信息，请稍后重试");
                         }
                     } else if (compareVersions(release.version(), Main.VERSION) > 0) {
-                        setUpdateButtonState("check", "检查更新 v" + release.version());
+                        setUpdateButtonState("check", "发现更新 v" + release.version());
                         status("发现新版本 " + release.version());
                         if (!automatic) installUpdate(release);
                     } else {
-                        setUpdateButtonState("latest", "最新版本 v" + Main.VERSION);
+                        setUpdateButtonState("latest", "已是最新 v" + Main.VERSION);
                         if (!automatic) status("当前已是最新版本 " + Main.VERSION);
                     }
                 } catch (Exception ex) {
-                    setUpdateButtonState("check", "检查更新 v" + Main.VERSION);
+                    setUpdateButtonState("check", "重新核对版本");
                     if (!automatic) error(ex.getCause() == null ? ex : ex.getCause());
                 }
             }
@@ -883,7 +883,12 @@ final class TokenProFrame extends JFrame {
         if (updateButton == null) return;
         updateButton.putClientProperty("tokenpro.updateState", state);
         updateButton.setText(text);
-        updateButton.setToolTipText("latest".equals(state) ? "当前已是最新版本" : "点击检查并安装最新版本");
+        boolean latest = "latest".equals(state);
+        boolean checking = "checking".equals(state);
+        updateButton.setEnabled(!latest && !checking);
+        updateButton.setCursor(latest || checking ? Cursor.getDefaultCursor() : Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        updateButton.setIcon(latest ? null : resourceIconContained("RefreshCwLucide.png", 15, 15, true));
+        updateButton.setToolTipText(latest ? "当前已更新至最新版本" : checking ? "正在核对云端版本" : "点击在线更新至最新版本");
         updateButton.repaint();
     }
 
@@ -933,7 +938,7 @@ final class TokenProFrame extends JFrame {
         if (!updateInProgress.compareAndSet(false, true)) return;
         if (release.preferredUrl().isBlank()) {
             updateInProgress.set(false);
-            setUpdateButtonState("check", "检查更新 v" + Main.VERSION);
+            setUpdateButtonState("check", "重新核对版本");
             status("当前系统暂未提供自动更新包");
             return;
         }
@@ -1542,7 +1547,7 @@ final class TokenProFrame extends JFrame {
             } else if (prominent && isEnabled()) g.setPaint(new GradientPaint(0, 0, new Color(111, 91, 255), getWidth(), 0, new Color(64, 142, 255)));
             else g.setColor(prominent ? new Color(76, 72, 132, 205) : (isEnabled() ? new Color(39, 53, 96, 235) : new Color(27, 36, 65, 210)));
             g.fillRoundRect(0, 0, getWidth(), getHeight(), 18, 18); g.setColor(stroke); g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 18, 18);
-            g.setFont(getFont()); g.setColor(isEnabled() ? getForeground() : new Color(137, 145, 177)); FontMetrics fm = g.getFontMetrics(); Icon icon = getIcon(); int textWidth = fm.stringWidth(getText()); int iconWidth = icon == null ? 0 : icon.getIconWidth(); int gap = icon == null || getText().isBlank() ? 0 : getIconTextGap(); int total = iconWidth + gap + textWidth; int x = (getWidth() - total) / 2; if (icon != null) { icon.paintIcon(this, g, x, (getHeight() - icon.getIconHeight()) / 2); x += iconWidth + gap; } g.drawString(getText(), x, (getHeight() - fm.getHeight()) / 2 + fm.getAscent()); g.dispose();
+            g.setFont(getFont()); g.setColor("latest".equals(updateState) ? new Color(218, 248, 239) : (isEnabled() ? getForeground() : new Color(137, 145, 177))); FontMetrics fm = g.getFontMetrics(); Icon icon = getIcon(); int textWidth = fm.stringWidth(getText()); int iconWidth = icon == null ? 0 : icon.getIconWidth(); int gap = icon == null || getText().isBlank() ? 0 : getIconTextGap(); int total = iconWidth + gap + textWidth; int x = (getWidth() - total) / 2; if (icon != null) { icon.paintIcon(this, g, x, (getHeight() - icon.getIconHeight()) / 2); x += iconWidth + gap; } g.drawString(getText(), x, (getHeight() - fm.getHeight()) / 2 + fm.getAscent()); g.dispose();
         }
     }
 }
