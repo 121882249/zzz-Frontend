@@ -105,9 +105,9 @@ final class SelfTest {
         check(ModelPickerDialog.groupRank(new PricedModel("gemini-3", "google", "Gemini", 3))
             < ModelPickerDialog.groupRank(new PricedModel("mistral-large", "mistral", "Mistral", 4)), "other groups follow Gemini"); passed++;
         check(ModuleLayer.boot().findModule("jdk.crypto.ec").isPresent(), "packaged runtime supports ECDSA TLS certificates"); passed++;
-        String releasePayload = "{\"tag_name\":\"v1.2.37\",\"incremental\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-update.jar\",\"sha256\":\"update-sha\"},\"downloads\":{\"windows-x64\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe\",\"sha256\":\"abc\"}}}";
+        String releasePayload = "{\"tag_name\":\"v1.2.39\",\"incremental\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-update.jar\",\"sha256\":\"update-sha\"},\"downloads\":{\"windows-x64\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe\",\"sha256\":\"abc\"}}}";
         TokenProFrame.ReleaseInfo release = TokenProFrame.releaseForPlatform(releasePayload, "windows-x64");
-        check("1.2.37".equals(release.version()) && release.downloadUrl().endsWith(".exe") && "abc".equals(release.sha256()) && release.hasIncrementalUpdate() && release.preferredUrl().endsWith(".jar") && "update-sha".equals(release.preferredSha256()), "incremental update manifest"); passed++;
+        check("1.2.39".equals(release.version()) && release.downloadUrl().endsWith(".exe") && "abc".equals(release.sha256()) && release.hasIncrementalUpdate() && release.preferredUrl().endsWith(".jar") && "update-sha".equals(release.preferredSha256()), "incremental update manifest"); passed++;
         check(Updater.platformKey().startsWith(Platform.OS_KIND == Platform.OS.MAC ? "macos-" : Platform.OS_KIND == Platform.OS.WINDOWS ? "windows-" : "linux-"), "automatic update platform mapping"); passed++;
         ClaudeBridgeConfig.Route route = ClaudeBridgeConfig.Route.from(priced);
         check(route.alias().matches("claude-tokenpro-[0-9a-f]{24}"), "Claude alias"); passed++;

@@ -159,6 +159,8 @@ final class Updater {
             application="$4"
             version="$5"
             while kill -0 "$pid" 2>/dev/null; do sleep 0.2; done
+            /usr/bin/pkill -f "$application/Contents/MacOS/TokenPro" 2>/dev/null || true
+            while /usr/bin/pgrep -f "$application/Contents/MacOS/TokenPro" >/dev/null 2>&1; do sleep 0.2; done
             backup="${target}.update-backup"
             plist="$application/Contents/Info.plist"
             plist_backup="${plist}.update-backup"
@@ -181,7 +183,8 @@ final class Updater {
               mv "$plist_backup" "$plist"
               exit 1
             fi
-            /usr/bin/open "$application"
+            sleep 1
+            /usr/bin/open -n "$application"
             rm -f "$0"
             """;
         Path script = script("tokenpro-update-", ".sh", body);

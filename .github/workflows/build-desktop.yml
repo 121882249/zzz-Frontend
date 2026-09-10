@@ -70,6 +70,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - uses: actions/download-artifact@v6
         with:
           path: release-assets
@@ -80,7 +82,12 @@ jobs:
           cp release-assets/TokenPro-macOS-Intel/*.dmg "release-files/TokenPro-${GITHUB_REF_NAME}-macOS-x64.dmg"
           cp release-assets/TokenPro-Windows-x64/*.exe "release-files/TokenPro-${GITHUB_REF_NAME}-Windows-x64.exe"
           cp release-assets/TokenPro-Linux-x64/*.deb "release-files/TokenPro-${GITHUB_REF_NAME}-Linux-x64.deb"
-          cp release-assets/TokenPro-incremental/TokenPro-update.jar "release-files/TokenPro-${GITHUB_REF_NAME}-update.jar"
+          previous_tag=$(git tag --sort=-version:refname | grep -v "^${GITHUB_REF_NAME}$" | head -1 || true)
+          if [ -n "$previous_tag" ] && git diff --quiet "$previous_tag" "$GITHUB_REF_NAME" -- Resources Router.icns Router.ico; then
+            cp release-assets/TokenPro-incremental/TokenPro-update.jar "release-files/TokenPro-${GITHUB_REF_NAME}-update.jar"
+          else
+            echo "Runtime assets changed or no previous release exists; clients will use the full installer."
+          fi
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

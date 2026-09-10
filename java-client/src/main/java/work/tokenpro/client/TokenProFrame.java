@@ -25,6 +25,7 @@ import java.security.MessageDigest;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 final class TokenProFrame extends JFrame {
     record ReleaseInfo(String version, String downloadUrl, String sha256, String incrementalUrl, String incrementalSha256) {
@@ -69,6 +70,7 @@ final class TokenProFrame extends JFrame {
     private JButton claudeLaunch;
     private JButton updateButton;
     private JButton refreshAccountButton;
+    private final AtomicBoolean updateInProgress = new AtomicBoolean();
     private JComponent activeModelMenuOverlay;
     private JComponent dashboardHeader;
     private final CardLayout views = new CardLayout();
@@ -928,7 +930,9 @@ final class TokenProFrame extends JFrame {
     }
 
     private void installUpdate(ReleaseInfo release) {
+        if (!updateInProgress.compareAndSet(false, true)) return;
         if (release.preferredUrl().isBlank()) {
+            updateInProgress.set(false);
             setUpdateButtonState("check", "检查更新 v" + Main.VERSION);
             status("当前系统暂未提供自动更新包");
             return;
@@ -988,6 +992,7 @@ final class TokenProFrame extends JFrame {
                     dispose();
                     System.exit(0);
                 } catch (Exception ex) {
+                    updateInProgress.set(false);
                     progress.dispose();
                     if (updateButton != null) updateButton.setEnabled(true);
                     setUpdateButtonState("check", "更新失败，点击重试");
