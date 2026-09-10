@@ -146,7 +146,7 @@ final class Updater {
             rm -f "$image" "$0"
             """;
         Path script = script("tokenpro-update-", ".sh", body);
-        new ProcessBuilder("/bin/sh", script.toString(), Long.toString(pid), installer.toString(), target.toString()).start();
+        startUpdater(new ProcessBuilder("/bin/sh", script.toString(), Long.toString(pid), installer.toString(), target.toString()));
     }
 
     private static void installMacIncremental(Path source, long pid, Path target, Path application, String version) throws Exception {
@@ -158,6 +158,15 @@ final class Updater {
             target="$3"
             application="$4"
             version="$5"
+            lock="${TMPDIR:-/tmp}/tokenpro-application-update.lock"
+            if ! mkdir "$lock" 2>/dev/null; then
+              owner=$(cat "$lock/pid" 2>/dev/null || true)
+              if [ -n "$owner" ] && kill -0 "$owner" 2>/dev/null; then exit 0; fi
+              rm -rf "$lock"
+              mkdir "$lock"
+            fi
+            echo $$ > "$lock/pid"
+            trap 'rm -rf "$lock"' EXIT
             while kill -0 "$pid" 2>/dev/null; do sleep 0.2; done
             /usr/bin/pkill -f "$application/Contents/MacOS/TokenPro" 2>/dev/null || true
             while /usr/bin/pgrep -f "$application/Contents/MacOS/TokenPro" >/dev/null 2>&1; do sleep 0.2; done
@@ -188,7 +197,7 @@ final class Updater {
             rm -f "$0"
             """;
         Path script = script("tokenpro-update-", ".sh", body);
-        new ProcessBuilder("/bin/sh", script.toString(), Long.toString(pid), source.toString(), target.toString(), application.toString(), version).start();
+        startUpdater(new ProcessBuilder("/bin/sh", script.toString(), Long.toString(pid), source.toString(), target.toString(), application.toString(), version));
     }
 
     private static void installWindows(Path installer, long pid, String command) throws Exception {
@@ -204,7 +213,7 @@ final class Updater {
             del /Q "%~f0" >NUL 2>&1
             """;
         Path script = script("tokenpro-update-", ".cmd", body);
-        new ProcessBuilder("cmd", "/c", "start", "", "/b", script.toString(), Long.toString(pid), installer.toString(), command).start();
+        startUpdater(new ProcessBuilder("cmd", "/c", "start", "", "/b", script.toString(), Long.toString(pid), installer.toString(), command));
     }
 
     private static void installWindowsIncremental(Path source, long pid, Path target, String command) throws Exception {
@@ -221,7 +230,7 @@ final class Updater {
             del /Q "%~f0" >NUL 2>&1
             """;
         Path script = script("tokenpro-update-", ".cmd", body);
-        new ProcessBuilder("cmd", "/c", "start", "", "/b", script.toString(), Long.toString(pid), source.toString(), target.toString(), command).start();
+        startUpdater(new ProcessBuilder("cmd", "/c", "start", "", "/b", script.toString(), Long.toString(pid), source.toString(), target.toString(), command));
     }
 
     private static void installLinux(Path installer, long pid) throws Exception {
@@ -236,7 +245,7 @@ final class Updater {
             rm -f "$package" "$0"
             """;
         Path script = script("tokenpro-update-", ".sh", body);
-        new ProcessBuilder("/bin/sh", script.toString(), Long.toString(pid), installer.toString()).start();
+        startUpdater(new ProcessBuilder("/bin/sh", script.toString(), Long.toString(pid), installer.toString()));
     }
 
     private static void installLinuxIncremental(Path source, long pid, Path target, String command) throws Exception {
@@ -253,7 +262,18 @@ final class Updater {
             rm -f "$source" "$0"
             """;
         Path script = script("tokenpro-update-", ".sh", body);
-        new ProcessBuilder("/bin/sh", script.toString(), Long.toString(pid), source.toString(), target.toString(), command).start();
+        startUpdater(new ProcessBuilder("/bin/sh", script.toString(), Long.toString(pid), source.toString(), target.toString(), command));
+    }
+
+    private static void startUpdater(ProcessBuilder process) throws IOException {
+        Path logDirectory = Path.of(System.getProperty("user.home"), ".tokenpro", "logs");
+        try {
+            Files.createDirectories(logDirectory);
+            process.redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.appendTo(logDirectory.resolve("updater.log").toFile()));
+        } catch (Exception ignored) {
+            process.redirectError(ProcessBuilder.Redirect.DISCARD).redirectOutput(ProcessBuilder.Redirect.DISCARD);
+        }
+        process.start();
     }
 
     private static Path script(String prefix, String suffix, String body) throws IOException {

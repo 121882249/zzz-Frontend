@@ -83,7 +83,7 @@ jobs:
           cp release-assets/TokenPro-Windows-x64/*.exe "release-files/TokenPro-${GITHUB_REF_NAME}-Windows-x64.exe"
           cp release-assets/TokenPro-Linux-x64/*.deb "release-files/TokenPro-${GITHUB_REF_NAME}-Linux-x64.deb"
           previous_tag=$(git tag --sort=-version:refname | grep -v "^${GITHUB_REF_NAME}$" | head -1 || true)
-          if [ -n "$previous_tag" ] && git diff --quiet "$previous_tag" "$GITHUB_REF_NAME" -- Resources Router.icns Router.ico; then
+          if [ -n "$previous_tag" ] && git diff --quiet "$previous_tag" "$GITHUB_REF_NAME" -- Resources Router.icns Router.ico java-client/src/main/java/work/tokenpro/client/Updater.java; then
             cp release-assets/TokenPro-incremental/TokenPro-update.jar "release-files/TokenPro-${GITHUB_REF_NAME}-update.jar"
           else
             echo "Runtime assets changed or no previous release exists; clients will use the full installer."
