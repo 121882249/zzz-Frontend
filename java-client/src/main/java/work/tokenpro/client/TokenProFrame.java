@@ -57,12 +57,13 @@ final class TokenProFrame extends JFrame {
     private final JLabel accountEmail = new JLabel("登录账户");
     private final JLabel headerBalance = new JLabel("—");
     private final JLabel accountBalance = new JLabel("—");
-    private final JPanel subscriptionSlot = transparent(new FlowLayout(FlowLayout.LEFT, 0, 0));
+    private final JPanel subscriptionSlot = transparent(new BorderLayout());
     private final JLabel homeClaudeStatus = new ClientStatusLabel("请先选择模型");
     private final JLabel homeCodexStatus = new ClientStatusLabel("请先选择模型");
     private JButton codexLaunch;
     private JButton claudeLaunch;
     private JButton updateButton;
+    private JButton refreshAccountButton;
     private JComponent activeModelMenuOverlay;
     private JComponent dashboardHeader;
     private final CardLayout views = new CardLayout();
@@ -154,11 +155,16 @@ final class TokenProFrame extends JFrame {
         updateButton = soft("检查更新"); updateButton.setIcon(resourceIconContained("RefreshCwLucide.png", 15, 15, true)); updateButton.addActionListener(e -> checkForUpdates(updateButton)); right.add(updateButton);
         JButton user = soft("登录账户"); user.setIcon(resourceIconContained("CircleUserLucide.png", 17, 17, true)); user.addActionListener(e -> openAccount()); headerUser.addPropertyChangeListener("text", e -> user.setText(headerUser.getText())); right.add(user);
         title.add(right, BorderLayout.EAST); panel.add(title, BorderLayout.NORTH);
-        RoundedPanel wallet = new RoundedPanel(20, new Color(22, 38, 78, 228)); wallet.setLayout(new FlowLayout(FlowLayout.LEFT, 14, 10)); wallet.setBorder(new EmptyBorder(0, 7, 0, 7));
-        JPanel captions = transparent(); captions.setLayout(new BoxLayout(captions, BoxLayout.Y_AXIS)); JLabel balanceText = new JLabel("钱包余额"); balanceText.setFont(appFont(12, Font.PLAIN)); balanceText.setForeground(MUTED); JLabel rate = new JLabel("充值比例  1￥ = 1$"); rate.setFont(appFont(10, Font.PLAIN)); rate.setForeground(MUTED); captions.add(balanceText); captions.add(rate); wallet.add(captions);
-        headerBalance.setFont(appFont(26, Font.BOLD)); wallet.add(headerBalance); JButton refresh = soft(""); refresh.setToolTipText("刷新余额和订阅"); refresh.setIcon(resourceIconContained("RefreshCwLucide.png", 15, 15, true)); refresh.addActionListener(e -> refreshAccount()); wallet.add(refresh); JButton recharge = soft("充值/订阅"); recharge.setIcon(resourceIconContained("PlusLucide.png", 15, 15, true)); recharge.addActionListener(e -> browse("https://tokenpro.work/purchase")); wallet.add(recharge);
-        subscriptionSlot.setVisible(false);
-        JPanel row = transparent(new FlowLayout(FlowLayout.LEFT, 12, 0)); row.add(wallet); row.add(subscriptionSlot); panel.add(row, BorderLayout.CENTER); return panel;
+        Dimension headerCardSize = new Dimension(430, 64);
+        RoundedPanel wallet = new RoundedPanel(20, new Color(22, 38, 78, 228), new Color(75, 190, 151, 145)); wallet.setLayout(new GridBagLayout()); wallet.setBorder(new EmptyBorder(0, 7, 0, 7)); wallet.setPreferredSize(headerCardSize); wallet.setMinimumSize(headerCardSize);
+        JPanel walletContent = transparent(new FlowLayout(FlowLayout.CENTER, 14, 0));
+        JPanel captions = transparent(); captions.setLayout(new BoxLayout(captions, BoxLayout.Y_AXIS)); JLabel balanceText = new JLabel("钱包余额"); balanceText.setFont(appFont(12, Font.PLAIN)); balanceText.setForeground(MUTED); JLabel rate = new JLabel("充值比例  1￥ = 1$"); rate.setFont(appFont(10, Font.PLAIN)); rate.setForeground(MUTED); captions.add(balanceText); captions.add(rate); walletContent.add(captions);
+        headerBalance.setFont(appFont(26, Font.BOLD)); headerBalance.setForeground(new Color(105, 220, 194)); walletContent.add(headerBalance); refreshAccountButton = soft("刷新"); refreshAccountButton.setToolTipText("刷新钱包余额和订阅信息"); refreshAccountButton.setIcon(resourceIconContained("RefreshCwLucide.png", 15, 15, true)); refreshAccountButton.addActionListener(e -> refreshAccount()); walletContent.add(refreshAccountButton); JButton recharge = soft("充值/订阅"); recharge.setIcon(resourceIconContained("PlusLucide.png", 15, 15, true)); recharge.addActionListener(e -> browse("https://tokenpro.work/purchase")); walletContent.add(recharge); wallet.add(walletContent);
+        subscriptionSlot.setPreferredSize(headerCardSize); subscriptionSlot.setMinimumSize(headerCardSize); subscriptionSlot.setVisible(false);
+        JPanel row = transparent(new GridBagLayout());
+        GridBagConstraints walletConstraints = new GridBagConstraints(); walletConstraints.gridx = 0; walletConstraints.weightx = 1; walletConstraints.fill = GridBagConstraints.BOTH;
+        GridBagConstraints subscriptionConstraints = new GridBagConstraints(); subscriptionConstraints.gridx = 1; subscriptionConstraints.weightx = 1; subscriptionConstraints.fill = GridBagConstraints.BOTH; subscriptionConstraints.insets = new Insets(0, 12, 0, 0);
+        row.add(wallet, walletConstraints); row.add(subscriptionSlot, subscriptionConstraints); panel.add(row, BorderLayout.CENTER); return panel;
     }
 
     private JComponent homePanel() {
@@ -176,7 +182,8 @@ final class TokenProFrame extends JFrame {
         JPanel actions = transparent(); actions.setLayout(new BoxLayout(actions, BoxLayout.Y_AXIS)); JPanel buttons = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         JButton menu = soft("模型选择  ▾");
         menu.addActionListener(e -> showModelMenu(menu, chooseModel, restore));
-        JButton launch = primary("打开应用"); launch.addActionListener(e -> open.run()); launch.setEnabled(false);
+        JButton launch = primary("打开应用"); launch.addActionListener(e -> open.run());
+        launch.setEnabled(installed && iconName.equals("Claude"));
         if (iconName.equals("Codex")) codexLaunch = launch; else claudeLaunch = launch;
         buttons.add(menu); buttons.add(launch); actions.add(buttons); state.setFont(appFont(11, Font.BOLD)); state.setAlignmentX(Component.RIGHT_ALIGNMENT); actions.add(Box.createVerticalStrut(7)); actions.add(state); card.add(actions, BorderLayout.EAST); return card;
     }
@@ -463,7 +470,7 @@ final class TokenProFrame extends JFrame {
 
     private void updateBridgeStatus() {
         try { ClaudeBridgeConfig config = ClaudeBridgeConfig.load(store); boolean healthy = ClaudeBridgeManager.healthy(store); bridgeStatus.setText("桥接状态：" + (healthy ? "运行中" : "已配置") + " · " + config.routes().size() + " 个模型"); homeClaudeStatus.setText("已选 " + config.routes().size() + " 个模型"); if (claudeLaunch != null) claudeLaunch.setEnabled(true); }
-        catch (Exception e) { bridgeStatus.setText("桥接状态：未配置"); homeClaudeStatus.setText("请先选择模型"); if (claudeLaunch != null) claudeLaunch.setEnabled(false); }
+        catch (Exception e) { bridgeStatus.setText("桥接状态：未配置"); homeClaudeStatus.setText("请先选择模型"); if (claudeLaunch != null) claudeLaunch.setEnabled(Platform.applicationInstalled("Claude")); }
     }
 
     private void restoreClaude() {
@@ -477,8 +484,31 @@ final class TokenProFrame extends JFrame {
     }
 
     private void openClaude() {
-        try { ClaudeBridgeConfig.load(store); ClaudeBridgeManager.ensureRunning(store); openApp("Claude"); updateBridgeStatus(); }
-        catch (Exception e) { error(e); }
+        status("正在打开 Claude…");
+        new SwingWorker<ClaudeBridgeConfig, Void>() {
+            protected ClaudeBridgeConfig doInBackground() throws Exception {
+                try {
+                    ClaudeBridgeConfig config = ClaudeBridgeConfig.load(store);
+                    ClaudeDesktopConfig.install(store, config);
+                    ClaudeBridgeManager.ensureRunning(store);
+                    if (!Platform.openClaudeThirdParty()) throw new IllegalStateException("无法打开 Claude");
+                    return config;
+                } catch (IllegalStateException noConfiguration) {
+                    if (noConfiguration.getMessage() != null && noConfiguration.getMessage().contains("请先在 TokenPro 中配置")) {
+                        if (!Platform.openApplication("Claude")) throw new IllegalStateException("无法打开 Claude");
+                        return null;
+                    }
+                    throw noConfiguration;
+                }
+            }
+            protected void done() {
+                try {
+                    ClaudeBridgeConfig config = get();
+                    if (config == null) status("Claude 已打开；选择模型后即可使用 TokenPro 连接");
+                    else { updateBridgeStatus(); status("Claude 已打开，TokenPro 桥接运行中"); }
+                } catch (Exception e) { error(e.getCause() == null ? e : e.getCause()); }
+            }
+        }.execute();
     }
 
     private void restoreSession() {
@@ -590,7 +620,7 @@ final class TokenProFrame extends JFrame {
         sessionUser = new LinkedHashMap<>(user);
         String emailValue = string(user.get("email"));
         Object rawBalance = user.get("balance");
-        String balance = rawBalance instanceof Number number ? String.format(Locale.ROOT, "$%.2f", number.doubleValue()) : "—";
+        String balance = rawBalance instanceof Number number ? String.format(Locale.ROOT, "¥%.2f", number.doubleValue()) : "—";
         account.setText("已登录：" + emailValue + "    余额：" + balance);
         headerUser.setText(emailValue.isBlank() ? "我的账户" : emailValue);
         accountEmail.setText(emailValue.isBlank() ? "我的账户" : emailValue);
@@ -651,7 +681,31 @@ final class TokenProFrame extends JFrame {
 
     private void refreshAccount() {
         if (accessToken == null) { showPage("我的账户"); return; }
-        async("正在刷新余额…", () -> api.me(accessToken), this::showAccount);
+        final String token = accessToken;
+        if (refreshAccountButton != null) { refreshAccountButton.setEnabled(false); refreshAccountButton.setText("刷新中…"); }
+        status("正在刷新钱包余额和订阅…");
+        new SwingWorker<Map<String, Object>, Void>() {
+            protected Map<String, Object> doInBackground() throws Exception { return api.me(token); }
+            protected void done() {
+                try {
+                    if (!Objects.equals(token, accessToken)) return;
+                    showAccount(get());
+                    if (refreshAccountButton != null) {
+                        refreshAccountButton.setText("已刷新");
+                        javax.swing.Timer reset = new javax.swing.Timer(1200, event -> {
+                            refreshAccountButton.setText("刷新");
+                            refreshAccountButton.setEnabled(true);
+                        });
+                        reset.setRepeats(false);
+                        reset.start();
+                    }
+                    status("钱包余额和订阅已刷新");
+                } catch (Exception exception) {
+                    if (refreshAccountButton != null) { refreshAccountButton.setText("重试"); refreshAccountButton.setEnabled(true); }
+                    error(exception.getCause() == null ? exception : exception.getCause());
+                }
+            }
+        }.execute();
     }
 
     private void refreshSubscriptions() {
@@ -685,42 +739,72 @@ final class TokenProFrame extends JFrame {
         subscriptionSlot.removeAll();
         subscriptionSlot.setVisible(!subscriptions.isEmpty());
         if (!subscriptions.isEmpty()) {
-            RoundedPanel card = new RoundedPanel(20, new Color(23, 91, 67, 238));
-            card.setBorder(new EmptyBorder(8, 14, 8, 14));
-            card.setLayout(new BorderLayout(10, 0));
-            JLabel title = new JLabel("订阅");
-            title.setFont(appFont(11, Font.BOLD));
-            title.setForeground(new Color(164, 244, 199));
-            card.add(title, BorderLayout.WEST);
+            RoundedPanel card = new RoundedPanel(20, new Color(31, 39, 67, 238), new Color(190, 143, 48, 155));
+            card.setLayout(new GridBagLayout());
+            JPanel content = transparent(new BorderLayout(12, 0));
+            JLabel title = new JLabel("订阅 " + subscriptions.size() + " 个");
+            title.setFont(appFont(12, Font.BOLD));
+            title.setForeground(new Color(226, 190, 105));
+            content.add(title, BorderLayout.WEST);
             if (subscriptions.size() == 1) {
                 JLabel value = subscriptionLabel(subscriptions.getFirst(), false);
-                card.add(value, BorderLayout.CENTER);
+                value.setHorizontalAlignment(SwingConstants.CENTER);
+                content.add(value, BorderLayout.CENTER);
             } else {
-                JComboBox<SubscriptionItem> picker = new JComboBox<>(subscriptions.toArray(SubscriptionItem[]::new));
-                picker.setSelectedIndex(0);
-                picker.setFont(appFont(12, Font.BOLD));
-                picker.setForeground(Color.WHITE);
-                picker.setBackground(new Color(29, 111, 81));
-                picker.setFocusable(false);
-                picker.setBorder(BorderFactory.createEmptyBorder(3, 7, 3, 7));
-                picker.setRenderer(new SubscriptionRenderer());
+                JButton picker = new SubscriptionPickerButton(subscriptions.getFirst().displayText() + "  ▾");
                 picker.setToolTipText("按订阅余额从高到低排列");
-                card.add(picker, BorderLayout.CENTER);
+                picker.addActionListener(event -> showSubscriptionMenu(picker, subscriptions));
+                content.add(picker, BorderLayout.CENTER);
             }
-            subscriptionSlot.add(card);
+            GridBagConstraints centered = new GridBagConstraints();
+            centered.weightx = 1; centered.fill = GridBagConstraints.HORIZONTAL; centered.insets = new Insets(0, 14, 0, 14);
+            card.add(content, centered);
+            subscriptionSlot.add(card, BorderLayout.CENTER);
         }
         subscriptionSlot.revalidate();
         subscriptionSlot.repaint();
     }
 
     private JLabel subscriptionLabel(SubscriptionItem item, boolean listCell) {
-        JLabel label = new JLabel(item.displayText() + (listCell ? "" : "  ✓"));
+        JLabel label = new JLabel(item.displayText());
         label.setFont(appFont(12, Font.BOLD));
-        label.setForeground(Color.WHITE);
-        label.setOpaque(listCell);
-        label.setBackground(new Color(29, 111, 81));
+        label.setForeground(new Color(241, 218, 161));
+        label.setOpaque(false);
         label.setBorder(new EmptyBorder(5, 7, 5, 7));
         return label;
+    }
+
+    private void showSubscriptionMenu(JButton anchor, List<SubscriptionItem> subscriptions) {
+        hideModelMenu();
+        JLayeredPane layered = getLayeredPane();
+        JPanel overlay = new JPanel(null);
+        overlay.setOpaque(false);
+        overlay.setBounds(0, 0, layered.getWidth(), layered.getHeight());
+        overlay.addMouseListener(new MouseAdapter() {
+            @Override public void mousePressed(MouseEvent event) { hideModelMenu(); }
+        });
+        SubscriptionMenuPanel menu = new SubscriptionMenuPanel(subscriptions.size());
+        for (SubscriptionItem item : subscriptions) {
+            SubscriptionMenuButton option = new SubscriptionMenuButton(item.displayText());
+            option.addActionListener(event -> {
+                anchor.setText(item.displayText() + "  ▾");
+                hideModelMenu();
+            });
+            menu.add(option);
+        }
+        FontMetrics metrics = anchor.getFontMetrics(appFont(11, Font.BOLD));
+        int desiredWidth = subscriptions.stream().mapToInt(item -> metrics.stringWidth(item.displayText())).max().orElse(176) + 36;
+        int width = Math.min(Math.max(210, desiredWidth), layered.getWidth() - 16);
+        int height = subscriptions.size() * 40 + 12;
+        Point point = SwingUtilities.convertPoint(anchor, 0, anchor.getHeight() + 6, layered);
+        int x = Math.max(8, Math.min(point.x, layered.getWidth() - width - 8));
+        int y = Math.max(8, Math.min(point.y, layered.getHeight() - height - 8));
+        menu.setBounds(x, y, width, height);
+        overlay.add(menu);
+        activeModelMenuOverlay = overlay;
+        layered.add(overlay, JLayeredPane.POPUP_LAYER);
+        overlay.revalidate();
+        overlay.repaint();
     }
 
     private void checkForUpdates(JButton button) {
@@ -965,17 +1049,9 @@ final class TokenProFrame extends JFrame {
     private static String string(Object value) { return value == null ? "" : String.valueOf(value); }
     private record KeyItem(long id, String name, String status) { public String toString() { return name + "  [" + status + "]"; } }
     private record SubscriptionItem(String name, double remaining, String expiresAt) {
-        String displayText() { return name + "  $" + String.format(Locale.US, "%.2f", remaining); }
+        String displayText() { return name + "   订阅余额 $" + String.format(Locale.US, "%.2f", remaining) + "   " + expiryText(); }
+        String expiryText() { return PricedModel.expiryLabel(expiresAt); }
         public String toString() { return displayText(); }
-    }
-
-    private final class SubscriptionRenderer extends DefaultListCellRenderer {
-        @Override public Component getListCellRendererComponent(JList<?> list, Object value, int index,
-                                                                 boolean selected, boolean focused) {
-            JLabel label = subscriptionLabel((SubscriptionItem) value, true);
-            label.setBackground(selected ? new Color(39, 130, 94) : new Color(29, 111, 81));
-            return label;
-        }
     }
 
     private static JTree modelTree(boolean multiple) {
@@ -1072,7 +1148,7 @@ final class TokenProFrame extends JFrame {
             setBorderPainted(false);
             setFocusPainted(false);
             setDoubleBuffered(true);
-            setFont(appFont(12, Font.BOLD));
+            setFont(appFont(11, Font.BOLD));
             setForeground(restore ? new Color(184, 194, 226) : new Color(241, 244, 255));
             setBorder(new EmptyBorder(0, 14, 0, 14));
             setHorizontalAlignment(SwingConstants.LEFT);
@@ -1088,6 +1164,62 @@ final class TokenProFrame extends JFrame {
                 g.dispose();
             }
             super.paintComponent(graphics);
+        }
+    }
+
+    private static final class SubscriptionMenuPanel extends JPanel {
+        SubscriptionMenuPanel(int count) {
+            setOpaque(false);
+            setBorder(new EmptyBorder(6, 6, 6, 6));
+            setLayout(new GridLayout(Math.max(1, count), 1, 0, 2));
+        }
+
+        @Override protected void paintComponent(Graphics graphics) {
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(new Color(31, 38, 64, 252));
+            g.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 16, 16);
+            g.setColor(new Color(190, 143, 48, 150));
+            g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 16, 16);
+            g.dispose();
+        }
+    }
+
+    private static class SubscriptionPickerButton extends JButton {
+        SubscriptionPickerButton(String text) {
+            super(text);
+            setFont(appFont(11, Font.BOLD));
+            setForeground(new Color(244, 220, 164));
+            setBorder(new EmptyBorder(8, 13, 8, 13));
+            setFocusPainted(false);
+            setContentAreaFilled(false);
+            setOpaque(false);
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        }
+
+        @Override protected void paintComponent(Graphics graphics) {
+            Font candidate = appFont(11, Font.BOLD);
+            int available = Math.max(40, getWidth() - 22);
+            while (candidate.getSize2D() > 8f && getFontMetrics(candidate).stringWidth(getText()) > available) {
+                candidate = candidate.deriveFont(candidate.getSize2D() - .5f);
+            }
+            if (!candidate.equals(getFont())) setFont(candidate);
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(getModel().isRollover() ? new Color(106, 78, 29, 225) : new Color(82, 62, 29, 218));
+            g.fillRoundRect(0, 0, getWidth(), getHeight(), 14, 14);
+            g.setColor(new Color(202, 155, 64, 155));
+            g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 14, 14);
+            g.dispose();
+            super.paintComponent(graphics);
+        }
+    }
+
+    private static final class SubscriptionMenuButton extends SubscriptionPickerButton {
+        SubscriptionMenuButton(String text) {
+            super(text);
+            setHorizontalAlignment(SwingConstants.LEFT);
+            setBorder(new EmptyBorder(0, 12, 0, 12));
         }
     }
 
@@ -1196,9 +1328,10 @@ final class TokenProFrame extends JFrame {
     }
 
     private static class RoundedPanel extends JPanel {
-        private final int radius; private final Color fill;
-        RoundedPanel(int radius, Color fill) { this.radius = radius; this.fill = fill; setOpaque(false); }
-        protected void paintComponent(Graphics g) { Graphics2D g2 = (Graphics2D) g.create(); g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON); g2.setColor(fill); g2.fill(new RoundRectangle2D.Double(.5, .5, getWidth()-1, getHeight()-1, radius, radius)); g2.setColor(new Color(205,218,255,58)); g2.draw(new RoundRectangle2D.Double(.5, .5, getWidth()-1, getHeight()-1, radius, radius)); g2.dispose(); super.paintComponent(g); }
+        private final int radius; private final Color fill; private final Color stroke;
+        RoundedPanel(int radius, Color fill) { this(radius, fill, new Color(205, 218, 255, 58)); }
+        RoundedPanel(int radius, Color fill, Color stroke) { this.radius = radius; this.fill = fill; this.stroke = stroke; setOpaque(false); }
+        protected void paintComponent(Graphics g) { Graphics2D g2 = (Graphics2D) g.create(); g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON); g2.setColor(fill); g2.fill(new RoundRectangle2D.Double(.5, .5, getWidth()-1, getHeight()-1, radius, radius)); g2.setColor(stroke); g2.draw(new RoundRectangle2D.Double(.5, .5, getWidth()-1, getHeight()-1, radius, radius)); g2.dispose(); super.paintComponent(g); }
     }
 
     private static final class GradientPanel extends JPanel {

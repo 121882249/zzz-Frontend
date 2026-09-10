@@ -80,14 +80,21 @@ final class SelfTest {
         PricedModel lowSubscription = new PricedModel("gpt-sub", "openai", "Silver", 9, "token", 1d, 2d, List.of(), true, 20d);
         check(ModelPickerDialog.compareGroups(List.of(richSubscription), List.of(lowSubscription)) < 0, "subscription groups sort by remaining balance"); passed++;
         check(ModelPickerDialog.compareGroups(List.of(lowSubscription), List.of(priced)) < 0, "subscription group precedes regular LLM groups"); passed++;
+        PricedModel claudeGroup = new PricedModel("claude-sonnet-5", "anthropic", "Claude", 11);
+        PricedModel gptGroup = new PricedModel("gpt-5.6-sol", "openai", "GPT", 12);
+        check(ModelPickerDialog.compareGroups(List.of(lowSubscription), List.of(claudeGroup), "Claude") < 0, "Claude client puts subscriptions first"); passed++;
+        check(ModelPickerDialog.compareGroups(List.of(claudeGroup), List.of(gptGroup), "Claude") < 0, "Claude client puts Claude before GPT"); passed++;
+        check(!ModelPickerDialog.supportsClient(imagePriced, "Claude") && ModelPickerDialog.supportsClient(imagePriced, "Codex"), "Claude filters image models"); passed++;
+        PricedModel datedSubscription = new PricedModel("gpt-sub", "openai", "Monthly", 10, "token", 1d, 2d, List.of(), true, 30d, "2026-10-31T08:00:00Z");
+        check(datedSubscription.subscriptionExpiryLabel().matches("到期 \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}"), "subscription expiry label includes minutes"); passed++;
         check(ModelPickerDialog.groupRank(new PricedModel("gpt-5.6", "openai", "GPT", 1))
             < ModelPickerDialog.groupRank(new PricedModel("claude-5", "anthropic", "Claude", 2)), "GPT groups precede Claude"); passed++;
         check(ModelPickerDialog.groupRank(new PricedModel("gemini-3", "google", "Gemini", 3))
             < ModelPickerDialog.groupRank(new PricedModel("mistral-large", "mistral", "Mistral", 4)), "other groups follow Gemini"); passed++;
         check(ModuleLayer.boot().findModule("jdk.crypto.ec").isPresent(), "packaged runtime supports ECDSA TLS certificates"); passed++;
-        String releasePayload = "{\"tag_name\":\"v1.2.30\",\"downloads\":{\"windows-x64\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe\",\"sha256\":\"abc\"}}}";
+        String releasePayload = "{\"tag_name\":\"v1.2.31\",\"downloads\":{\"windows-x64\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe\",\"sha256\":\"abc\"}}}";
         TokenProFrame.ReleaseInfo release = TokenProFrame.releaseForPlatform(releasePayload, "windows-x64");
-        check("1.2.30".equals(release.version()) && release.downloadUrl().endsWith(".exe") && "abc".equals(release.sha256()), "automatic update manifest"); passed++;
+        check("1.2.31".equals(release.version()) && release.downloadUrl().endsWith(".exe") && "abc".equals(release.sha256()), "automatic update manifest"); passed++;
         check(Updater.platformKey().startsWith(Platform.OS_KIND == Platform.OS.MAC ? "macos-" : Platform.OS_KIND == Platform.OS.WINDOWS ? "windows-" : "linux-"), "automatic update platform mapping"); passed++;
         ClaudeBridgeConfig.Route route = ClaudeBridgeConfig.Route.from(priced);
         check(route.alias().matches("claude-tokenpro-[0-9a-f]{24}"), "Claude alias"); passed++;

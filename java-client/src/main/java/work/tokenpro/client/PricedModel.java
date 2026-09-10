@@ -6,25 +6,33 @@ import java.util.stream.Collectors;
 
 record PricedModel(String name, String platform, String groupName, long groupId, String billingMode,
                    Double inputPrice, Double officialOutputPrice, List<ImagePrice> imagePrices,
-                   boolean subscription, double subscriptionRemaining) {
+                   boolean subscription, double subscriptionRemaining, String subscriptionExpiresAt) {
     record ImagePrice(String label, double perImage) {}
 
     PricedModel {
         imagePrices = imagePrices == null ? List.of() : List.copyOf(imagePrices);
+        subscriptionExpiresAt = subscriptionExpiresAt == null ? "" : subscriptionExpiresAt;
     }
 
     PricedModel(String name, String platform, String groupName, long groupId) {
-        this(name, platform, groupName, groupId, "token", null, null, List.of(), false, 0d);
+        this(name, platform, groupName, groupId, "token", null, null, List.of(), false, 0d, "");
     }
 
     PricedModel(String name, String platform, String groupName, long groupId,
                 String billingMode, Double officialOutputPrice) {
-        this(name, platform, groupName, groupId, billingMode, null, officialOutputPrice, List.of(), false, 0d);
+        this(name, platform, groupName, groupId, billingMode, null, officialOutputPrice, List.of(), false, 0d, "");
     }
 
     PricedModel(String name, String platform, String groupName, long groupId, String billingMode,
                 Double inputPrice, Double officialOutputPrice, List<ImagePrice> imagePrices) {
-        this(name, platform, groupName, groupId, billingMode, inputPrice, officialOutputPrice, imagePrices, false, 0d);
+        this(name, platform, groupName, groupId, billingMode, inputPrice, officialOutputPrice, imagePrices, false, 0d, "");
+    }
+
+    PricedModel(String name, String platform, String groupName, long groupId, String billingMode,
+                Double inputPrice, Double officialOutputPrice, List<ImagePrice> imagePrices,
+                boolean subscription, double subscriptionRemaining) {
+        this(name, platform, groupName, groupId, billingMode, inputPrice, officialOutputPrice,
+            imagePrices, subscription, subscriptionRemaining, "");
     }
 
     boolean tokenBilled() { return billingMode == null || billingMode.isBlank() || "token".equalsIgnoreCase(billingMode); }
@@ -65,6 +73,19 @@ record PricedModel(String name, String platform, String groupName, long groupId,
 
     String displayGroupName() { return displayCase(groupName); }
     String displayPlatform() { return displayCase(platform); }
+
+    String subscriptionExpiryLabel() { return expiryLabel(subscriptionExpiresAt); }
+
+    static String expiryLabel(String value) {
+        if (value == null || value.isBlank()) return "长期有效";
+        try {
+            return "到期 " + java.time.Instant.parse(value).atZone(java.time.ZoneId.systemDefault())
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
+        } catch (java.time.format.DateTimeParseException ignored) {
+            String compact = value.replace('T', ' ');
+            return "到期 " + (compact.length() >= 16 ? compact.substring(0, 16) : compact);
+        }
+    }
 
     static String displayCase(String source) {
         String value = source == null ? "" : source.trim();

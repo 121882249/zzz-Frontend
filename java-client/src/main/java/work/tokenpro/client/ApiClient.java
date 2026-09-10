@@ -56,13 +56,19 @@ final class ApiClient {
             if (id != null) available.put(id, group);
         }
         Map<Long, Double> subscriptionBalances = new HashMap<>();
+        Map<Long, String> subscriptionExpiries = new HashMap<>();
         try {
             Object raw = subscriptionSummary(token).get("subscriptions");
             if (raw instanceof List<?> rows) for (Object value : rows) {
                 Map<String, Object> subscription = Json.object(value);
                 Long groupId = integer(subscription.get("group_id"));
                 if (groupId != null && "active".equalsIgnoreCase(text(subscription.get("status")))) {
-                    subscriptionBalances.merge(groupId, subscriptionRemaining(subscription), Math::max);
+                    double remaining = subscriptionRemaining(subscription);
+                    Double current = subscriptionBalances.get(groupId);
+                    if (current == null || remaining > current) {
+                        subscriptionBalances.put(groupId, remaining);
+                        subscriptionExpiries.put(groupId, text(subscription.get("expires_at")));
+                    }
                 }
             }
         } catch (Exception ignored) {
@@ -100,7 +106,8 @@ final class ApiClient {
                     decimal(officialPricing.get("output_price")),
                     imagePrices(pricing),
                     subscription,
-                    subscriptionBalances.getOrDefault(groupId, 0d)
+                    subscriptionBalances.getOrDefault(groupId, 0d),
+                    subscriptionExpiries.getOrDefault(groupId, "")
                 ));
             }
         }

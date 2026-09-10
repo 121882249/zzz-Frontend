@@ -18,7 +18,11 @@ final class ClaudeBridgeManager {
 
     static void ensureRunning(SecureStore store) throws Exception {
         if (healthy(store)) return;
-        new ProcessBuilder(RuntimeCommand.withArgs("--claude-bridge")).redirectInput(ProcessBuilder.Redirect.DISCARD).redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(ProcessBuilder.Redirect.DISCARD).start();
+        Process bridge = new ProcessBuilder(RuntimeCommand.withArgs("--claude-bridge"))
+            .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+            .redirectError(ProcessBuilder.Redirect.DISCARD)
+            .start();
+        bridge.getOutputStream().close();
         for (int i = 0; i < 35; i++) { Thread.sleep(100); if (healthy(store)) return; }
         throw new IllegalStateException("Claude 本地桥接未能启动，端口 23179 可能被占用");
     }

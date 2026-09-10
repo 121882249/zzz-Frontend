@@ -64,12 +64,33 @@ final class Platform {
     static boolean openApplication(String name) throws IOException {
         Process process;
         if (OS_KIND == OS.MAC) {
-            String target = name.equals("Codex") && !applicationPath("Codex").map(Files::exists).orElse(false) && applicationPath("ChatGPT").map(Files::exists).orElse(false) ? "ChatGPT" : name;
+            String target = macApplicationTarget(name);
             process = new ProcessBuilder("open", "-a", target).start();
+            try {
+                if (!process.waitFor(5, TimeUnit.SECONDS) || process.exitValue() != 0) return false;
+                new ProcessBuilder("osascript", "-e", "tell application \"" + target + "\" to activate").start();
+                return true;
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
         }
         else if (OS_KIND == OS.WINDOWS) process = new ProcessBuilder("cmd", "/c", "start", "", name).start();
         else process = new ProcessBuilder(name.toLowerCase(Locale.ROOT)).start();
         return process.isAlive() || process.exitValue() == 0;
+    }
+
+    static boolean openClaudeThirdParty() throws IOException {
+        if (OS_KIND != OS.MAC) return openApplication("Claude");
+        Path application = applicationPath("Claude").orElseThrow(() -> new IOException("没有找到 Claude 应用"));
+        Path data = Path.of(System.getProperty("user.home"), "Library", "Application Support", "Claude-3p");
+        Process process = new ProcessBuilder("open", "-na", application.toString(), "--args", "--user-data-dir=" + data).start();
+        try {
+            return process.waitFor(5, TimeUnit.SECONDS) && process.exitValue() == 0;
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
     }
 
     static boolean restartApplication(String name) throws Exception {

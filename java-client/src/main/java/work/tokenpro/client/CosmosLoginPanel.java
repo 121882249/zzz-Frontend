@@ -5,6 +5,7 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.ActionListener;
+import java.awt.font.TextLayout;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
@@ -183,9 +184,49 @@ final class CosmosLoginPanel extends JPanel {
             super(new BorderLayout()); setOpaque(false);
             JPanel copy = new JPanel(); copy.setOpaque(false); copy.setLayout(new BoxLayout(copy, BoxLayout.Y_AXIS));
             JLabel eyebrow = label("—  CROSS-PLATFORM AI ACCESS", 12, Font.BOLD, new Color(171, 187, 255)); eyebrow.setAlignmentX(Component.LEFT_ALIGNMENT); copy.add(eyebrow); copy.add(Box.createVerticalStrut(27));
-            JLabel titleLine = label("连接每一颗 AI 星辰", 50, Font.BOLD, TEXT); titleLine.setAlignmentX(Component.LEFT_ALIGNMENT); titleLine.setPreferredSize(new Dimension(650, 72)); titleLine.setMinimumSize(new Dimension(500, 72)); titleLine.setMaximumSize(new Dimension(Integer.MAX_VALUE, 72)); copy.add(titleLine); copy.add(Box.createVerticalStrut(14));
+            JComponent titleLine = new StarlightTitle("TokenPro 连接每一颗 AI 星辰"); titleLine.setAlignmentX(Component.LEFT_ALIGNMENT); titleLine.setPreferredSize(new Dimension(650, 72)); titleLine.setMinimumSize(new Dimension(500, 72)); titleLine.setMaximumSize(new Dimension(Integer.MAX_VALUE, 72)); copy.add(titleLine); copy.add(Box.createVerticalStrut(14));
             JLabel lead = label("<html>连接主流与新兴 AI 模型，一个入口，跨平台启航。<br>模型宇宙实时同步，并持续扩展。</html>", 15, Font.PLAIN, MUTED); lead.setAlignmentX(Component.LEFT_ALIGNMENT); copy.add(lead);
             add(copy, BorderLayout.NORTH); add(new VortexCanvas(), BorderLayout.CENTER);
+        }
+    }
+
+    private static final class StarlightTitle extends JComponent {
+        private final String text;
+        StarlightTitle(String text) { this.text = text; setOpaque(false); }
+
+        @Override protected void paintComponent(Graphics graphics) {
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            Font titleFont = font(44, Font.BOLD);
+            TextLayout layout = new TextLayout(text, titleFont, g.getFontRenderContext());
+            while (layout.getAdvance() > getWidth() - 4 && titleFont.getSize2D() > 32f) {
+                titleFont = titleFont.deriveFont(titleFont.getSize2D() - 1f);
+                layout = new TextLayout(text, titleFont, g.getFontRenderContext());
+            }
+            Rectangle bounds = layout.getPixelBounds(g.getFontRenderContext(), 0, 0);
+            float baseline = (getHeight() - bounds.height) / 2f - bounds.y;
+            Shape glyphs = layout.getOutline(AffineTransform.getTranslateInstance(1, baseline));
+
+            g.translate(0, 2);
+            g.setColor(new Color(54, 39, 145, 105));
+            g.fill(glyphs);
+            g.translate(0, -2);
+            g.setPaint(new LinearGradientPaint(0, 0, Math.max(1, getWidth()), 0,
+                new float[]{0f, .28f, .58f, .80f, 1f},
+                new Color[]{new Color(112, 225, 255), new Color(141, 117, 255),
+                    new Color(245, 248, 255), new Color(185, 157, 255), new Color(91, 181, 255)}));
+            g.fill(glyphs);
+
+            g.setClip(glyphs);
+            for (int index = 0; index < 28; index++) {
+                int x = Math.floorMod(index * 79 + 17, Math.max(1, getWidth()));
+                int y = Math.floorMod(index * 37 + 11, Math.max(1, getHeight()));
+                int size = index % 6 == 0 ? 2 : 1;
+                g.setColor(new Color(255, 255, 255, index % 6 == 0 ? 215 : 115));
+                g.fillOval(x, y, size, size);
+            }
+            g.dispose();
         }
     }
 
@@ -205,16 +246,18 @@ final class CosmosLoginPanel extends JPanel {
 
         VortexCanvas() {
             setOpaque(true);
-            Timer timer = new Timer(200, e -> {
+            setDoubleBuffered(true);
+            Timer timer = new Timer(16, e -> {
                 long now = System.nanoTime();
                 if (!isShowing()) { lastTick = now; return; }
                 double elapsed = Math.min((now - lastTick) / 1_000_000_000.0, .25);
                 lastTick = now;
-                phase = (phase + elapsed * .025) % (Math.PI * 2);
-                strip += elapsed * 3;
+                phase = (phase + elapsed * .15) % (Math.PI * 2);
+                strip += elapsed * 24;
                 repaint();
             });
             timer.setCoalesce(true);
+            timer.setInitialDelay(0);
             timer.start();
         }
 
@@ -246,7 +289,7 @@ final class CosmosLoginPanel extends JPanel {
             g.setColor(new Color(178, 195, 255, 35)); g.drawRoundRect(0, barY, getWidth() - 4, barH, 18, 18);
             List<ModelChip> chips = List.of(new ModelChip("GPT", gpt), new ModelChip("Claude", claude), new ModelChip("Gemini", gemini), new ModelChip("Grok", grok), new ModelChip("更多模型持续接入", null));
             int total = chips.stream().mapToInt(ModelChip::width).sum() + chips.size() * 10;
-            int x = -(int) (strip % total);
+            double x = -(strip % total);
             while (x < getWidth()) { for (ModelChip chip : chips) { drawChip(g, chip, x, barY + 14); x += chip.width() + 10; } }
             g.dispose();
         }
@@ -306,13 +349,16 @@ final class CosmosLoginPanel extends JPanel {
             g.setComposite(AlphaComposite.SrcOver);
         }
 
-        private void drawChip(Graphics2D g, ModelChip chip, int x, int y) {
+        private void drawChip(Graphics2D g, ModelChip chip, double x, int y) {
+            Graphics2D chipGraphics = (Graphics2D) g.create();
+            chipGraphics.translate(x, y);
             int width = chip.width();
-            g.setColor(new Color(9, 15, 38, 210)); g.fillRoundRect(x, y, width, 44, 14, 14);
-            g.setColor(new Color(188, 202, 255, 42)); g.drawRoundRect(x, y, width, 44, 14, 14);
-            int textX = x + 14;
-            if (chip.image() != null) { g.drawImage(chip.image(), x + 10, y + 10, 24, 24, null); textX = x + 42; }
-            g.setFont(font(11, Font.BOLD)); g.setColor(new Color(238, 241, 255, 225)); g.drawString(chip.name(), textX, y + 27);
+            chipGraphics.setColor(new Color(9, 15, 38, 210)); chipGraphics.fillRoundRect(0, 0, width, 44, 14, 14);
+            chipGraphics.setColor(new Color(188, 202, 255, 42)); chipGraphics.drawRoundRect(0, 0, width, 44, 14, 14);
+            int textX = 14;
+            if (chip.image() != null) { chipGraphics.drawImage(chip.image(), 10, 10, 24, 24, null); textX = 42; }
+            chipGraphics.setFont(font(11, Font.BOLD)); chipGraphics.setColor(new Color(238, 241, 255, 225)); chipGraphics.drawString(chip.name(), textX, 27);
+            chipGraphics.dispose();
         }
 
         private record ModelChip(String name, BufferedImage image) {

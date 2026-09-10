@@ -10,6 +10,7 @@ final class ClaudeDesktopConfig {
     static void install(SecureStore store, ClaudeBridgeConfig bridge) throws Exception {
         Path library = library();
         Files.createDirectories(library);
+        ensureThirdPartyMode(library.getParent());
         Map<String, Object> meta = readMeta(library);
         Map<String, Object> state = store.read(STATE_FILE).map(Json::parse).map(Json::object).orElseGet(LinkedHashMap::new);
         String official = validId(state.get("official_profile_id"));
@@ -48,6 +49,16 @@ final class ClaudeDesktopConfig {
             case WINDOWS -> Path.of(System.getenv().getOrDefault("APPDATA", home), "Claude-3p", "configLibrary");
             case LINUX -> Path.of(System.getenv().getOrDefault("XDG_CONFIG_HOME", Path.of(home, ".config").toString()), "Claude-3p", "configLibrary");
         };
+    }
+
+    private static void ensureThirdPartyMode(Path root) throws Exception {
+        Files.createDirectories(root);
+        Path path = root.resolve("claude_desktop_config.json");
+        Map<String, Object> config = Files.exists(path)
+            ? new LinkedHashMap<>(Json.object(Json.parse(Files.readString(path))))
+            : new LinkedHashMap<>();
+        config.put("deploymentMode", "3p");
+        writeJson(path, config);
     }
 
     private static Map<String, Object> readMeta(Path library) throws Exception {

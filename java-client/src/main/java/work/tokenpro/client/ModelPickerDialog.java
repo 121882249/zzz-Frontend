@@ -56,7 +56,7 @@ final class ModelPickerDialog extends JDialog {
         titleLine.add(title, BorderLayout.WEST);
         titleLine.add(closeControl(), BorderLayout.EAST);
         boolean codex = "Codex".equals(client);
-        JLabel detail = new JLabel(codex ? "Image Model 选择 1 个，LLM Model 至少选择 1 个" : "按可用分组展示，可直接点选多个模型");
+        JLabel detail = new JLabel(codex ? "Image Model 选择 1 个，LLM Model 至少选择 1 个" : "LLM Model 至少选择 1 个，可同时选择多个");
         detail.setFont(font(12, Font.PLAIN));
         detail.setForeground(MUTED);
         header.add(titleLine);
@@ -69,12 +69,12 @@ final class ModelPickerDialog extends JDialog {
         groups.setLayout(new BoxLayout(groups, BoxLayout.Y_AXIS));
         Map<String, List<PricedModel>> grouped = new LinkedHashMap<>();
         for (PricedModel model : models) {
-            if (codex && model.isImageGeneration()) continue;
+            if (!supportsClient(model, client) || model.isImageGeneration()) continue;
             grouped.computeIfAbsent(groupKey(model), ignored -> new ArrayList<>()).add(model);
         }
         if (codex) addImageChoices(groups, models, selectedIds);
         List<List<PricedModel>> orderedGroups = grouped.values().stream()
-            .sorted(ModelPickerDialog::compareGroups)
+            .sorted((left, right) -> compareGroups(left, right, client))
             .toList();
         for (List<PricedModel> groupModels : orderedGroups) {
             groupModels.sort(ApiClient::compareSelectablePriceDescending);
@@ -85,7 +85,7 @@ final class ModelPickerDialog extends JDialog {
             group.setBorder(new EmptyBorder(14, 16, 12, 16));
             group.setAlignmentX(Component.LEFT_ALIGNMENT);
             String groupLabel = first.displayGroupName();
-            if (subscription) groupLabel += "  ·  订阅余额 $" + String.format(Locale.US, "%.2f", first.subscriptionRemaining());
+            if (subscription) groupLabel += "   订阅余额 $" + String.format(Locale.US, "%.2f", first.subscriptionRemaining()) + "   " + first.subscriptionExpiryLabel();
             JLabel groupName = new JLabel(groupLabel);
             groupName.setFont(font(13, Font.BOLD));
             groupName.setForeground(subscription ? new Color(218, 181, 92) : new Color(105, 220, 194));
@@ -105,11 +105,14 @@ final class ModelPickerDialog extends JDialog {
             groups.add(group);
             groups.add(Box.createVerticalStrut(10));
         }
+        if (!codex && choices.stream().noneMatch(AbstractButton::isSelected)) {
+            choices.stream().findFirst().ifPresent(choice -> choice.setSelected(true));
+        }
         if (codex && choices.stream().noneMatch(choice -> !choice.model().isImageGeneration() && choice.isSelected())) {
             choices.stream().filter(choice -> !choice.model().isImageGeneration()).findFirst()
                 .ifPresent(choice -> choice.setSelected(true));
         }
-        if (models.isEmpty()) {
+        if (choices.isEmpty()) {
             JLabel empty = new JLabel("当前账户没有可用模型");
             empty.setForeground(MUTED);
             groups.add(empty);
@@ -149,7 +152,7 @@ final class ModelPickerDialog extends JDialog {
             dispose();
             onApply.accept(selected);
         });
-        apply.setEnabled(!models.isEmpty());
+        apply.setEnabled(!choices.isEmpty());
         actions.add(cancel);
         actions.add(apply);
         footer.add(actions, BorderLayout.EAST);
@@ -191,13 +194,7 @@ final class ModelPickerDialog extends JDialog {
             imageHeading.setAlignmentX(Component.LEFT_ALIGNMENT);
             imageHeading.add(new BillingBadge(subscription));
             imageHeading.add(imageTitle);
-            JLabel imageHint = new JLabel("Image Model · 必选 1 个 · 固定搭配所有已选 LLM");
-            imageHint.setFont(font(11, Font.PLAIN));
-            imageHint.setForeground(MUTED);
-            imageHint.setAlignmentX(Component.LEFT_ALIGNMENT);
             imageGroup.add(imageHeading);
-            imageGroup.add(Box.createVerticalStrut(4));
-            imageGroup.add(imageHint);
             imageGroup.add(Box.createVerticalStrut(8));
             for (PricedModel model : groupModels) {
                 ModelCheckBox choice = new ModelCheckBox(model);
@@ -228,22 +225,41 @@ final class ModelPickerDialog extends JDialog {
     static boolean matchesSelectedImage(PricedModel model, Set<String> selectedIds) {
         return selectedIds.contains(id(model)) || selectedIds.contains(imageNameId(model.name()));
     }
+    static boolean supportsClient(PricedModel model, String client) {
+        return !model.isImageGeneration() || "Codex".equals(client);
+    }
     private static String groupKey(PricedModel model) { return model.groupId() + "\u0000" + model.groupName(); }
 
     static int compareGroups(List<PricedModel> left, List<PricedModel> right) {
+        return compareGroups(left, right, "Codex");
+    }
+
+    static int compareGroups(List<PricedModel> left, List<PricedModel> right, String client) {
         PricedModel a = left.getFirst(), b = right.getFirst();
         if (a.subscription() && b.subscription()) {
             int balance = Double.compare(b.subscriptionRemaining(), a.subscriptionRemaining());
             if (balance != 0) return balance;
         }
-        int rank = Integer.compare(groupRank(a), groupRank(b));
+        int rank = Integer.compare(groupRank(a, client), groupRank(b, client));
         if (rank != 0) return rank;
         return a.displayGroupName().compareToIgnoreCase(b.displayGroupName());
     }
 
     static int groupRank(PricedModel model) {
-        if (model.subscription()) return -1;
+        return groupRank(model, "Codex");
+    }
+
+    static int groupRank(PricedModel model, String client) {
         String value = (model.name() + " " + model.platform() + " " + model.groupName()).toLowerCase(Locale.ROOT);
+        if ("Claude".equals(client)) {
+            if (model.subscription()) return 0;
+            if (value.contains("claude") || value.contains("anthropic")) return 1;
+            if (value.contains("gpt") || value.contains("openai")) return 2;
+            if (value.contains("grok") || value.contains("xai")) return 3;
+            if (value.contains("gemini") || value.contains("google")) return 4;
+            return 5;
+        }
+        if (model.subscription()) return -1;
         if (value.contains("gpt") || value.contains("openai")) return 0;
         if (value.contains("claude") || value.contains("anthropic")) return 1;
         if (value.contains("grok") || value.contains("xai")) return 2;
@@ -427,9 +443,9 @@ final class ModelPickerDialog extends JDialog {
         protected void paintComponent(Graphics graphics) {
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g.setColor(subscription ? new Color(69, 54, 25, 235) : new Color(25, 42, 84, 226));
+            g.setColor(subscription ? new Color(69, 54, 25, 235) : new Color(19, 67, 61, 232));
             g.fillRoundRect(0, 0, getWidth(), getHeight(), 18, 18);
-            g.setColor(subscription ? new Color(196, 153, 61, 135) : new Color(196, 211, 255, 84));
+            g.setColor(subscription ? new Color(196, 153, 61, 135) : new Color(79, 190, 163, 125));
             g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 18, 18);
             g.dispose();
             super.paintComponent(graphics);
