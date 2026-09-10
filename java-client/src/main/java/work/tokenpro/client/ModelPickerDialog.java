@@ -18,7 +18,6 @@ final class ModelPickerDialog extends JDialog {
     private static final Color PANEL = new Color(8, 14, 35);
     private final List<ModelCheckBox> choices = new ArrayList<>();
     private final List<ModelCheckBox> imageChoices = new ArrayList<>();
-    private final List<ModelCheckBox> chatChoices = new ArrayList<>();
 
     ModelPickerDialog(JFrame owner, String client, List<PricedModel> models,
                       Set<String> selectedIds, Consumer<List<PricedModel>> onApply) {
@@ -55,7 +54,7 @@ final class ModelPickerDialog extends JDialog {
         title.setFont(font(23, Font.BOLD));
         title.setForeground(TEXT);
         boolean codex = "Codex".equals(client);
-        JLabel detail = new JLabel(codex ? "请选择 1 个 LLM Model 和 1 个 Image Model" : "按可用分组展示，可直接点选多个模型");
+        JLabel detail = new JLabel(codex ? "Image Model 选择 1 个，LLM Model 至少选择 1 个" : "按可用分组展示，可直接点选多个模型");
         detail.setFont(font(12, Font.PLAIN));
         detail.setForeground(MUTED);
         header.add(title);
@@ -71,15 +70,15 @@ final class ModelPickerDialog extends JDialog {
             if (codex && model.isImageGeneration()) continue;
             grouped.computeIfAbsent(groupKey(model), ignored -> new ArrayList<>()).add(model);
         }
+        if (codex) addImageChoices(groups, models, selectedIds);
         if (codex && !grouped.isEmpty()) {
-            JLabel llmTitle = new JLabel("LLM Model（必选 1 个）");
+            JLabel llmTitle = new JLabel("LLM Model（至少选择 1 个）");
             llmTitle.setFont(font(13, Font.BOLD));
             llmTitle.setForeground(new Color(172, 183, 255));
             llmTitle.setAlignmentX(Component.LEFT_ALIGNMENT);
             groups.add(llmTitle);
             groups.add(Box.createVerticalStrut(8));
         }
-        boolean restoredChat = false;
         for (List<PricedModel> groupModels : grouped.values()) {
             PricedModel first = groupModels.getFirst();
             JPanel group = new GroupPanel();
@@ -94,61 +93,13 @@ final class ModelPickerDialog extends JDialog {
             group.add(Box.createVerticalStrut(8));
             for (PricedModel model : groupModels) {
                 ModelCheckBox choice = new ModelCheckBox(model);
-                boolean selected = selectedIds.contains(id(model));
-                if (codex) {
-                    selected = !restoredChat && selected;
-                    restoredChat |= selected;
-                    chatChoices.add(choice);
-                    choice.addActionListener(event -> {
-                        if (!choice.isSelected()) return;
-                        for (ModelCheckBox other : chatChoices) if (other != choice) other.setSelected(false);
-                    });
-                }
-                choice.setSelected(selected);
+                choice.setSelected(selectedIds.contains(id(model)));
                 choices.add(choice);
                 group.add(choice);
             }
             group.setMaximumSize(new Dimension(Integer.MAX_VALUE, group.getPreferredSize().height));
             groups.add(group);
             groups.add(Box.createVerticalStrut(10));
-        }
-        if (codex) {
-            List<PricedModel> imageModels = models.stream().filter(PricedModel::isImageGeneration).toList();
-            if (!imageModels.isEmpty()) {
-                JPanel imageGroup = new GroupPanel();
-                imageGroup.setLayout(new BoxLayout(imageGroup, BoxLayout.Y_AXIS));
-                imageGroup.setBorder(new EmptyBorder(14, 16, 12, 16));
-                imageGroup.setAlignmentX(Component.LEFT_ALIGNMENT);
-                JLabel imageTitle = new JLabel("Image Model（必选 1 个）");
-                imageTitle.setFont(font(13, Font.BOLD));
-                imageTitle.setForeground(new Color(105, 220, 194));
-                imageTitle.setAlignmentX(Component.LEFT_ALIGNMENT);
-                JLabel imageHint = new JLabel("在 Codex 模型菜单中以 Image Model 显示");
-                imageHint.setFont(font(11, Font.PLAIN));
-                imageHint.setForeground(MUTED);
-                imageHint.setAlignmentX(Component.LEFT_ALIGNMENT);
-                imageGroup.add(imageTitle);
-                imageGroup.add(Box.createVerticalStrut(4));
-                imageGroup.add(imageHint);
-                imageGroup.add(Box.createVerticalStrut(8));
-                boolean restored = false;
-                for (PricedModel model : imageModels) {
-                    ModelCheckBox choice = new ModelCheckBox(model);
-                    boolean selected = !restored && matchesSelectedImage(model, selectedIds);
-                    choice.setSelected(selected);
-                    restored |= selected;
-                    imageChoices.add(choice);
-                    choices.add(choice);
-                    choice.addActionListener(event -> {
-                        if (!choice.isSelected()) return;
-                        for (ModelCheckBox other : imageChoices) if (other != choice) other.setSelected(false);
-                    });
-                    imageGroup.add(choice);
-                }
-                imageGroup.setMaximumSize(new Dimension(Integer.MAX_VALUE, imageGroup.getPreferredSize().height));
-                groups.add(imageGroup);
-                groups.add(Box.createVerticalStrut(10));
-            }
         }
         if (models.isEmpty()) {
             JLabel empty = new JLabel("当前账户没有可用模型");
@@ -170,7 +121,7 @@ final class ModelPickerDialog extends JDialog {
         Runnable updateCount = () -> {
             long imageCount = selected().stream().filter(PricedModel::isImageGeneration).count();
             long chatCount = selected().size() - imageCount;
-            count.setText(codex ? "LLM Model " + (chatCount == 1 ? "已选" : "未选") + " · Image Model " + (imageCount == 1 ? "已选" : "未选") : "已选择 " + selected().size() + " 个模型");
+            count.setText(codex ? "Image Model 已选 " + imageCount + " 个 · LLM Model 已选 " + chatCount + " 个" : "已选择 " + selected().size() + " 个模型");
         };
         choices.forEach(choice -> choice.addActionListener(event -> updateCount.run()));
         updateCount.run();
@@ -183,8 +134,8 @@ final class ModelPickerDialog extends JDialog {
             List<PricedModel> selected = selected();
             long imageCount = selected.stream().filter(PricedModel::isImageGeneration).count();
             long chatCount = selected.size() - imageCount;
-            if (selected.isEmpty() || codex && (chatCount != 1 || imageCount != 1)) {
-                JOptionPane.showMessageDialog(this, codex ? "请分别选择 1 个 LLM Model 和 1 个 Image Model" : "请至少选择一个模型", "TokenPro", JOptionPane.WARNING_MESSAGE);
+            if (selected.isEmpty() || codex && (chatCount < 1 || imageCount != 1)) {
+                JOptionPane.showMessageDialog(this, codex ? "请选择 1 个 Image Model，并至少选择 1 个 LLM Model" : "请至少选择一个模型", "TokenPro", JOptionPane.WARNING_MESSAGE);
                 return;
             }
             dispose();
@@ -196,6 +147,44 @@ final class ModelPickerDialog extends JDialog {
         footer.add(actions, BorderLayout.EAST);
         root.add(footer, BorderLayout.SOUTH);
         return root;
+    }
+
+    private void addImageChoices(JPanel groups, List<PricedModel> models, Set<String> selectedIds) {
+        List<PricedModel> imageModels = models.stream().filter(PricedModel::isImageGeneration).toList();
+        if (imageModels.isEmpty()) return;
+        JPanel imageGroup = new GroupPanel();
+        imageGroup.setLayout(new BoxLayout(imageGroup, BoxLayout.Y_AXIS));
+        imageGroup.setBorder(new EmptyBorder(14, 16, 12, 16));
+        imageGroup.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel imageTitle = new JLabel("Image Model（必选 1 个）");
+        imageTitle.setFont(font(13, Font.BOLD));
+        imageTitle.setForeground(new Color(105, 220, 194));
+        imageTitle.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel imageHint = new JLabel("固定搭配下方选择的 LLM Model");
+        imageHint.setFont(font(11, Font.PLAIN));
+        imageHint.setForeground(MUTED);
+        imageHint.setAlignmentX(Component.LEFT_ALIGNMENT);
+        imageGroup.add(imageTitle);
+        imageGroup.add(Box.createVerticalStrut(4));
+        imageGroup.add(imageHint);
+        imageGroup.add(Box.createVerticalStrut(8));
+        boolean restored = false;
+        for (PricedModel model : imageModels) {
+            ModelCheckBox choice = new ModelCheckBox(model);
+            boolean selected = !restored && matchesSelectedImage(model, selectedIds);
+            choice.setSelected(selected);
+            restored |= selected;
+            imageChoices.add(choice);
+            choices.add(choice);
+            choice.addActionListener(event -> {
+                if (!choice.isSelected()) return;
+                for (ModelCheckBox other : imageChoices) if (other != choice) other.setSelected(false);
+            });
+            imageGroup.add(choice);
+        }
+        imageGroup.setMaximumSize(new Dimension(Integer.MAX_VALUE, imageGroup.getPreferredSize().height));
+        groups.add(imageGroup);
+        groups.add(Box.createVerticalStrut(14));
     }
 
     private List<PricedModel> selected() {

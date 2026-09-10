@@ -338,21 +338,23 @@ final class TokenProFrame extends JFrame {
         selected = uniqueModels(selected);
         List<PricedModel> chatModels = selected.stream().filter(model -> !model.isImageGeneration()).toList();
         List<PricedModel> imageModels = selected.stream().filter(PricedModel::isImageGeneration).toList();
-        if (chatModels.size() != 1 || imageModels.size() != 1) { error(new IllegalStateException("请分别选择 1 个 LLM Model 和 1 个 Image Model")); return; }
+        if (chatModels.isEmpty() || imageModels.size() != 1) { error(new IllegalStateException("请选择 1 个 Image Model，并至少选择 1 个 LLM Model")); return; }
         PricedModel imageModel = imageModels.getFirst();
-        List<PricedModel> chosen = List.of(chatModels.getFirst(), imageModel);
+        List<PricedModel> chosen = new ArrayList<>();
+        chosen.add(imageModel);
+        chosen.addAll(chatModels);
         async("正在使用全局 Key 配置 Codex…", () -> {
             ApiClient.ManagedKey managed = api.globalKey(accessToken);
             codex.apply("https://tokenpro.work/v1", chosen, managed.key());
             Map<String, Object> saved = new LinkedHashMap<>();
-            saved.put("default_model", chosen.getFirst().name());
+            saved.put("default_model", chatModels.getFirst().name());
             saved.put("models", modelRows(chosen));
             saved.put("image_model", imageModel.name());
             saved.put("key_id", managed.id());
             store.write("codex-selected.json", Json.stringify(saved));
             return chosen;
         }, configured -> {
-            homeCodexStatus.setText("LLM + Image 已配置");
+            homeCodexStatus.setText(chatModels.size() + " LLM + 1 Image 已配置");
             if (codexLaunch != null) codexLaunch.setEnabled(true);
             status("Codex 已配置 " + configured.size() + " 个模型");
             openApp("Codex");
@@ -490,7 +492,7 @@ final class TokenProFrame extends JFrame {
             if (saved.get("models") instanceof List<?> models && !models.isEmpty()) {
                 boolean imageEnabled = !string(saved.get("image_model")).isBlank();
                 int chatCount = imageEnabled ? Math.max(0, models.size() - 1) : models.size();
-                homeCodexStatus.setText(chatCount == 1 && imageEnabled ? "LLM + Image 已配置" : "请重新选择两个模型");
+                homeCodexStatus.setText(chatCount > 0 && imageEnabled ? chatCount + " LLM + 1 Image 已配置" : "请重新选择模型");
             }
             else {
                 String selected = string(saved.get("model")); if (selected.isBlank()) throw new IllegalStateException("未选择");
