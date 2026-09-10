@@ -27,7 +27,11 @@ import java.util.List;
 import java.util.concurrent.Callable;
 
 final class TokenProFrame extends JFrame {
-    record ReleaseInfo(String version, String downloadUrl, String sha256) {}
+    record ReleaseInfo(String version, String downloadUrl, String sha256, String incrementalUrl, String incrementalSha256) {
+        boolean hasIncrementalUpdate() { return !incrementalUrl.isBlank(); }
+        String preferredUrl() { return hasIncrementalUpdate() ? incrementalUrl : downloadUrl; }
+        String preferredSha256() { return hasIncrementalUpdate() ? incrementalSha256 : sha256; }
+    }
     private static final Color PURPLE = new Color(102, 82, 240);
     private static final Color STATUS_READY = new Color(114, 230, 210);
     private static final Color STATUS_PENDING = new Color(242, 200, 121);
@@ -846,7 +850,7 @@ final class TokenProFrame extends JFrame {
                     } catch (Exception ignored) {}
                 }
                 if (payload.isBlank()) payload = Platform.githubLatestReleaseJson().orElse("");
-                return payload.isBlank() ? new ReleaseInfo("", "", "") : releaseForPlatform(payload, Updater.platformKey());
+                return payload.isBlank() ? new ReleaseInfo("", "", "", "", "") : releaseForPlatform(payload, Updater.platformKey());
             }
             protected void done() {
                 if (button != null) button.setEnabled(true);
@@ -884,7 +888,12 @@ final class TokenProFrame extends JFrame {
     static ReleaseInfo releaseForPlatform(String payload, String platformKey) {
         Map<String, Object> release = Json.object(Json.parse(payload));
         String version = string(release.get("tag_name")).replaceFirst("^v", "");
-        String downloadUrl = "", sha256 = "";
+        String downloadUrl = "", sha256 = "", incrementalUrl = "", incrementalSha256 = "";
+        if (release.get("incremental") instanceof Map<?, ?> rawIncremental) {
+            Map<String, Object> incremental = Json.object(rawIncremental);
+            incrementalUrl = string(incremental.get("url"));
+            incrementalSha256 = string(incremental.get("sha256"));
+        }
         if (release.get("downloads") instanceof Map<?, ?> rawDownloads) {
             Map<String, Object> downloads = Json.object(rawDownloads);
             if (downloads.get(platformKey) instanceof Map<?, ?> rawDownload) {
@@ -906,11 +915,20 @@ final class TokenProFrame extends JFrame {
                 if (string(asset.get("name")).endsWith(marker)) { downloadUrl = string(asset.get("browser_download_url")); break; }
             }
         }
-        return new ReleaseInfo(version, downloadUrl, sha256);
+        if (incrementalUrl.isBlank() && release.get("assets") instanceof List<?> assets) {
+            for (Object raw : assets) {
+                Map<String, Object> asset = Json.object(raw);
+                if (string(asset.get("name")).endsWith("-update.jar")) {
+                    incrementalUrl = string(asset.get("browser_download_url"));
+                    break;
+                }
+            }
+        }
+        return new ReleaseInfo(version, downloadUrl, sha256, incrementalUrl, incrementalSha256);
     }
 
     private void installUpdate(ReleaseInfo release) {
-        if (release.downloadUrl().isBlank()) {
+        if (release.preferredUrl().isBlank()) {
             setUpdateButtonState("check", "检查更新 v" + Main.VERSION);
             status("当前系统暂未提供自动更新包");
             return;
@@ -922,7 +940,7 @@ final class TokenProFrame extends JFrame {
         progress.setVisible(true);
         new SwingWorker<Path, Integer>() {
             protected Path doInBackground() throws Exception {
-                URI uri = URI.create(release.downloadUrl());
+                URI uri = URI.create(release.preferredUrl());
                 if (!"https".equalsIgnoreCase(uri.getScheme())) throw new IllegalStateException("更新地址不是安全的 HTTPS 链接");
                 String suffix = uri.getPath().replaceFirst("^.*(?=\\.)", "");
                 Path target = Files.createTempFile("TokenPro-" + release.version() + "-", suffix);
@@ -943,12 +961,13 @@ final class TokenProFrame extends JFrame {
                         if (total > 0) publish((int) Math.min(99, downloaded * 100 / total));
                     }
                 }
-                if (Files.size(target) < 1_000_000) {
+                long minimumSize = release.hasIncrementalUpdate() ? 50_000 : 1_000_000;
+                if (Files.size(target) < minimumSize) {
                     Files.deleteIfExists(target);
                     throw new IllegalStateException("更新包下载不完整");
                 }
                 publish(100);
-                if (!release.sha256().isBlank() && !release.sha256().equalsIgnoreCase(sha256(target))) {
+                if (!release.preferredSha256().isBlank() && !release.preferredSha256().equalsIgnoreCase(sha256(target))) {
                     Files.deleteIfExists(target);
                     throw new IllegalStateException("更新包校验失败，已停止安装");
                 }
@@ -964,7 +983,8 @@ final class TokenProFrame extends JFrame {
                     Path installer = get();
                     progress.installing();
                     status("正在安装 TokenPro " + release.version() + "，程序即将重启…");
-                    Updater.install(installer);
+                    if (release.hasIncrementalUpdate()) Updater.installIncremental(installer, release.version());
+                    else Updater.install(installer);
                     dispose();
                     System.exit(0);
                 } catch (Exception ex) {

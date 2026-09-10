@@ -3,6 +3,7 @@ Set-Location $PSScriptRoot
 if (-not $env:JAVA_HOME) { throw "JDK 21 is required. Set JAVA_HOME first." }
 Remove-Item -Recurse -Force build/classes -ErrorAction SilentlyContinue
 Remove-Item -Force build/TokenPro.jar -ErrorAction SilentlyContinue
+Remove-Item -Force build/TokenPro-update.jar -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force build/classes | Out-Null
 $sources = Get-ChildItem -Recurse src/main/java -Filter *.java | ForEach-Object FullName
 & "$env:JAVA_HOME/bin/javac.exe" --release 21 --add-modules jdk.httpserver -encoding UTF-8 -d build/classes $sources
@@ -27,9 +28,10 @@ Copy-Item ../Resources/PlusLucide.png build/classes/assets/PlusLucide.png
 @"
 Main-Class: work.tokenpro.client.Main
 Implementation-Title: TokenPro
-Implementation-Version: 1.2.36
+Implementation-Version: 1.2.37
 
 "@ | Set-Content -Encoding ascii build/manifest.mf
 & "$env:JAVA_HOME/bin/jar.exe" --create --file build/TokenPro.jar --manifest build/manifest.mf -C build/classes .
+& "$env:JAVA_HOME/bin/jar.exe" --create --file build/TokenPro-update.jar --no-manifest -C build/classes work
 & "$env:JAVA_HOME/bin/java.exe" -jar build/TokenPro.jar --self-test
-Write-Host "Built java-client/build/TokenPro.jar"
+Write-Host "Built java-client/build/TokenPro.jar and TokenPro-update.jar"
