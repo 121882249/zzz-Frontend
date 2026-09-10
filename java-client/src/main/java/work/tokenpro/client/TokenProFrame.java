@@ -52,7 +52,7 @@ final class TokenProFrame extends JFrame {
     private final CardLayout pages = new CardLayout();
     private final JPanel pageHost = new JPanel(pages);
     private final Map<String, NavButton> navButtons = new LinkedHashMap<>();
-    private final JLabel headerTitle = new JLabel("TokenPro");
+    private final GradientTitleLabel headerTitle = new GradientTitleLabel("https://tokenpro.work");
     private final JLabel headerUser = new JLabel("登录账户");
     private final JLabel accountEmail = new JLabel("登录账户");
     private final JLabel headerBalance = new JLabel("—");
@@ -150,9 +150,9 @@ final class TokenProFrame extends JFrame {
 
     private JComponent header() {
         GradientPanel panel = new GradientPanel(); panel.setLayout(new BorderLayout(0, 16)); panel.setBorder(new EmptyBorder(23, 28, 20, 28));
-        JPanel title = transparent(new BorderLayout()); headerTitle.setFont(appFont(23, Font.BOLD)); title.add(headerTitle, BorderLayout.WEST);
+        JPanel title = transparent(new BorderLayout()); headerTitle.setFont(appFont(23, Font.BOLD)); headerTitle.setIcon(resourceIconContained("ModelUniverseVortex.png", 36, 24, false)); headerTitle.setIconTextGap(10); headerTitle.setGradient(true); headerTitle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)); headerTitle.setToolTipText("打开 TokenPro 主页"); headerTitle.addMouseListener(new MouseAdapter() { @Override public void mouseClicked(MouseEvent event) { if ("https://tokenpro.work".equals(headerTitle.getText())) browse("https://tokenpro.work"); } }); title.add(headerTitle, BorderLayout.WEST);
         JPanel right = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        updateButton = soft("检查更新"); updateButton.setIcon(resourceIconContained("RefreshCwLucide.png", 15, 15, true)); updateButton.addActionListener(e -> checkForUpdates(updateButton)); right.add(updateButton);
+        updateButton = soft("检查更新 v" + Main.VERSION); updateButton.setIcon(resourceIconContained("RefreshCwLucide.png", 15, 15, true)); updateButton.addActionListener(e -> checkForUpdates(updateButton)); right.add(updateButton);
         JButton user = soft("登录账户"); user.setIcon(resourceIconContained("CircleUserLucide.png", 17, 17, true)); user.addActionListener(e -> openAccount()); headerUser.addPropertyChangeListener("text", e -> user.setText(headerUser.getText())); right.add(user);
         title.add(right, BorderLayout.EAST); panel.add(title, BorderLayout.NORTH);
         Dimension headerCardSize = new Dimension(430, 64);
@@ -670,7 +670,13 @@ final class TokenProFrame extends JFrame {
 
     private void showPage(String page) {
         pages.show(pageHost, page);
-        headerTitle.setText(page.equals("首页") ? "TokenPro" : page);
+        boolean homePage = page.equals("首页");
+        headerTitle.setText(homePage ? "https://tokenpro.work" : page);
+        headerTitle.setIcon(homePage ? resourceIconContained("ModelUniverseVortex.png", 36, 24, false) : null);
+        headerTitle.setGradient(homePage);
+        headerTitle.setForeground(Color.WHITE);
+        headerTitle.setCursor(Cursor.getPredefinedCursor(homePage ? Cursor.HAND_CURSOR : Cursor.DEFAULT_CURSOR));
+        headerTitle.setToolTipText(homePage ? "打开 TokenPro 主页" : null);
         if (dashboardHeader != null) dashboardHeader.setVisible(!page.equals("我的账户"));
         navButtons.forEach((name, button) -> button.setSelected(name.equals(page)));
     }
@@ -842,7 +848,7 @@ final class TokenProFrame extends JFrame {
                 return payload.isBlank() ? new ReleaseInfo("", "", "") : releaseForPlatform(payload, Updater.platformKey());
             }
             protected void done() {
-                if (button != null) { button.setEnabled(true); button.setText("检查更新"); }
+                if (button != null) { button.setEnabled(true); button.setText("检查更新 v" + Main.VERSION); }
                 try {
                     ReleaseInfo release = get();
                     if (release.version().isBlank()) {
@@ -1304,6 +1310,43 @@ final class TokenProFrame extends JFrame {
             g.drawLine(size / 3, middle, size - 2, middle);
             g.drawLine(size - 5, middle - 3, size - 2, middle);
             g.drawLine(size - 5, middle + 3, size - 2, middle);
+            g.dispose();
+        }
+    }
+
+    private static final class GradientTitleLabel extends JLabel {
+        private boolean gradient;
+
+        GradientTitleLabel(String text) { super(text); }
+
+        void setGradient(boolean gradient) {
+            this.gradient = gradient;
+            repaint();
+        }
+
+        @Override protected void paintComponent(Graphics graphics) {
+            if (!gradient) {
+                super.paintComponent(graphics);
+                return;
+            }
+            Color foreground = getForeground();
+            setForeground(new Color(0, 0, 0, 0));
+            super.paintComponent(graphics);
+            setForeground(foreground);
+
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            Insets insets = getInsets();
+            Icon icon = getIcon();
+            int textX = insets.left + (icon == null ? 0 : icon.getIconWidth() + getIconTextGap());
+            FontMetrics metrics = g.getFontMetrics(getFont());
+            int baseline = (getHeight() - metrics.getHeight()) / 2 + metrics.getAscent();
+            g.setFont(getFont());
+            g.setPaint(new LinearGradientPaint(textX, 0, Math.max(textX + 1, getWidth()), 0,
+                new float[]{0f, .42f, .72f, 1f},
+                new Color[]{new Color(104, 229, 205), new Color(92, 164, 255), new Color(153, 105, 255), new Color(230, 151, 255)}));
+            g.drawString(getText(), textX, baseline);
             g.dispose();
         }
     }
