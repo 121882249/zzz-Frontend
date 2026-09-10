@@ -7,7 +7,7 @@ final class ClaudeDesktopConfig {
     private static final String STATE_FILE = "claude-desktop-state.json";
     private ClaudeDesktopConfig() {}
 
-    static void install(SecureStore store, ClaudeBridgeConfig bridge) throws Exception {
+    static void install(SecureStore store, ClaudeBridgeConfig bridge, String accountLabel) throws Exception {
         Path library = library();
         Files.createDirectories(library);
         ensureThirdPartyMode(library.getParent());
@@ -22,7 +22,7 @@ final class ClaudeDesktopConfig {
         writeJson(library.resolve(official + ".json"), Map.of());
         List<Map<String, Object>> models = bridge.routes().stream().map(route -> Map.<String, Object>of("name", route.alias(), "labelOverride", route.name())).toList();
         Map<String, Object> profile = new LinkedHashMap<>();
-        profile.put("deploymentDisplayName", "TokenPro"); profile.put("endUserAttribution", false);
+        profile.put("deploymentDisplayName", deploymentDisplayName(accountLabel)); profile.put("endUserAttribution", false);
         profile.put("inferenceProvider", "gateway"); profile.put("inferenceGatewayBaseUrl", bridge.baseUrl());
         profile.put("inferenceGatewayAuthScheme", "bearer"); profile.put("inferenceCredentialKind", "helper-script");
         profile.put("inferenceCredentialHelper", RuntimeCommand.helperExecutable(store));
@@ -59,6 +59,10 @@ final class ClaudeDesktopConfig {
             : new LinkedHashMap<>();
         config.put("deploymentMode", "3p");
         writeJson(path, config);
+    }
+
+    static String deploymentDisplayName(String accountLabel) {
+        return accountLabel == null || accountLabel.isBlank() ? "用户账户" : accountLabel.trim();
     }
 
     private static Map<String, Object> readMeta(Path library) throws Exception {

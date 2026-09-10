@@ -322,7 +322,7 @@ final class TokenProFrame extends JFrame {
 
     private JComponent connectionPanel() {
         JPanel panel = vertical();
-        panel.add(pageHeading("选择 Codex 模型", "Image Model 必选 1 个；LLM Model 至少选择 1 个，可同时选择多个。"));
+        panel.add(pageHeading("选择 Codex 模型", "全局至少选择 1 个模型；生图模型可独立直接生图。"));
         panel.add(Box.createVerticalStrut(15));
         JLabel hint = new JLabel("专用 Key 保存在当前系统账户的 TokenPro 安全目录中，可随时恢复官方配置。"); hint.setForeground(MUTED); panel.add(hint); panel.add(Box.createVerticalStrut(10));
         JButton load = soft("刷新可用分组与模型"); load.setAlignmentX(Component.LEFT_ALIGNMENT); load.addActionListener(e -> loadCodexModels()); panel.add(load);
@@ -361,23 +361,22 @@ final class TokenProFrame extends JFrame {
         selected = uniqueModels(selected);
         List<PricedModel> chatModels = selected.stream().filter(model -> !model.isImageGeneration()).toList();
         List<PricedModel> imageModels = selected.stream().filter(PricedModel::isImageGeneration).toList();
-        if (chatModels.isEmpty() || imageModels.size() != 1) { error(new IllegalStateException("请选择 1 个 Image Model，并至少选择 1 个 LLM Model")); return; }
-        PricedModel imageModel = imageModels.getFirst();
-        List<PricedModel> chosen = new ArrayList<>();
-        chosen.add(imageModel);
-        chosen.addAll(chatModels);
+        if (selected.isEmpty()) { error(new IllegalStateException("请全局至少选择 1 个模型")); return; }
+        PricedModel imageModel = imageModels.isEmpty() ? null : imageModels.getFirst();
+        List<PricedModel> chosen = selected;
         async("正在使用全局 Key 配置 Codex…", () -> {
             ApiClient.ManagedKey managed = api.globalKey(accessToken);
             codex.apply("https://tokenpro.work/v1", chosen, managed.key(), string(sessionUser.get("email")));
             Map<String, Object> saved = new LinkedHashMap<>();
-            saved.put("default_model", chatModels.getFirst().name());
+            saved.put("default_model", (chatModels.isEmpty() ? imageModel : chatModels.getFirst()).name());
             saved.put("models", modelRows(chosen));
-            saved.put("image_model", imageModel.name());
+            saved.put("image_model", imageModel == null ? "" : imageModel.name());
+            saved.put("image_models", imageModels.stream().map(PricedModel::name).toList());
             saved.put("key_id", managed.id());
             store.write("codex-selected.json", Json.stringify(saved));
             return chosen;
         }, configured -> {
-            homeCodexStatus.setText(chatModels.size() + " LLM + " + imageModel.displayName());
+            homeCodexStatus.setText(codexSelectionStatus(chatModels.size(), imageModels.size(), imageModel == null ? "" : imageModel.name()));
             if (codexLaunch != null) codexLaunch.setEnabled(true);
             status("Codex 已配置 " + configured.size() + " 个模型");
             openApp("Codex");
@@ -455,10 +454,11 @@ final class TokenProFrame extends JFrame {
         selected = uniqueModels(selected);
         if (selected.isEmpty()) { error(new IllegalStateException("请至少选择一个模型")); return; }
         List<PricedModel> chosen = selected;
+        String accountLabel = string(sessionUser.get("email"));
         async("正在使用全局 Key 配置 Claude…", () -> {
             ApiClient.ManagedKey managed = api.globalKey(accessToken);
             ClaudeBridgeConfig config = ClaudeBridgeConfig.create(accountId, accessToken, managed, chosen);
-            config.save(store); ClaudeDesktopConfig.install(store, config); ClaudeBridgeManager.ensureRunning(store); return config;
+            config.save(store); ClaudeDesktopConfig.install(store, config, accountLabel); ClaudeBridgeManager.ensureRunning(store); return config;
         }, config -> {
             bridgeStatus.setText("桥接状态：运行中 · " + config.routes().size() + " 个模型 · " + config.baseUrl());
             homeClaudeStatus.setText("已选 " + config.routes().size() + " 个模型");
@@ -485,11 +485,12 @@ final class TokenProFrame extends JFrame {
 
     private void openClaude() {
         status("正在打开 Claude…");
+        String accountLabel = string(sessionUser.get("email"));
         new SwingWorker<ClaudeBridgeConfig, Void>() {
             protected ClaudeBridgeConfig doInBackground() throws Exception {
                 try {
                     ClaudeBridgeConfig config = ClaudeBridgeConfig.load(store);
-                    ClaudeDesktopConfig.install(store, config);
+                    ClaudeDesktopConfig.install(store, config, accountLabel);
                     ClaudeBridgeManager.ensureRunning(store);
                     if (!Platform.openClaudeThirdParty()) throw new IllegalStateException("无法打开 Claude");
                     return config;
@@ -537,11 +538,10 @@ final class TokenProFrame extends JFrame {
             Map<String, Object> saved = Json.object(Json.parse(raw.get()));
             if (saved.get("models") instanceof List<?> models && !models.isEmpty()) {
                 String imageModel = string(saved.get("image_model"));
-                boolean imageEnabled = !imageModel.isBlank();
-                int chatCount = imageEnabled ? Math.max(0, models.size() - 1) : models.size();
-                homeCodexStatus.setText(chatCount > 0 && imageEnabled
-                    ? chatCount + " LLM + " + PricedModel.displayCase(imageModel)
-                    : "请重新选择模型");
+                int imageCount = saved.get("image_models") instanceof List<?> imageModels
+                    ? imageModels.size() : imageModel.isBlank() ? 0 : 1;
+                int chatCount = Math.max(0, models.size() - imageCount);
+                homeCodexStatus.setText(codexSelectionStatus(chatCount, imageCount, imageModel));
             }
             else {
                 String selected = string(saved.get("model")); if (selected.isBlank()) throw new IllegalStateException("未选择");
@@ -549,6 +549,14 @@ final class TokenProFrame extends JFrame {
             }
             if (codexLaunch != null) codexLaunch.setEnabled(true);
         } catch (Exception ignored) { homeCodexStatus.setText("请先选择模型"); if (codexLaunch != null) codexLaunch.setEnabled(false); }
+    }
+
+    private static String codexSelectionStatus(int chatCount, int imageCount, String firstImageModel) {
+        if (chatCount > 0 && imageCount > 0) return chatCount + " 个主模型 + " + imageCount + " 个生图模型";
+        if (chatCount > 0) return chatCount + " 个主模型";
+        if (imageCount > 1) return imageCount + " 个生图模型 · 直接生图";
+        if (imageCount == 1) return PricedModel.displayCase(firstImageModel) + " · 直接生图";
+        return "请重新选择模型";
     }
 
     private Set<String> selectedModelIds(String client) {

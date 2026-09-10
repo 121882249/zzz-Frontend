@@ -21,20 +21,17 @@ final class CodexConfig {
         if (models.isEmpty()) throw new IllegalArgumentException("请至少选择一个 Codex 模型");
         List<PricedModel> chatModels = models.stream().filter(model -> !model.isImageGeneration()).toList();
         List<PricedModel> imageModels = models.stream().filter(PricedModel::isImageGeneration).toList();
-        if (chatModels.isEmpty()) throw new IllegalArgumentException("请至少选择 1 个 LLM Model");
-        if (imageModels.size() != 1) throw new IllegalArgumentException("请选择 1 个 Image Model");
-        PricedModel imageModel = imageModels.getFirst();
-        PricedModel primaryModel = chatModels.getFirst();
+        PricedModel imageModel = imageModels.isEmpty() ? null : imageModels.getFirst();
+        PricedModel primaryModel = chatModels.isEmpty() ? imageModel : chatModels.getFirst();
         required(primaryModel.name(), "模型 ID");
         Path target = Platform.codexConfig();
         Files.createDirectories(target.getParent());
         String current = Files.exists(target) ? Files.readString(target) : "";
         if (store.read("codex-original.toml").isEmpty()) store.write("codex-original.toml", current);
         String clean = stripRootOverrides(stripManaged(current));
-        // The Codex picker only needs the allowed LLMs. The selected image
-        // model stays behind the scenes in the provider header and is paired
-        // with whichever LLM is active.
-        Path catalog = writeModelCatalog(chatModels);
+        // Image models stay in their own picker group and are also written to
+        // Codex's catalog so they can run directly without a selected LLM.
+        Path catalog = writeModelCatalog(models);
         String block = managedBlock(url, primaryModel, imageModel, catalog, key.trim(), actor);
         writeAtomic(target, block + (clean.isBlank() ? "" : "\n" + clean.stripLeading()));
     }

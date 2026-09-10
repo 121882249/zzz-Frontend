@@ -26,6 +26,8 @@ final class SelfTest {
         String emailActor = CodexConfig.withActor(managedActor, "user@example.com");
         check(emailActor.contains("name = \"user@example.com\"") && emailActor.contains("\"x-openai-actor-authorization\" = \"user@example.com\""), "existing Codex actor migrates to account email"); passed++;
         check(Platform.dataDirectory().endsWith("TokenPro"), "platform data directory"); passed++;
+        check("user@example.com".equals(ClaudeDesktopConfig.deploymentDisplayName(" user@example.com "))
+            && "用户账户".equals(ClaudeDesktopConfig.deploymentDisplayName("")), "Claude account display name"); passed++;
         PricedModel priced = new PricedModel("gpt-test", "openai", "GPT", 16);
         check("GPT-Test".equals(priced.displayName()), "GPT model display name"); passed++;
         check("GPT-Image-2.5-Sunburst".equals(new PricedModel("gpt-image-2.5-sunburst", "openai", "gpt models", 17).displayName()), "GPT acronym and model title case"); passed++;
@@ -92,9 +94,9 @@ final class SelfTest {
         check(ModelPickerDialog.groupRank(new PricedModel("gemini-3", "google", "Gemini", 3))
             < ModelPickerDialog.groupRank(new PricedModel("mistral-large", "mistral", "Mistral", 4)), "other groups follow Gemini"); passed++;
         check(ModuleLayer.boot().findModule("jdk.crypto.ec").isPresent(), "packaged runtime supports ECDSA TLS certificates"); passed++;
-        String releasePayload = "{\"tag_name\":\"v1.2.31\",\"downloads\":{\"windows-x64\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe\",\"sha256\":\"abc\"}}}";
+        String releasePayload = "{\"tag_name\":\"v1.2.32\",\"downloads\":{\"windows-x64\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe\",\"sha256\":\"abc\"}}}";
         TokenProFrame.ReleaseInfo release = TokenProFrame.releaseForPlatform(releasePayload, "windows-x64");
-        check("1.2.31".equals(release.version()) && release.downloadUrl().endsWith(".exe") && "abc".equals(release.sha256()), "automatic update manifest"); passed++;
+        check("1.2.32".equals(release.version()) && release.downloadUrl().endsWith(".exe") && "abc".equals(release.sha256()), "automatic update manifest"); passed++;
         check(Updater.platformKey().startsWith(Platform.OS_KIND == Platform.OS.MAC ? "macos-" : Platform.OS_KIND == Platform.OS.WINDOWS ? "windows-" : "linux-"), "automatic update platform mapping"); passed++;
         ClaudeBridgeConfig.Route route = ClaudeBridgeConfig.Route.from(priced);
         check(route.alias().matches("claude-tokenpro-[0-9a-f]{24}"), "Claude alias"); passed++;

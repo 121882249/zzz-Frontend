@@ -16,7 +16,6 @@ final class ModelPickerDialog extends JDialog {
     private static final Color TEXT = new Color(242, 245, 255);
     private static final Color MUTED = new Color(180, 190, 220);
     private final List<ModelCheckBox> choices = new ArrayList<>();
-    private final List<ModelCheckBox> imageChoices = new ArrayList<>();
 
     ModelPickerDialog(JFrame owner, String client, List<PricedModel> models,
                       Set<String> selectedIds, Consumer<List<PricedModel>> onApply) {
@@ -56,7 +55,7 @@ final class ModelPickerDialog extends JDialog {
         titleLine.add(title, BorderLayout.WEST);
         titleLine.add(closeControl(), BorderLayout.EAST);
         boolean codex = "Codex".equals(client);
-        JLabel detail = new JLabel(codex ? "Image Model 选择 1 个，LLM Model 至少选择 1 个" : "LLM Model 至少选择 1 个，可同时选择多个");
+        JLabel detail = new JLabel(codex ? "全局至少选择 1 个模型；生图模型可独立直接生图" : "LLM Model 至少选择 1 个，可同时选择多个");
         detail.setFont(font(12, Font.PLAIN));
         detail.setForeground(MUTED);
         header.add(titleLine);
@@ -72,10 +71,10 @@ final class ModelPickerDialog extends JDialog {
             if (!supportsClient(model, client) || model.isImageGeneration()) continue;
             grouped.computeIfAbsent(groupKey(model), ignored -> new ArrayList<>()).add(model);
         }
-        if (codex) addImageChoices(groups, models, selectedIds);
         List<List<PricedModel>> orderedGroups = grouped.values().stream()
             .sorted((left, right) -> compareGroups(left, right, client))
             .toList();
+        boolean imageGroupAdded = false;
         for (List<PricedModel> groupModels : orderedGroups) {
             groupModels.sort(ApiClient::compareSelectablePriceDescending);
             PricedModel first = groupModels.getFirst();
@@ -104,13 +103,19 @@ final class ModelPickerDialog extends JDialog {
             group.setMaximumSize(new Dimension(Integer.MAX_VALUE, group.getPreferredSize().height));
             groups.add(group);
             groups.add(Box.createVerticalStrut(10));
+            // The image models remain their own independent group. Their visual
+            // position is immediately below the first GPT/OpenAI group only.
+            if (codex && !imageGroupAdded && !first.subscription() && isGptGroup(first)) {
+                addImageChoices(groups, models, selectedIds);
+                imageGroupAdded = true;
+            }
         }
+        if (codex && !imageGroupAdded) addImageChoices(groups, models, selectedIds);
         if (!codex && choices.stream().noneMatch(AbstractButton::isSelected)) {
             choices.stream().findFirst().ifPresent(choice -> choice.setSelected(true));
         }
-        if (codex && choices.stream().noneMatch(choice -> !choice.model().isImageGeneration() && choice.isSelected())) {
-            choices.stream().filter(choice -> !choice.model().isImageGeneration()).findFirst()
-                .ifPresent(choice -> choice.setSelected(true));
+        if (codex && choices.stream().noneMatch(AbstractButton::isSelected)) {
+            choices.stream().findFirst().ifPresent(choice -> choice.setSelected(true));
         }
         if (choices.isEmpty()) {
             JLabel empty = new JLabel("当前账户没有可用模型");
@@ -132,7 +137,7 @@ final class ModelPickerDialog extends JDialog {
         Runnable updateCount = () -> {
             long imageCount = selected().stream().filter(PricedModel::isImageGeneration).count();
             long chatCount = selected().size() - imageCount;
-            count.setText(codex ? "Image Model 已选 " + imageCount + " 个 · LLM Model 已选 " + chatCount + " 个" : "已选择 " + selected().size() + " 个模型");
+            count.setText(codex ? "主模型已选 " + chatCount + " 个   生图模型已选 " + imageCount + " 个" : "已选择 " + selected().size() + " 个模型");
         };
         choices.forEach(choice -> choice.addActionListener(event -> updateCount.run()));
         updateCount.run();
@@ -144,9 +149,8 @@ final class ModelPickerDialog extends JDialog {
         apply.addActionListener(event -> {
             List<PricedModel> selected = selected();
             long imageCount = selected.stream().filter(PricedModel::isImageGeneration).count();
-            long chatCount = selected.size() - imageCount;
-            if (selected.isEmpty() || codex && (chatCount < 1 || imageCount != 1)) {
-                JOptionPane.showMessageDialog(this, codex ? "请选择 1 个 Image Model，并至少选择 1 个 LLM Model" : "请至少选择一个模型", "TokenPro", JOptionPane.WARNING_MESSAGE);
+            if (selected.isEmpty()) {
+                JOptionPane.showMessageDialog(this, codex ? "请全局至少选择 1 个模型；生图模型可自由多选" : "请至少选择一个模型", "TokenPro", JOptionPane.WARNING_MESSAGE);
                 return;
             }
             dispose();
@@ -179,7 +183,6 @@ final class ModelPickerDialog extends JDialog {
         for (PricedModel model : imageModels) {
             grouped.computeIfAbsent(groupKey(model), ignored -> new ArrayList<>()).add(model);
         }
-        boolean restored = false;
         for (List<PricedModel> groupModels : grouped.values()) {
             groupModels.sort(ApiClient::compareSelectablePriceDescending);
             boolean subscription = groupModels.getFirst().subscription();
@@ -198,22 +201,19 @@ final class ModelPickerDialog extends JDialog {
             imageGroup.add(Box.createVerticalStrut(8));
             for (PricedModel model : groupModels) {
                 ModelCheckBox choice = new ModelCheckBox(model);
-                boolean selected = !restored && matchesSelectedImage(model, selectedIds);
-                choice.setSelected(selected);
-                restored |= selected;
-                imageChoices.add(choice);
+                choice.setSelected(matchesSelectedImage(model, selectedIds));
                 choices.add(choice);
-                choice.addActionListener(event -> {
-                    if (!choice.isSelected()) return;
-                    for (ModelCheckBox other : imageChoices) if (other != choice) other.setSelected(false);
-                });
                 imageGroup.add(choice);
             }
             imageGroup.setMaximumSize(new Dimension(Integer.MAX_VALUE, imageGroup.getPreferredSize().height));
             groups.add(imageGroup);
             groups.add(Box.createVerticalStrut(14));
         }
-        if (!restored) imageChoices.getFirst().setSelected(true);
+    }
+
+    private static boolean isGptGroup(PricedModel model) {
+        String value = (model.name() + " " + model.platform() + " " + model.groupName()).toLowerCase(Locale.ROOT);
+        return value.contains("gpt") || value.contains("openai");
     }
 
     private List<PricedModel> selected() {
