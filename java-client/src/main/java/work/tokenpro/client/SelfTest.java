@@ -22,6 +22,9 @@ final class SelfTest {
         check(restoredConfig.startsWith("model = \"old\"\nmodel_provider = \"openai\"\n"), "official root model settings restored"); passed++;
         check(restoredConfig.contains("apps = false") && restoredConfig.contains("[new_setting]"), "restore preserves newer Codex settings"); passed++;
         check("https://tokenpro.work/v1".equals(CodexConfig.providerBaseUrl("https://tokenpro.work/v1")), "Codex provider keeps v1 route"); passed++;
+        String managedActor = "# >>> TokenPro managed >>>\n[model_providers.custom]\nname = \"Codex\"\nhttp_headers = { \"x-openai-actor-authorization\" = \"Codex\", \"x-tokenpro-image-model\" = \"gpt-image\" }\n# <<< TokenPro managed <<<\n";
+        String emailActor = CodexConfig.withActor(managedActor, "user@example.com");
+        check(emailActor.contains("name = \"user@example.com\"") && emailActor.contains("\"x-openai-actor-authorization\" = \"user@example.com\""), "existing Codex actor migrates to account email"); passed++;
         check(Platform.dataDirectory().endsWith("TokenPro"), "platform data directory"); passed++;
         PricedModel priced = new PricedModel("gpt-test", "openai", "GPT", 16);
         check("GPT-Test".equals(priced.displayName()), "GPT model display name"); passed++;
@@ -71,14 +74,20 @@ final class SelfTest {
         PricedModel cheaperImage = new PricedModel("gpt-image-2", "openai", "Image", 60, "image", null, null,
             List.of(new PricedModel.ImagePrice("1K", 0.01), new PricedModel.ImagePrice("2K", 0.02)));
         check(ApiClient.compareSelectablePriceDescending(imagePriced, cheaperImage) < 0, "image models sort by displayed per-image price descending"); passed++;
+        Map<String, Object> subscription = Map.of("monthly_limit_usd", 100d, "monthly_used_usd", 37.5d);
+        check(Math.abs(ApiClient.subscriptionRemaining(subscription) - 62.5d) < 1e-9, "subscription remaining balance"); passed++;
+        PricedModel richSubscription = new PricedModel("claude-sub", "anthropic", "Gold", 8, "token", 1d, 2d, List.of(), true, 80d);
+        PricedModel lowSubscription = new PricedModel("gpt-sub", "openai", "Silver", 9, "token", 1d, 2d, List.of(), true, 20d);
+        check(ModelPickerDialog.compareGroups(List.of(richSubscription), List.of(lowSubscription)) < 0, "subscription groups sort by remaining balance"); passed++;
+        check(ModelPickerDialog.compareGroups(List.of(lowSubscription), List.of(priced)) < 0, "subscription group precedes regular LLM groups"); passed++;
         check(ModelPickerDialog.groupRank(new PricedModel("gpt-5.6", "openai", "GPT", 1))
             < ModelPickerDialog.groupRank(new PricedModel("claude-5", "anthropic", "Claude", 2)), "GPT groups precede Claude"); passed++;
         check(ModelPickerDialog.groupRank(new PricedModel("gemini-3", "google", "Gemini", 3))
             < ModelPickerDialog.groupRank(new PricedModel("mistral-large", "mistral", "Mistral", 4)), "other groups follow Gemini"); passed++;
         check(ModuleLayer.boot().findModule("jdk.crypto.ec").isPresent(), "packaged runtime supports ECDSA TLS certificates"); passed++;
-        String releasePayload = "{\"tag_name\":\"v1.2.29\",\"downloads\":{\"windows-x64\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe\",\"sha256\":\"abc\"}}}";
+        String releasePayload = "{\"tag_name\":\"v1.2.30\",\"downloads\":{\"windows-x64\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe\",\"sha256\":\"abc\"}}}";
         TokenProFrame.ReleaseInfo release = TokenProFrame.releaseForPlatform(releasePayload, "windows-x64");
-        check("1.2.29".equals(release.version()) && release.downloadUrl().endsWith(".exe") && "abc".equals(release.sha256()), "automatic update manifest"); passed++;
+        check("1.2.30".equals(release.version()) && release.downloadUrl().endsWith(".exe") && "abc".equals(release.sha256()), "automatic update manifest"); passed++;
         check(Updater.platformKey().startsWith(Platform.OS_KIND == Platform.OS.MAC ? "macos-" : Platform.OS_KIND == Platform.OS.WINDOWS ? "windows-" : "linux-"), "automatic update platform mapping"); passed++;
         ClaudeBridgeConfig.Route route = ClaudeBridgeConfig.Route.from(priced);
         check(route.alias().matches("claude-tokenpro-[0-9a-f]{24}"), "Claude alias"); passed++;

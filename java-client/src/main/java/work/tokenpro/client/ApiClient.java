@@ -19,6 +19,10 @@ final class ApiClient {
 
     Map<String, Object> me(String token) throws Exception { return request("/auth/me", "GET", null, token); }
 
+    Map<String, Object> subscriptionSummary(String token) throws Exception {
+        return request("/subscriptions/summary", "GET", null, token);
+    }
+
     String browserLoginUrl(String token, String targetUrl) throws Exception {
         URI target = URI.create(targetUrl);
         if (!"https".equalsIgnoreCase(target.getScheme()) || !"tokenpro.work".equalsIgnoreCase(target.getHost())) {
@@ -51,6 +55,19 @@ final class ApiClient {
             Long id = integer(group.get("id"));
             if (id != null) available.put(id, group);
         }
+        Map<Long, Double> subscriptionBalances = new HashMap<>();
+        try {
+            Object raw = subscriptionSummary(token).get("subscriptions");
+            if (raw instanceof List<?> rows) for (Object value : rows) {
+                Map<String, Object> subscription = Json.object(value);
+                Long groupId = integer(subscription.get("group_id"));
+                if (groupId != null && "active".equalsIgnoreCase(text(subscription.get("status")))) {
+                    subscriptionBalances.merge(groupId, subscriptionRemaining(subscription), Math::max);
+                }
+            }
+        } catch (Exception ignored) {
+            // Subscription decoration must never prevent the model catalog from loading.
+        }
         List<PricedModel> result = new ArrayList<>();
         Object rawGroups = plaza.get("groups");
         if (!(rawGroups instanceof List<?> groups)) throw new IllegalStateException("模型广场格式不兼容");
@@ -71,6 +88,8 @@ final class ApiClient {
                 Map<String, Object> pricing = Json.object(model.get("pricing"));
                 Map<String, Object> officialPricing = model.get("official_pricing") instanceof Map<?, ?> value ? Json.object(value) : Map.of();
                 String billingMode = text(pricing.getOrDefault("billing_mode", "token"));
+                boolean subscription = "subscription".equalsIgnoreCase(text(allowed.get("subscription_type")))
+                    || subscriptionBalances.containsKey(groupId);
                 result.add(new PricedModel(
                     modelName,
                     text(model.getOrDefault("platform", groupPlatform)),
@@ -79,13 +98,25 @@ final class ApiClient {
                     billingMode,
                     discountedInputPrice(decimal(pricing.get("input_price")), billingMode, effectiveRate),
                     decimal(officialPricing.get("output_price")),
-                    imagePrices(pricing)
+                    imagePrices(pricing),
+                    subscription,
+                    subscriptionBalances.getOrDefault(groupId, 0d)
                 ));
             }
         }
         result.sort(Comparator.comparingLong(PricedModel::groupId).reversed()
             .thenComparing(ApiClient::compareSelectablePriceDescending));
         return result;
+    }
+
+    static double subscriptionRemaining(Map<String, Object> item) {
+        for (String period : List.of("monthly", "weekly", "daily")) {
+            Double limit = decimal(item.get(period + "_limit_usd"));
+            if (limit == null || limit <= 0) continue;
+            Double used = decimal(item.get(period + "_used_usd"));
+            return Math.max(0d, limit - (used == null ? 0d : used));
+        }
+        return 0d;
     }
 
     private static List<PricedModel.ImagePrice> imagePrices(Map<String, Object> pricing) {

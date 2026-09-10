@@ -57,6 +57,7 @@ final class TokenProFrame extends JFrame {
     private final JLabel accountEmail = new JLabel("登录账户");
     private final JLabel headerBalance = new JLabel("—");
     private final JLabel accountBalance = new JLabel("—");
+    private final JPanel subscriptionSlot = transparent(new FlowLayout(FlowLayout.LEFT, 0, 0));
     private final JLabel homeClaudeStatus = new ClientStatusLabel("请先选择模型");
     private final JLabel homeCodexStatus = new ClientStatusLabel("请先选择模型");
     private JButton codexLaunch;
@@ -155,8 +156,9 @@ final class TokenProFrame extends JFrame {
         title.add(right, BorderLayout.EAST); panel.add(title, BorderLayout.NORTH);
         RoundedPanel wallet = new RoundedPanel(20, new Color(22, 38, 78, 228)); wallet.setLayout(new FlowLayout(FlowLayout.LEFT, 14, 10)); wallet.setBorder(new EmptyBorder(0, 7, 0, 7));
         JPanel captions = transparent(); captions.setLayout(new BoxLayout(captions, BoxLayout.Y_AXIS)); JLabel balanceText = new JLabel("钱包余额"); balanceText.setFont(appFont(12, Font.PLAIN)); balanceText.setForeground(MUTED); JLabel rate = new JLabel("充值比例  1￥ = 1$"); rate.setFont(appFont(10, Font.PLAIN)); rate.setForeground(MUTED); captions.add(balanceText); captions.add(rate); wallet.add(captions);
-        headerBalance.setFont(appFont(26, Font.BOLD)); wallet.add(headerBalance); JButton refresh = soft(""); refresh.setToolTipText("刷新余额"); refresh.setIcon(resourceIconContained("RefreshCwLucide.png", 15, 15, true)); refresh.addActionListener(e -> refreshAccount()); wallet.add(refresh); JButton recharge = soft("充值"); recharge.setIcon(resourceIconContained("PlusLucide.png", 15, 15, true)); recharge.addActionListener(e -> browse("https://tokenpro.work/purchase")); wallet.add(recharge);
-        JPanel row = transparent(new FlowLayout(FlowLayout.LEFT, 0, 0)); row.add(wallet); panel.add(row, BorderLayout.CENTER); return panel;
+        headerBalance.setFont(appFont(26, Font.BOLD)); wallet.add(headerBalance); JButton refresh = soft(""); refresh.setToolTipText("刷新余额和订阅"); refresh.setIcon(resourceIconContained("RefreshCwLucide.png", 15, 15, true)); refresh.addActionListener(e -> refreshAccount()); wallet.add(refresh); JButton recharge = soft("充值/订阅"); recharge.setIcon(resourceIconContained("PlusLucide.png", 15, 15, true)); recharge.addActionListener(e -> browse("https://tokenpro.work/purchase")); wallet.add(recharge);
+        subscriptionSlot.setVisible(false);
+        JPanel row = transparent(new FlowLayout(FlowLayout.LEFT, 12, 0)); row.add(wallet); row.add(subscriptionSlot); panel.add(row, BorderLayout.CENTER); return panel;
     }
 
     private JComponent homePanel() {
@@ -305,7 +307,7 @@ final class TokenProFrame extends JFrame {
     private void logout() {
         try {
             store.delete("java-session.json"); accessToken = null; refreshToken = ""; tokenExpiresAt = 0; sessionUser = Map.of(); accountId = ""; keys.clear();
-            account.setText("尚未登录"); headerUser.setText("登录账户"); accountEmail.setText("登录账户"); headerBalance.setText("—"); accountBalance.setText("—");
+            account.setText("尚未登录"); headerUser.setText("登录账户"); accountEmail.setText("登录账户"); headerBalance.setText("—"); accountBalance.setText("—"); showSubscriptions(List.of());
             homeCodexStatus.setText("请先选择模型"); homeClaudeStatus.setText("请先选择模型"); if (codexLaunch != null) codexLaunch.setEnabled(false); if (claudeLaunch != null) claudeLaunch.setEnabled(false);
             showPage("首页"); showLoginScreen(); status("已退出账户");
         } catch (Exception ex) { error(ex); }
@@ -359,7 +361,7 @@ final class TokenProFrame extends JFrame {
         chosen.addAll(chatModels);
         async("正在使用全局 Key 配置 Codex…", () -> {
             ApiClient.ManagedKey managed = api.globalKey(accessToken);
-            codex.apply("https://tokenpro.work/v1", chosen, managed.key());
+            codex.apply("https://tokenpro.work/v1", chosen, managed.key(), string(sessionUser.get("email")));
             Map<String, Object> saved = new LinkedHashMap<>();
             saved.put("default_model", chatModels.getFirst().name());
             saved.put("models", modelRows(chosen));
@@ -597,6 +599,8 @@ final class TokenProFrame extends JFrame {
         accountId = string(user.get("id"));
         password.setText("");
         status("就绪");
+        try { if (!emailValue.isBlank()) codex.updateActor(emailValue); } catch (Exception ignored) {}
+        refreshSubscriptions();
     }
 
     private void saveSession(Map<String, Object> user) throws Exception {
@@ -648,6 +652,75 @@ final class TokenProFrame extends JFrame {
     private void refreshAccount() {
         if (accessToken == null) { showPage("我的账户"); return; }
         async("正在刷新余额…", () -> api.me(accessToken), this::showAccount);
+    }
+
+    private void refreshSubscriptions() {
+        if (accessToken == null) { showSubscriptions(List.of()); return; }
+        final String token = accessToken;
+        new SwingWorker<List<SubscriptionItem>, Void>() {
+            protected List<SubscriptionItem> doInBackground() throws Exception {
+                Object raw = api.subscriptionSummary(token).get("subscriptions");
+                if (!(raw instanceof List<?> rows)) return List.of();
+                List<SubscriptionItem> items = new ArrayList<>();
+                for (Object value : rows) {
+                    Map<String, Object> row = Json.object(value);
+                    if (!"active".equalsIgnoreCase(string(row.get("status")))) continue;
+                    String group = string(row.get("group_name"));
+                    if (group.isBlank()) group = "TokenPro 订阅";
+                    items.add(new SubscriptionItem(group, ApiClient.subscriptionRemaining(row), string(row.get("expires_at"))));
+                }
+                items.sort(Comparator.comparingDouble(SubscriptionItem::remaining).reversed()
+                    .thenComparing(SubscriptionItem::name, String.CASE_INSENSITIVE_ORDER));
+                return List.copyOf(items);
+            }
+            protected void done() {
+                if (!Objects.equals(token, accessToken)) return;
+                try { showSubscriptions(get()); }
+                catch (Exception ignored) { showSubscriptions(List.of()); }
+            }
+        }.execute();
+    }
+
+    private void showSubscriptions(List<SubscriptionItem> subscriptions) {
+        subscriptionSlot.removeAll();
+        subscriptionSlot.setVisible(!subscriptions.isEmpty());
+        if (!subscriptions.isEmpty()) {
+            RoundedPanel card = new RoundedPanel(20, new Color(23, 91, 67, 238));
+            card.setBorder(new EmptyBorder(8, 14, 8, 14));
+            card.setLayout(new BorderLayout(10, 0));
+            JLabel title = new JLabel("订阅");
+            title.setFont(appFont(11, Font.BOLD));
+            title.setForeground(new Color(164, 244, 199));
+            card.add(title, BorderLayout.WEST);
+            if (subscriptions.size() == 1) {
+                JLabel value = subscriptionLabel(subscriptions.getFirst(), false);
+                card.add(value, BorderLayout.CENTER);
+            } else {
+                JComboBox<SubscriptionItem> picker = new JComboBox<>(subscriptions.toArray(SubscriptionItem[]::new));
+                picker.setSelectedIndex(0);
+                picker.setFont(appFont(12, Font.BOLD));
+                picker.setForeground(Color.WHITE);
+                picker.setBackground(new Color(29, 111, 81));
+                picker.setFocusable(false);
+                picker.setBorder(BorderFactory.createEmptyBorder(3, 7, 3, 7));
+                picker.setRenderer(new SubscriptionRenderer());
+                picker.setToolTipText("按订阅余额从高到低排列");
+                card.add(picker, BorderLayout.CENTER);
+            }
+            subscriptionSlot.add(card);
+        }
+        subscriptionSlot.revalidate();
+        subscriptionSlot.repaint();
+    }
+
+    private JLabel subscriptionLabel(SubscriptionItem item, boolean listCell) {
+        JLabel label = new JLabel(item.displayText() + (listCell ? "" : "  ✓"));
+        label.setFont(appFont(12, Font.BOLD));
+        label.setForeground(Color.WHITE);
+        label.setOpaque(listCell);
+        label.setBackground(new Color(29, 111, 81));
+        label.setBorder(new EmptyBorder(5, 7, 5, 7));
+        return label;
     }
 
     private void checkForUpdates(JButton button) {
@@ -891,6 +964,19 @@ final class TokenProFrame extends JFrame {
     private void error(Throwable error) { status("错误：" + error.getMessage()); JOptionPane.showMessageDialog(this, error.getMessage(), "TokenPro", JOptionPane.ERROR_MESSAGE); }
     private static String string(Object value) { return value == null ? "" : String.valueOf(value); }
     private record KeyItem(long id, String name, String status) { public String toString() { return name + "  [" + status + "]"; } }
+    private record SubscriptionItem(String name, double remaining, String expiresAt) {
+        String displayText() { return name + "  $" + String.format(Locale.US, "%.2f", remaining); }
+        public String toString() { return displayText(); }
+    }
+
+    private final class SubscriptionRenderer extends DefaultListCellRenderer {
+        @Override public Component getListCellRendererComponent(JList<?> list, Object value, int index,
+                                                                 boolean selected, boolean focused) {
+            JLabel label = subscriptionLabel((SubscriptionItem) value, true);
+            label.setBackground(selected ? new Color(39, 130, 94) : new Color(29, 111, 81));
+            return label;
+        }
+    }
 
     private static JTree modelTree(boolean multiple) {
         JTree tree = new JTree(new DefaultMutableTreeNode("可用分组"));

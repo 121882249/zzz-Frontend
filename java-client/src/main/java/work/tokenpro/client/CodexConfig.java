@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 final class CodexConfig {
@@ -14,8 +15,9 @@ final class CodexConfig {
     private final SecureStore store;
     CodexConfig(SecureStore store) { this.store = store; }
 
-    void apply(String baseUrl, List<PricedModel> models, String key) throws Exception {
+    void apply(String baseUrl, List<PricedModel> models, String key, String accountEmail) throws Exception {
         String url = validateUrl(baseUrl);
+        String actor = required(accountEmail, "账户邮箱");
         if (models.isEmpty()) throw new IllegalArgumentException("请至少选择一个 Codex 模型");
         List<PricedModel> chatModels = models.stream().filter(model -> !model.isImageGeneration()).toList();
         List<PricedModel> imageModels = models.stream().filter(PricedModel::isImageGeneration).toList();
@@ -33,7 +35,7 @@ final class CodexConfig {
         // model stays behind the scenes in the provider header and is paired
         // with whichever LLM is active.
         Path catalog = writeModelCatalog(chatModels);
-        String block = managedBlock(url, primaryModel, imageModel, catalog, key.trim());
+        String block = managedBlock(url, primaryModel, imageModel, catalog, key.trim(), actor);
         writeAtomic(target, block + (clean.isBlank() ? "" : "\n" + clean.stripLeading()));
     }
 
@@ -48,7 +50,31 @@ final class CodexConfig {
         store.delete("codex-model-catalog.json");
     }
 
-    private String managedBlock(String url, PricedModel model, PricedModel imageModel, Path catalog, String key) {
+    void updateActor(String accountEmail) throws Exception {
+        String actor = required(accountEmail, "账户邮箱");
+        Path target = Platform.codexConfig();
+        if (!Files.exists(target)) return;
+        String current = Files.readString(target);
+        String updated = withActor(current, actor);
+        if (!updated.equals(current)) writeAtomic(target, updated);
+    }
+
+    static String withActor(String current, String actor) {
+        int start = current.indexOf(START);
+        int end = start < 0 ? -1 : current.indexOf(END, start);
+        if (start < 0 || end < 0) return current;
+        String managed = current.substring(start, end);
+        managed = managed.replaceFirst("(?m)^name\\s*=.*$", Matcher.quoteReplacement("name = " + toml(actor)));
+        Pattern header = Pattern.compile("(\\\"x-openai-actor-authorization\\\"\\s*=\\s*)\\\"(?:[^\\\"\\\\]|\\\\.)*\\\"");
+        Matcher matcher = header.matcher(managed);
+        if (matcher.find()) {
+            String replacement = matcher.group(1) + toml(actor);
+            managed = matcher.replaceFirst(Matcher.quoteReplacement(replacement));
+        }
+        return current.substring(0, start) + managed + current.substring(end);
+    }
+
+    private String managedBlock(String url, PricedModel model, PricedModel imageModel, Path catalog, String key, String actor) {
         StringBuilder out = new StringBuilder();
         out.append(START).append('\n');
         out.append("model = ").append(toml(model.name())).append('\n');
@@ -62,7 +88,7 @@ final class CodexConfig {
         out.append("model_auto_compact_token_limit = 372000\n\n");
         out.append("model_catalog_json = ").append(toml(catalog.toAbsolutePath().toString())).append("\n\n");
         out.append("[model_providers.custom]\n");
-        out.append("name = \"Codex\"\n");
+        out.append("name = ").append(toml(actor)).append('\n');
         // Keep /v1 in the provider URL. Codex appends /responses to this value;
         // dropping /v1 sends traffic through TokenPro's legacy generic endpoint,
         // which bypasses the OpenAI image-only model normalization path.
@@ -70,7 +96,7 @@ final class CodexConfig {
         out.append("wire_api = \"responses\"\n");
         out.append("requires_openai_auth = false\n");
         out.append("experimental_bearer_token = ").append(toml(key)).append('\n');
-        out.append("http_headers = { \"x-openai-actor-authorization\" = \"Codex\"");
+        out.append("http_headers = { \"x-openai-actor-authorization\" = ").append(toml(actor));
         if (imageModel != null) out.append(", \"x-tokenpro-image-model\" = ").append(toml(imageModel.name()));
         out.append(" }\n");
         out.append("supports_websockets = false\n\n");

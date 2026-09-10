@@ -79,15 +79,21 @@ final class ModelPickerDialog extends JDialog {
         for (List<PricedModel> groupModels : orderedGroups) {
             groupModels.sort(ApiClient::compareSelectablePriceDescending);
             PricedModel first = groupModels.getFirst();
-            JPanel group = new GroupPanel();
+            boolean subscription = first.subscription();
+            JPanel group = new GroupPanel(subscription);
             group.setLayout(new BoxLayout(group, BoxLayout.Y_AXIS));
             group.setBorder(new EmptyBorder(14, 16, 12, 16));
             group.setAlignmentX(Component.LEFT_ALIGNMENT);
-            JLabel groupName = new JLabel(first.displayGroupName());
+            String groupLabel = first.displayGroupName();
+            if (subscription) groupLabel += "  ·  订阅余额 $" + String.format(Locale.US, "%.2f", first.subscriptionRemaining());
+            JLabel groupName = new JLabel(groupLabel);
             groupName.setFont(font(13, Font.BOLD));
-            groupName.setForeground(new Color(172, 183, 255));
-            groupName.setAlignmentX(Component.LEFT_ALIGNMENT);
-            group.add(groupName);
+            groupName.setForeground(subscription ? new Color(218, 181, 92) : new Color(105, 220, 194));
+            JPanel heading = transparent(new FlowLayout(FlowLayout.LEFT, 8, 0));
+            heading.setAlignmentX(Component.LEFT_ALIGNMENT);
+            heading.add(new BillingBadge(subscription));
+            heading.add(groupName);
+            group.add(heading);
             group.add(Box.createVerticalStrut(8));
             for (PricedModel model : groupModels) {
                 ModelCheckBox choice = new ModelCheckBox(model);
@@ -173,19 +179,23 @@ final class ModelPickerDialog extends JDialog {
         boolean restored = false;
         for (List<PricedModel> groupModels : grouped.values()) {
             groupModels.sort(ApiClient::compareSelectablePriceDescending);
-            JPanel imageGroup = new GroupPanel();
+            boolean subscription = groupModels.getFirst().subscription();
+            JPanel imageGroup = new GroupPanel(subscription);
             imageGroup.setLayout(new BoxLayout(imageGroup, BoxLayout.Y_AXIS));
             imageGroup.setBorder(new EmptyBorder(14, 16, 12, 16));
             imageGroup.setAlignmentX(Component.LEFT_ALIGNMENT);
             JLabel imageTitle = new JLabel(groupModels.getFirst().displayGroupName());
             imageTitle.setFont(font(13, Font.BOLD));
-            imageTitle.setForeground(new Color(105, 220, 194));
-            imageTitle.setAlignmentX(Component.LEFT_ALIGNMENT);
+            imageTitle.setForeground(subscription ? new Color(218, 181, 92) : new Color(105, 220, 194));
+            JPanel imageHeading = transparent(new FlowLayout(FlowLayout.LEFT, 8, 0));
+            imageHeading.setAlignmentX(Component.LEFT_ALIGNMENT);
+            imageHeading.add(new BillingBadge(subscription));
+            imageHeading.add(imageTitle);
             JLabel imageHint = new JLabel("Image Model · 必选 1 个 · 固定搭配所有已选 LLM");
             imageHint.setFont(font(11, Font.PLAIN));
             imageHint.setForeground(MUTED);
             imageHint.setAlignmentX(Component.LEFT_ALIGNMENT);
-            imageGroup.add(imageTitle);
+            imageGroup.add(imageHeading);
             imageGroup.add(Box.createVerticalStrut(4));
             imageGroup.add(imageHint);
             imageGroup.add(Box.createVerticalStrut(8));
@@ -220,14 +230,19 @@ final class ModelPickerDialog extends JDialog {
     }
     private static String groupKey(PricedModel model) { return model.groupId() + "\u0000" + model.groupName(); }
 
-    private static int compareGroups(List<PricedModel> left, List<PricedModel> right) {
+    static int compareGroups(List<PricedModel> left, List<PricedModel> right) {
         PricedModel a = left.getFirst(), b = right.getFirst();
+        if (a.subscription() && b.subscription()) {
+            int balance = Double.compare(b.subscriptionRemaining(), a.subscriptionRemaining());
+            if (balance != 0) return balance;
+        }
         int rank = Integer.compare(groupRank(a), groupRank(b));
         if (rank != 0) return rank;
         return a.displayGroupName().compareToIgnoreCase(b.displayGroupName());
     }
 
     static int groupRank(PricedModel model) {
+        if (model.subscription()) return -1;
         String value = (model.name() + " " + model.platform() + " " + model.groupName()).toLowerCase(Locale.ROOT);
         if (value.contains("gpt") || value.contains("openai")) return 0;
         if (value.contains("claude") || value.contains("anthropic")) return 1;
@@ -407,14 +422,38 @@ final class ModelPickerDialog extends JDialog {
     }
 
     private static final class GroupPanel extends JPanel {
-        GroupPanel() { setOpaque(false); }
+        private final boolean subscription;
+        GroupPanel(boolean subscription) { this.subscription = subscription; setOpaque(false); }
         protected void paintComponent(Graphics graphics) {
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g.setColor(new Color(25, 42, 84, 226));
+            g.setColor(subscription ? new Color(69, 54, 25, 235) : new Color(25, 42, 84, 226));
             g.fillRoundRect(0, 0, getWidth(), getHeight(), 18, 18);
-            g.setColor(new Color(196, 211, 255, 84));
+            g.setColor(subscription ? new Color(196, 153, 61, 135) : new Color(196, 211, 255, 84));
             g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 18, 18);
+            g.dispose();
+            super.paintComponent(graphics);
+        }
+    }
+
+    private static final class BillingBadge extends JLabel {
+        private final boolean subscription;
+        BillingBadge(boolean subscription) {
+            super(subscription ? "订阅" : "余额");
+            this.subscription = subscription;
+            setFont(font(10, Font.BOLD));
+            setForeground(subscription ? new Color(244, 210, 126) : new Color(151, 229, 211));
+            setBorder(new EmptyBorder(3, 8, 3, 8));
+            setOpaque(false);
+        }
+
+        @Override protected void paintComponent(Graphics graphics) {
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(subscription ? new Color(125, 91, 27, 190) : new Color(31, 105, 91, 175));
+            g.fillRoundRect(0, 0, getWidth(), getHeight(), getHeight(), getHeight());
+            g.setColor(subscription ? new Color(221, 174, 70, 150) : new Color(98, 205, 178, 120));
+            g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, getHeight(), getHeight());
             g.dispose();
             super.paintComponent(graphics);
         }

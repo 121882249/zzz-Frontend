@@ -5,7 +5,8 @@ import java.util.Locale;
 import java.util.stream.Collectors;
 
 record PricedModel(String name, String platform, String groupName, long groupId, String billingMode,
-                   Double inputPrice, Double officialOutputPrice, List<ImagePrice> imagePrices) {
+                   Double inputPrice, Double officialOutputPrice, List<ImagePrice> imagePrices,
+                   boolean subscription, double subscriptionRemaining) {
     record ImagePrice(String label, double perImage) {}
 
     PricedModel {
@@ -13,12 +14,17 @@ record PricedModel(String name, String platform, String groupName, long groupId,
     }
 
     PricedModel(String name, String platform, String groupName, long groupId) {
-        this(name, platform, groupName, groupId, "token", null, null, List.of());
+        this(name, platform, groupName, groupId, "token", null, null, List.of(), false, 0d);
     }
 
     PricedModel(String name, String platform, String groupName, long groupId,
                 String billingMode, Double officialOutputPrice) {
-        this(name, platform, groupName, groupId, billingMode, null, officialOutputPrice, List.of());
+        this(name, platform, groupName, groupId, billingMode, null, officialOutputPrice, List.of(), false, 0d);
+    }
+
+    PricedModel(String name, String platform, String groupName, long groupId, String billingMode,
+                Double inputPrice, Double officialOutputPrice, List<ImagePrice> imagePrices) {
+        this(name, platform, groupName, groupId, billingMode, inputPrice, officialOutputPrice, imagePrices, false, 0d);
     }
 
     boolean tokenBilled() { return billingMode == null || billingMode.isBlank() || "token".equalsIgnoreCase(billingMode); }
