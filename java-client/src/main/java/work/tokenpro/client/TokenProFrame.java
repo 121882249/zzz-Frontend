@@ -338,21 +338,23 @@ final class TokenProFrame extends JFrame {
         selected = uniqueModels(selected);
         List<PricedModel> chatModels = selected.stream().filter(model -> !model.isImageGeneration()).toList();
         List<PricedModel> imageModels = selected.stream().filter(PricedModel::isImageGeneration).toList();
-        if (chatModels.size() != 1 || imageModels.size() != 1) { error(new IllegalStateException("请分别选择 1 个 LLM Model 和 1 个 Image Model")); return; }
+        if (chatModels.isEmpty() || imageModels.isEmpty()) { error(new IllegalStateException("LLM Model 和 Image Model 必须各选择至少 1 个")); return; }
         PricedModel imageModel = imageModels.getFirst();
-        List<PricedModel> chosen = List.of(chatModels.getFirst(), imageModel);
+        List<PricedModel> chosen = new ArrayList<>(imageModels);
+        chosen.addAll(chatModels);
         async("正在使用全局 Key 配置 Codex…", () -> {
             ApiClient.ManagedKey managed = api.globalKey(accessToken);
             codex.apply("https://tokenpro.work/v1", chosen, managed.key());
             Map<String, Object> saved = new LinkedHashMap<>();
-            saved.put("default_model", chosen.getFirst().name());
+            saved.put("default_model", chatModels.getFirst().name());
             saved.put("models", modelRows(chosen));
             saved.put("image_model", imageModel.name());
+            saved.put("image_models", imageModels.stream().map(PricedModel::name).toList());
             saved.put("key_id", managed.id());
             store.write("codex-selected.json", Json.stringify(saved));
             return chosen;
         }, configured -> {
-            homeCodexStatus.setText("LLM + Image 已配置");
+            homeCodexStatus.setText(chatModels.size() + " LLM + " + imageModels.size() + " Image 已配置");
             if (codexLaunch != null) codexLaunch.setEnabled(true);
             status("Codex 已配置 " + configured.size() + " 个模型");
             openApp("Codex");
@@ -488,9 +490,12 @@ final class TokenProFrame extends JFrame {
             if (raw.isEmpty()) throw new IllegalStateException("未选择");
             Map<String, Object> saved = Json.object(Json.parse(raw.get()));
             if (saved.get("models") instanceof List<?> models && !models.isEmpty()) {
-                boolean imageEnabled = !string(saved.get("image_model")).isBlank();
-                int chatCount = imageEnabled ? Math.max(0, models.size() - 1) : models.size();
-                homeCodexStatus.setText(chatCount == 1 && imageEnabled ? "LLM + Image 已配置" : "请重新选择两个模型");
+                int imageCount = saved.get("image_models") instanceof List<?> images
+                    ? images.size() : string(saved.get("image_model")).isBlank() ? 0 : 1;
+                int chatCount = Math.max(0, models.size() - imageCount);
+                homeCodexStatus.setText(chatCount > 0 && imageCount > 0
+                    ? chatCount + " LLM + " + imageCount + " Image 已配置"
+                    : "请重新选择模型");
             }
             else {
                 String selected = string(saved.get("model")); if (selected.isBlank()) throw new IllegalStateException("未选择");
@@ -517,6 +522,12 @@ final class TokenProFrame extends JFrame {
                     }
                     String imageModel = string(root.get("image_model"));
                     if (!imageModel.isBlank()) ids.add(ModelPickerDialog.imageNameId(imageModel));
+                    if (root.get("image_models") instanceof List<?> imageModels) {
+                        for (Object image : imageModels) {
+                            String name = string(image);
+                            if (!name.isBlank()) ids.add(ModelPickerDialog.imageNameId(name));
+                        }
+                    }
                     if (ids.isEmpty() && root.get("group_id") instanceof Number groupId) ids.add(groupId.longValue() + "\u0000" + string(root.get("model")));
                 }
             }
