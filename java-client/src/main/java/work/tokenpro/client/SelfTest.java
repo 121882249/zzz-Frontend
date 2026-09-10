@@ -63,15 +63,15 @@ final class SelfTest {
         check("Input ¥4.00/M".equals(inputPriced.priceLabel()), "LLM input price label"); passed++;
         PricedModel imagePriced = new PricedModel("gpt-image-2.5", "openai", "Image", 60, "image", null, null,
             List.of(new PricedModel.ImagePrice("1K", 0.03), new PricedModel.ImagePrice("2K", 0.05), new PricedModel.ImagePrice("4K", 0.10)));
-        check("1K ¥0.03/image · 2K ¥0.05/image · 4K ¥0.10/image".equals(imagePriced.priceLabel()), "image resolution prices"); passed++;
+        check("1K ¥0.03/IMG · 2K ¥0.05/IMG · 4K ¥0.10/IMG".equals(imagePriced.priceLabel()), "image resolution prices"); passed++;
         check(ModelPickerDialog.groupRank(new PricedModel("gpt-5.6", "openai", "GPT", 1))
             < ModelPickerDialog.groupRank(new PricedModel("claude-5", "anthropic", "Claude", 2)), "GPT groups precede Claude"); passed++;
         check(ModelPickerDialog.groupRank(new PricedModel("gemini-3", "google", "Gemini", 3))
             < ModelPickerDialog.groupRank(new PricedModel("mistral-large", "mistral", "Mistral", 4)), "other groups follow Gemini"); passed++;
         check(ModuleLayer.boot().findModule("jdk.crypto.ec").isPresent(), "packaged runtime supports ECDSA TLS certificates"); passed++;
-        String releasePayload = "{\"tag_name\":\"v1.2.23\",\"downloads\":{\"windows-x64\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe\",\"sha256\":\"abc\"}}}";
+        String releasePayload = "{\"tag_name\":\"v1.2.24\",\"downloads\":{\"windows-x64\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe\",\"sha256\":\"abc\"}}}";
         TokenProFrame.ReleaseInfo release = TokenProFrame.releaseForPlatform(releasePayload, "windows-x64");
-        check("1.2.23".equals(release.version()) && release.downloadUrl().endsWith(".exe") && "abc".equals(release.sha256()), "automatic update manifest"); passed++;
+        check("1.2.24".equals(release.version()) && release.downloadUrl().endsWith(".exe") && "abc".equals(release.sha256()), "automatic update manifest"); passed++;
         check(Updater.platformKey().startsWith(Platform.OS_KIND == Platform.OS.MAC ? "macos-" : Platform.OS_KIND == Platform.OS.WINDOWS ? "windows-" : "linux-"), "automatic update platform mapping"); passed++;
         ClaudeBridgeConfig.Route route = ClaudeBridgeConfig.Route.from(priced);
         check(route.alias().matches("claude-tokenpro-[0-9a-f]{24}"), "Claude alias"); passed++;

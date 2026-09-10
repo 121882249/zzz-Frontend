@@ -49,7 +49,7 @@ record PricedModel(String name, String platform, String groupName, long groupId,
     String priceLabel() {
         if (isImageGeneration() && !imagePrices.isEmpty()) {
             return imagePrices.stream()
-                .map(price -> price.label() + " ¥" + money(price.perImage()) + "/image")
+                .map(price -> price.label() + " ¥" + money(price.perImage()) + "/IMG")
                 .collect(Collectors.joining(" · "));
         }
         return inputPrice == null ? "" : "Input ¥" + money(inputPrice * 1_000_000d) + "/M";
