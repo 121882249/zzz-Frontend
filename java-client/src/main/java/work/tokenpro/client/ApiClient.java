@@ -65,12 +65,31 @@ final class ApiClient {
                 Map<String, Object> model = Json.object(rawModel);
                 String modelName = text(model.get("name"));
                 if (modelName.isBlank() || model.get("pricing") == null) continue;
-                result.add(new PricedModel(modelName, text(model.getOrDefault("platform", groupPlatform)), groupName, groupId));
+                Map<String, Object> pricing = Json.object(model.get("pricing"));
+                Map<String, Object> officialPricing = model.get("official_pricing") instanceof Map<?, ?> value ? Json.object(value) : Map.of();
+                result.add(new PricedModel(
+                    modelName,
+                    text(model.getOrDefault("platform", groupPlatform)),
+                    groupName,
+                    groupId,
+                    text(pricing.getOrDefault("billing_mode", "token")),
+                    decimal(officialPricing.get("output_price"))
+                ));
             }
         }
         result.sort(Comparator.comparingLong(PricedModel::groupId).reversed()
-            .thenComparing(PricedModel::name, ApiClient::compareModelVersionDescending));
+            .thenComparing(ApiClient::compareModelPriceDescending));
         return result;
+    }
+
+    static int compareModelPriceDescending(PricedModel left, PricedModel right) {
+        if (left.tokenBilled() != right.tokenBilled()) return left.tokenBilled() ? -1 : 1;
+        Double a = left.officialOutputPrice();
+        Double b = right.officialOutputPrice();
+        if (a != null && b != null && Double.compare(a, b) != 0) return Double.compare(b, a);
+        if (a != null) return -1;
+        if (b != null) return 1;
+        return compareModelVersionDescending(left.name(), right.name());
     }
 
     static int compareModelVersionDescending(String left, String right) {
@@ -217,6 +236,7 @@ final class ApiClient {
     }
 
     private static Long integer(Object value) { return value instanceof Number number ? number.longValue() : null; }
+    private static Double decimal(Object value) { return value instanceof Number number ? number.doubleValue() : null; }
     private static String text(Object value) { return value == null ? "" : String.valueOf(value); }
     private static String encode(String value) { return URLEncoder.encode(value, StandardCharsets.UTF_8); }
     private static void validateKey(String key, String label) {

@@ -1,6 +1,12 @@
 package work.tokenpro.client;
 
-record PricedModel(String name, String platform, String groupName, long groupId) {
+record PricedModel(String name, String platform, String groupName, long groupId, String billingMode, Double officialOutputPrice) {
+    PricedModel(String name, String platform, String groupName, long groupId) {
+        this(name, platform, groupName, groupId, "token", null);
+    }
+
+    boolean tokenBilled() { return billingMode == null || billingMode.isBlank() || "token".equalsIgnoreCase(billingMode); }
+
     boolean usesResponses() { return "openai".equalsIgnoreCase(platform); }
 
     boolean isImageGeneration() {

@@ -8,6 +8,8 @@ import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BaseMultiResolutionImage;
 import java.awt.image.BufferedImage;
@@ -59,6 +61,7 @@ final class TokenProFrame extends JFrame {
     private JButton codexLaunch;
     private JButton claudeLaunch;
     private JButton updateButton;
+    private JComponent activeModelMenuOverlay;
     private JComponent dashboardHeader;
     private final CardLayout views = new CardLayout();
     private final JPanel viewHost = new JPanel(views);
@@ -157,14 +160,56 @@ final class TokenProFrame extends JFrame {
         JPanel words = transparent(); words.setLayout(new BoxLayout(words, BoxLayout.Y_AXIS)); JPanel nameLine = transparent(new FlowLayout(FlowLayout.LEFT, 10, 0)); nameLine.setAlignmentX(Component.LEFT_ALIGNMENT); nameLine.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24)); JLabel heading = new JLabel(title); heading.setFont(appFont(17, Font.BOLD)); JLabel installedLabel = new JLabel(installed ? "已安装" : "未安装"); installedLabel.setFont(appFont(11, Font.BOLD)); installedLabel.setForeground(installed ? new Color(97, 222, 165) : MUTED); nameLine.add(heading); nameLine.add(installedLabel); JLabel detail = new JLabel(subtitle); detail.setAlignmentX(Component.LEFT_ALIGNMENT); detail.setFont(appFont(11, Font.PLAIN)); detail.setForeground(MUTED); words.add(Box.createVerticalStrut(3)); words.add(nameLine); words.add(Box.createVerticalStrut(6)); words.add(detail); card.add(words, BorderLayout.CENTER);
         JPanel actions = transparent(); actions.setLayout(new BoxLayout(actions, BoxLayout.Y_AXIS)); JPanel buttons = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         JButton menu = soft("模型选择  ▾");
-        CosmosPopup popup = new CosmosPopup();
-        JMenuItem choose = new CosmosMenuItem("选择模型", false); choose.addActionListener(e -> chooseModel.run());
-        JMenuItem official = new CosmosMenuItem("恢复官方配置", true); official.addActionListener(e -> restore.run());
-        popup.add(choose); popup.add(official);
-        menu.addActionListener(e -> popup.show(menu, 0, menu.getHeight() + 6));
+        menu.addActionListener(e -> showModelMenu(menu, chooseModel, restore));
         JButton launch = primary("打开应用"); launch.addActionListener(e -> open.run()); launch.setEnabled(false);
         if (iconName.equals("Codex")) codexLaunch = launch; else claudeLaunch = launch;
         buttons.add(menu); buttons.add(launch); actions.add(buttons); state.setFont(appFont(11, Font.BOLD)); state.setForeground(PURPLE); state.setAlignmentX(Component.RIGHT_ALIGNMENT); actions.add(Box.createVerticalStrut(7)); actions.add(state); card.add(actions, BorderLayout.EAST); return card;
+    }
+
+    private void showModelMenu(JButton anchor, Runnable chooseModel, Runnable restore) {
+        hideModelMenu();
+        JLayeredPane layered = getLayeredPane();
+        JPanel overlay = new JPanel(null);
+        overlay.setOpaque(false);
+        overlay.setBounds(0, 0, layered.getWidth(), layered.getHeight());
+        overlay.addMouseListener(new MouseAdapter() {
+            @Override public void mousePressed(MouseEvent event) { hideModelMenu(); }
+        });
+
+        CosmosMenuPanel menu = new CosmosMenuPanel();
+        CosmosMenuButton choose = new CosmosMenuButton("选择模型", false);
+        choose.addActionListener(event -> { hideModelMenu(); chooseModel.run(); });
+        CosmosMenuButton official = new CosmosMenuButton("恢复官方配置", true);
+        official.addActionListener(event -> { hideModelMenu(); restore.run(); });
+        menu.add(choose);
+        menu.add(official);
+
+        int width = 186;
+        int height = 84;
+        Point point = SwingUtilities.convertPoint(anchor, 0, anchor.getHeight() + 6, layered);
+        int x = Math.max(8, Math.min(point.x, layered.getWidth() - width - 8));
+        int y = Math.max(8, Math.min(point.y, layered.getHeight() - height - 8));
+        menu.setBounds(x, y, width, height);
+        overlay.add(menu);
+        activeModelMenuOverlay = overlay;
+        layered.add(overlay, JLayeredPane.POPUP_LAYER);
+        overlay.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("ESCAPE"), "close-model-menu");
+        overlay.getActionMap().put("close-model-menu", new AbstractAction() {
+            @Override public void actionPerformed(java.awt.event.ActionEvent event) { hideModelMenu(); }
+        });
+        overlay.revalidate();
+        overlay.repaint();
+    }
+
+    private void hideModelMenu() {
+        if (activeModelMenuOverlay == null) return;
+        Container parent = activeModelMenuOverlay.getParent();
+        if (parent != null) {
+            parent.remove(activeModelMenuOverlay);
+            parent.revalidate();
+            parent.repaint();
+        }
+        activeModelMenuOverlay = null;
     }
 
     private JComponent commandClientCard(String title, String subtitle, String iconName, String command, String downloadUrl) {
@@ -893,15 +938,12 @@ final class TokenProFrame extends JFrame {
         }
     }
 
-    private static final class CosmosPopup extends JPopupMenu {
-        CosmosPopup() {
-            // Do not let the platform popup UI paint its default (white) background first.
-            // This popup is composited directly onto the dark dashboard instead.
+    private static final class CosmosMenuPanel extends JPanel {
+        CosmosMenuPanel() {
             setOpaque(false);
-            setBackground(new Color(8, 13, 32));
-            setLightWeightPopupEnabled(true);
             setDoubleBuffered(true);
             setBorder(new EmptyBorder(6, 6, 6, 6));
+            setLayout(new GridLayout(2, 1));
         }
 
         protected void paintComponent(Graphics graphics) {
@@ -915,24 +957,21 @@ final class TokenProFrame extends JFrame {
         }
     }
 
-    private static final class CosmosMenuItem extends JMenuItem {
+    private static final class CosmosMenuButton extends JButton {
         private final boolean restore;
 
-        CosmosMenuItem(String text, boolean restore) {
+        CosmosMenuButton(String text, boolean restore) {
             super(text);
             this.restore = restore;
             setOpaque(false);
             setContentAreaFilled(false);
+            setBorderPainted(false);
+            setFocusPainted(false);
             setDoubleBuffered(true);
-            setUI(new javax.swing.plaf.basic.BasicMenuItemUI() {
-                @Override protected void paintBackground(Graphics g, JMenuItem item, Color color) {
-                    // Hover feedback is painted by CosmosMenuItem; suppress the LAF's white fill.
-                }
-            });
             setFont(appFont(12, Font.BOLD));
             setForeground(restore ? new Color(184, 194, 226) : new Color(241, 244, 255));
             setBorder(new EmptyBorder(0, 14, 0, 14));
-            setPreferredSize(new Dimension(174, 36));
+            setHorizontalAlignment(SwingConstants.LEFT);
         }
 
         protected void paintComponent(Graphics graphics) {

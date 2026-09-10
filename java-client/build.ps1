@@ -27,7 +27,7 @@ Copy-Item ../Resources/PlusLucide.png build/classes/assets/PlusLucide.png
 @"
 Main-Class: work.tokenpro.client.Main
 Implementation-Title: TokenPro
-Implementation-Version: 1.2.14
+Implementation-Version: 1.2.15
 
 "@ | Set-Content -Encoding ascii build/manifest.mf
 & "$env:JAVA_HOME/bin/jar.exe" --create --file build/TokenPro.jar --manifest build/manifest.mf -C build/classes .

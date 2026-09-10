@@ -17,6 +17,10 @@ final class SelfTest {
         check(CodexConfig.stripManaged(sample).equals("before\nafter\n"), "managed config removal"); passed++;
         String config = "model = \"old\"\nmodel_provider = \"openai\"\n[features]\napps = true\n";
         check(CodexConfig.stripRootOverrides(config).equals("[features]\napps = true\n"), "root override removal"); passed++;
+        String liveConfig = "[features]\napps = false\n[new_setting]\nenabled = true\n";
+        String restoredConfig = CodexConfig.restoreRootOverrides(liveConfig, config);
+        check(restoredConfig.startsWith("model = \"old\"\nmodel_provider = \"openai\"\n"), "official root model settings restored"); passed++;
+        check(restoredConfig.contains("apps = false") && restoredConfig.contains("[new_setting]"), "restore preserves newer Codex settings"); passed++;
         check("https://tokenpro.work/v1".equals(CodexConfig.providerBaseUrl("https://tokenpro.work/v1")), "Codex provider keeps v1 route"); passed++;
         check(Platform.dataDirectory().endsWith("TokenPro"), "platform data directory"); passed++;
         PricedModel priced = new PricedModel("gpt-test", "openai", "GPT", 16);
@@ -42,10 +46,15 @@ final class SelfTest {
         check(ApiClient.compareNaturalDescending("gpt-5.10", "gpt-5.9") < 0, "model versions sort descending"); passed++;
         check(ApiClient.compareModelVersionDescending("claude-fable-5-1", "claude-opus-5") < 0, "minor version sorts above major version"); passed++;
         check(ApiClient.compareModelVersionDescending("claude-opus-4-8", "claude-opus-4-7") < 0, "decimal model versions sort descending"); passed++;
+        PricedModel premium = new PricedModel("claude-fable-5-1", "anthropic", "Claude", 60, "token", 0.00005);
+        PricedModel standard = new PricedModel("claude-opus-5", "anthropic", "Claude", 60, "token", 0.000025);
+        PricedModel image = new PricedModel("gpt-image-2", "openai", "GPT", 60, "image", null);
+        check(ApiClient.compareModelPriceDescending(premium, standard) < 0, "models sort by output price descending"); passed++;
+        check(ApiClient.compareModelPriceDescending(standard, image) < 0, "token models sort before non-token models"); passed++;
         check(ModuleLayer.boot().findModule("jdk.crypto.ec").isPresent(), "packaged runtime supports ECDSA TLS certificates"); passed++;
-        String releasePayload = "{\"tag_name\":\"v1.2.14\",\"downloads\":{\"windows-x64\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe\",\"sha256\":\"abc\"}}}";
+        String releasePayload = "{\"tag_name\":\"v1.2.15\",\"downloads\":{\"windows-x64\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe\",\"sha256\":\"abc\"}}}";
         TokenProFrame.ReleaseInfo release = TokenProFrame.releaseForPlatform(releasePayload, "windows-x64");
-        check("1.2.14".equals(release.version()) && release.downloadUrl().endsWith(".exe") && "abc".equals(release.sha256()), "automatic update manifest"); passed++;
+        check("1.2.15".equals(release.version()) && release.downloadUrl().endsWith(".exe") && "abc".equals(release.sha256()), "automatic update manifest"); passed++;
         check(Updater.platformKey().startsWith(Platform.OS_KIND == Platform.OS.MAC ? "macos-" : Platform.OS_KIND == Platform.OS.WINDOWS ? "windows-" : "linux-"), "automatic update platform mapping"); passed++;
         ClaudeBridgeConfig.Route route = ClaudeBridgeConfig.Route.from(priced);
         check(route.alias().matches("claude-tokenpro-[0-9a-f]{24}"), "Claude alias"); passed++;

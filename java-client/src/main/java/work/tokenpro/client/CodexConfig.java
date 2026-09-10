@@ -10,6 +10,7 @@ import java.util.regex.Pattern;
 final class CodexConfig {
     private static final String START = "# >>> TokenPro managed >>>";
     private static final String END = "# <<< TokenPro managed <<<";
+    private static final Pattern MANAGED_ROOT_KEY = Pattern.compile("^(model|model_provider|review_model|model_catalog_json|model_reasoning_effort|model_context_window|model_auto_compact_token_limit)\\s*=.*$");
     private final SecureStore store;
     CodexConfig(SecureStore store) { this.store = store; }
 
@@ -40,7 +41,8 @@ final class CodexConfig {
         if (original.isEmpty()) throw new IllegalStateException("没有可恢复的 Codex 配置备份");
         Path target = Platform.codexConfig();
         Files.createDirectories(target.getParent());
-        writeAtomic(target, original.get());
+        String current = Files.exists(target) ? Files.readString(target) : "";
+        writeAtomic(target, restoreRootOverrides(stripManaged(current), original.get()));
         store.delete("codex-original.toml");
         store.delete("codex-model-catalog.json");
     }
@@ -218,15 +220,29 @@ final class CodexConfig {
         }
         StringBuilder out = new StringBuilder();
         boolean root = true;
-        Pattern managedKey = Pattern.compile("^(model|model_provider|review_model|model_catalog_json|model_reasoning_effort|model_context_window|model_auto_compact_token_limit)\\s*=.*$");
         for (String line : text.split("(?<=\\n)", -1)) {
             String trimmed = line.stripLeading();
             if (trimmed.startsWith("[")) root = false;
             String withoutNewline = trimmed.replaceFirst("[\\r\\n]+$", "");
-            if (root && managedKey.matcher(withoutNewline).matches()) continue;
+            if (root && MANAGED_ROOT_KEY.matcher(withoutNewline).matches()) continue;
             out.append(line);
         }
         return out.toString();
+    }
+
+    static String restoreRootOverrides(String current, String original) {
+        StringBuilder rootOverrides = new StringBuilder();
+        boolean root = true;
+        for (String line : original.split("(?<=\\n)", -1)) {
+            String trimmed = line.stripLeading();
+            if (trimmed.startsWith("[")) root = false;
+            String withoutNewline = trimmed.replaceFirst("[\\r\\n]+$", "");
+            if (root && MANAGED_ROOT_KEY.matcher(withoutNewline).matches()) rootOverrides.append(line);
+        }
+        String clean = stripRootOverrides(current);
+        if (rootOverrides.isEmpty()) return clean;
+        if (rootOverrides.charAt(rootOverrides.length() - 1) != '\n') rootOverrides.append('\n');
+        return rootOverrides + clean.stripLeading();
     }
 
     private static String validateUrl(String raw) {

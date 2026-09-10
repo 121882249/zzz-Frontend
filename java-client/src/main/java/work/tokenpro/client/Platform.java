@@ -76,8 +76,10 @@ final class Platform {
         if (OS_KIND == OS.MAC) {
             String target = macApplicationTarget(name);
             Process quit = new ProcessBuilder("osascript", "-e", "tell application \"" + target + "\" to quit").start();
-            quit.waitFor(5, TimeUnit.SECONDS);
-            Thread.sleep(450);
+            if (!quit.waitFor(5, TimeUnit.SECONDS) || quit.exitValue() != 0) return false;
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+            while (applicationRunning(target) && System.nanoTime() < deadline) Thread.sleep(200);
+            if (applicationRunning(target)) return false;
             Process open = new ProcessBuilder("open", "-a", target).start();
             return open.waitFor(5, TimeUnit.SECONDS) && open.exitValue() == 0;
         }
@@ -89,6 +91,11 @@ final class Platform {
         new ProcessBuilder("pkill", "-x", name.toLowerCase(Locale.ROOT)).start().waitFor(3, TimeUnit.SECONDS);
         Thread.sleep(350);
         return openApplication(name);
+    }
+
+    private static boolean applicationRunning(String name) throws Exception {
+        Process process = new ProcessBuilder("pgrep", "-x", name).start();
+        return process.waitFor(2, TimeUnit.SECONDS) && process.exitValue() == 0;
     }
 
     private static String macApplicationTarget(String name) {
