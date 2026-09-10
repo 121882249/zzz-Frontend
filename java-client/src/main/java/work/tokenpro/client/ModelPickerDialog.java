@@ -14,8 +14,7 @@ import java.util.function.Consumer;
 /** Model selection stays on the dashboard and uses ordinary click-to-toggle controls. */
 final class ModelPickerDialog extends JDialog {
     private static final Color TEXT = new Color(242, 245, 255);
-    private static final Color MUTED = new Color(145, 154, 185);
-    private static final Color PANEL = new Color(8, 14, 35);
+    private static final Color MUTED = new Color(180, 190, 220);
     private final List<ModelCheckBox> choices = new ArrayList<>();
     private final List<ModelCheckBox> imageChoices = new ArrayList<>();
 
@@ -23,10 +22,10 @@ final class ModelPickerDialog extends JDialog {
                       Set<String> selectedIds, Consumer<List<PricedModel>> onApply) {
         super(owner, "选择 " + client + " 模型", true);
         setUndecorated(true);
-        setBackground(new Color(7, 11, 29));
+        setBackground(new Color(15, 26, 58));
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
         setContentPane(content(client, models, selectedIds, onApply));
-        setSize(680, 650);
+        setSize(760, 680);
         setMinimumSize(new Dimension(560, 480));
         applyShape();
         addComponentListener(new ComponentAdapter() {
@@ -71,15 +70,10 @@ final class ModelPickerDialog extends JDialog {
             grouped.computeIfAbsent(groupKey(model), ignored -> new ArrayList<>()).add(model);
         }
         if (codex) addImageChoices(groups, models, selectedIds);
-        if (codex && !grouped.isEmpty()) {
-            JLabel llmTitle = new JLabel("LLM Model（至少选择 1 个）");
-            llmTitle.setFont(font(13, Font.BOLD));
-            llmTitle.setForeground(new Color(172, 183, 255));
-            llmTitle.setAlignmentX(Component.LEFT_ALIGNMENT);
-            groups.add(llmTitle);
-            groups.add(Box.createVerticalStrut(8));
-        }
-        for (List<PricedModel> groupModels : grouped.values()) {
+        List<List<PricedModel>> orderedGroups = grouped.values().stream()
+            .sorted(ModelPickerDialog::compareGroups)
+            .toList();
+        for (List<PricedModel> groupModels : orderedGroups) {
             PricedModel first = groupModels.getFirst();
             JPanel group = new GroupPanel();
             group.setLayout(new BoxLayout(group, BoxLayout.Y_AXIS));
@@ -100,6 +94,10 @@ final class ModelPickerDialog extends JDialog {
             group.setMaximumSize(new Dimension(Integer.MAX_VALUE, group.getPreferredSize().height));
             groups.add(group);
             groups.add(Box.createVerticalStrut(10));
+        }
+        if (codex && choices.stream().noneMatch(choice -> !choice.model().isImageGeneration() && choice.isSelected())) {
+            choices.stream().filter(choice -> !choice.model().isImageGeneration()).findFirst()
+                .ifPresent(choice -> choice.setSelected(true));
         }
         if (models.isEmpty()) {
             JLabel empty = new JLabel("当前账户没有可用模型");
@@ -156,11 +154,11 @@ final class ModelPickerDialog extends JDialog {
         imageGroup.setLayout(new BoxLayout(imageGroup, BoxLayout.Y_AXIS));
         imageGroup.setBorder(new EmptyBorder(14, 16, 12, 16));
         imageGroup.setAlignmentX(Component.LEFT_ALIGNMENT);
-        JLabel imageTitle = new JLabel("Image Model（必选 1 个）");
+        JLabel imageTitle = new JLabel("Image");
         imageTitle.setFont(font(13, Font.BOLD));
         imageTitle.setForeground(new Color(105, 220, 194));
         imageTitle.setAlignmentX(Component.LEFT_ALIGNMENT);
-        JLabel imageHint = new JLabel("固定搭配下方选择的 LLM Model");
+        JLabel imageHint = new JLabel("必选 1 个 · 固定搭配所有已选 LLM");
         imageHint.setFont(font(11, Font.PLAIN));
         imageHint.setForeground(MUTED);
         imageHint.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -198,6 +196,22 @@ final class ModelPickerDialog extends JDialog {
     }
     private static String groupKey(PricedModel model) { return model.groupId() + "\u0000" + model.groupName(); }
 
+    private static int compareGroups(List<PricedModel> left, List<PricedModel> right) {
+        PricedModel a = left.getFirst(), b = right.getFirst();
+        int rank = Integer.compare(groupRank(a), groupRank(b));
+        if (rank != 0) return rank;
+        return a.displayGroupName().compareToIgnoreCase(b.displayGroupName());
+    }
+
+    static int groupRank(PricedModel model) {
+        String value = (model.name() + " " + model.platform() + " " + model.groupName()).toLowerCase(Locale.ROOT);
+        if (value.contains("gpt") || value.contains("openai")) return 0;
+        if (value.contains("claude") || value.contains("anthropic")) return 1;
+        if (value.contains("grok") || value.contains("xai")) return 2;
+        if (value.contains("gemini") || value.contains("google")) return 3;
+        return 4;
+    }
+
     private static JPanel transparent() { JPanel panel = new JPanel(); panel.setOpaque(false); return panel; }
     private static JPanel transparent(LayoutManager layout) { JPanel panel = new JPanel(layout); panel.setOpaque(false); return panel; }
     private static Font font(float size, int style) { return new Font(Platform.OS_KIND == Platform.OS.MAC ? ".AppleSystemUIFont" : "SansSerif", style, Math.round(size)); }
@@ -224,9 +238,9 @@ final class ModelPickerDialog extends JDialog {
             setFocusPainted(false);
             setContentAreaFilled(false);
             setBorderPainted(false);
-            setPreferredSize(new Dimension(520, 44));
-            setMinimumSize(new Dimension(240, 44));
-            setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
+            setPreferredSize(new Dimension(620, 48));
+            setMinimumSize(new Dimension(300, 48));
+            setMaximumSize(new Dimension(Integer.MAX_VALUE, 48));
             setAlignmentX(Component.LEFT_ALIGNMENT);
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
             addMouseListener(new MouseAdapter() {
@@ -241,9 +255,9 @@ final class ModelPickerDialog extends JDialog {
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             int width = getWidth() - 1, height = getHeight() - 2;
             if (isSelected()) {
-                g.setPaint(new GradientPaint(0, 0, new Color(91, 73, 220, 155), width, 0, new Color(44, 130, 229, 105)));
+                g.setPaint(new GradientPaint(0, 0, new Color(105, 85, 232, 190), width, 0, new Color(52, 144, 235, 155)));
             } else {
-                g.setColor(hovered ? new Color(35, 47, 91, 175) : new Color(15, 24, 55, 150));
+                g.setColor(hovered ? new Color(45, 63, 116, 220) : new Color(25, 40, 80, 205));
             }
             g.fillRoundRect(0, 1, width, height, 14, 14);
             g.setColor(isSelected() ? new Color(152, 178, 255, 180) : new Color(151, 169, 226, hovered ? 92 : 42));
@@ -263,34 +277,39 @@ final class ModelPickerDialog extends JDialog {
                 g.drawOval(cx - 8, cy - 8, 16, 16);
             }
 
+            String price = model.priceLabel();
+            g.setFont(font(11, Font.PLAIN));
+            FontMetrics priceMetrics = g.getFontMetrics();
+            int priceX = getWidth() - priceMetrics.stringWidth(price) - 15;
+            g.setColor(isSelected() ? new Color(225, 235, 255) : new Color(180, 199, 238));
+            g.drawString(price, priceX, (getHeight() - priceMetrics.getHeight()) / 2 + priceMetrics.getAscent());
+
             g.setFont(getFont());
-            g.setColor(isSelected() ? Color.WHITE : hovered ? new Color(232, 237, 255) : TEXT);
+            g.setColor(isSelected() ? Color.WHITE : hovered ? new Color(239, 243, 255) : TEXT);
             FontMetrics metrics = g.getFontMetrics();
-            g.drawString(model.displayName(), 38, (getHeight() - metrics.getHeight()) / 2 + metrics.getAscent());
-            if (model.isImageGeneration()) {
-                String tag = "生图";
-                g.setFont(font(10, Font.BOLD));
-                FontMetrics tagMetrics = g.getFontMetrics();
-                int tagWidth = tagMetrics.stringWidth(tag) + 16;
-                int tagX = getWidth() - tagWidth - 13;
-                g.setColor(new Color(65, 214, 190, isSelected() ? 56 : 28));
-                g.fillRoundRect(tagX, cy - 10, tagWidth, 20, 10, 10);
-                g.setColor(new Color(112, 235, 211));
-                g.drawString(tag, tagX + 8, cy + (tagMetrics.getAscent() - tagMetrics.getDescent()) / 2);
-            }
+            String name = fit(model.displayName(), metrics, Math.max(80, priceX - 50));
+            g.drawString(name, 38, (getHeight() - metrics.getHeight()) / 2 + metrics.getAscent());
             g.dispose();
+        }
+
+        private static String fit(String value, FontMetrics metrics, int maxWidth) {
+            if (metrics.stringWidth(value) <= maxWidth) return value;
+            String suffix = "…";
+            int end = value.length();
+            while (end > 1 && metrics.stringWidth(value.substring(0, end) + suffix) > maxWidth) end--;
+            return value.substring(0, end) + suffix;
         }
     }
 
     private static final class CosmosPanel extends JPanel {
-        CosmosPanel() { setOpaque(true); setBackground(new Color(7, 11, 29)); }
+        CosmosPanel() { setOpaque(true); setBackground(new Color(15, 26, 58)); }
         protected void paintComponent(Graphics graphics) {
             super.paintComponent(graphics);
             Graphics2D g = (Graphics2D) graphics.create();
-            g.setPaint(new GradientPaint(0, 0, new Color(12, 20, 51), getWidth(), getHeight(), new Color(9, 8, 35)));
+            g.setPaint(new GradientPaint(0, 0, new Color(24, 43, 89), getWidth(), getHeight(), new Color(24, 24, 76)));
             g.fillRect(0, 0, getWidth(), getHeight());
             g.setPaint(new RadialGradientPaint(getWidth() * .78f, getHeight() * .08f, Math.max(180, getWidth() * .52f),
-                new float[]{0f, 1f}, new Color[]{new Color(82, 66, 220, 72), new Color(20, 15, 67, 0)}));
+                new float[]{0f, 1f}, new Color[]{new Color(106, 89, 242, 105), new Color(31, 30, 92, 0)}));
             g.fillRect(0, 0, getWidth(), getHeight());
             g.setColor(new Color(198, 218, 255, 105));
             for (int i = 0; i < 28; i++) {
@@ -332,9 +351,9 @@ final class ModelPickerDialog extends JDialog {
         protected void paintComponent(Graphics graphics) {
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g.setColor(new Color(13, 23, 54, 196));
+            g.setColor(new Color(25, 42, 84, 226));
             g.fillRoundRect(0, 0, getWidth(), getHeight(), 18, 18);
-            g.setColor(new Color(187, 201, 255, 54));
+            g.setColor(new Color(196, 211, 255, 84));
             g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 18, 18);
             g.dispose();
             super.paintComponent(graphics);

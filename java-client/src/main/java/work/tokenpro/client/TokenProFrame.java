@@ -28,10 +28,9 @@ import java.util.concurrent.Callable;
 final class TokenProFrame extends JFrame {
     record ReleaseInfo(String version, String downloadUrl, String sha256) {}
     private static final Color PURPLE = new Color(102, 82, 240);
-    private static final Color CANVAS = new Color(4, 7, 22);
-    private static final Color SIDEBAR = new Color(7, 11, 29);
+    private static final Color CANVAS = new Color(11, 20, 47);
     private static final Color TEXT = new Color(242, 245, 255);
-    private static final Color MUTED = new Color(145, 154, 185);
+    private static final Color MUTED = new Color(181, 191, 220);
     private final SecureStore store;
     private final ApiClient api = new ApiClient();
     private final CodexConfig codex;
@@ -140,7 +139,7 @@ final class TokenProFrame extends JFrame {
         updateButton = soft("检查更新"); updateButton.setIcon(resourceIconContained("RefreshCwLucide.png", 15, 15, true)); updateButton.addActionListener(e -> checkForUpdates(updateButton)); right.add(updateButton);
         JButton user = soft("登录账户"); user.setIcon(resourceIconContained("CircleUserLucide.png", 17, 17, true)); user.addActionListener(e -> openAccount()); headerUser.addPropertyChangeListener("text", e -> user.setText(headerUser.getText())); right.add(user);
         title.add(right, BorderLayout.EAST); panel.add(title, BorderLayout.NORTH);
-        RoundedPanel wallet = new RoundedPanel(20, new Color(10, 18, 44, 214)); wallet.setLayout(new FlowLayout(FlowLayout.LEFT, 14, 10)); wallet.setBorder(new EmptyBorder(0, 7, 0, 7));
+        RoundedPanel wallet = new RoundedPanel(20, new Color(22, 38, 78, 228)); wallet.setLayout(new FlowLayout(FlowLayout.LEFT, 14, 10)); wallet.setBorder(new EmptyBorder(0, 7, 0, 7));
         JPanel captions = transparent(); captions.setLayout(new BoxLayout(captions, BoxLayout.Y_AXIS)); JLabel balanceText = new JLabel("钱包余额"); balanceText.setFont(appFont(12, Font.PLAIN)); balanceText.setForeground(MUTED); JLabel rate = new JLabel("充值比例  1￥ = 1$"); rate.setFont(appFont(10, Font.PLAIN)); rate.setForeground(MUTED); captions.add(balanceText); captions.add(rate); wallet.add(captions);
         headerBalance.setFont(appFont(26, Font.BOLD)); wallet.add(headerBalance); JButton refresh = soft(""); refresh.setToolTipText("刷新余额"); refresh.setIcon(resourceIconContained("RefreshCwLucide.png", 15, 15, true)); refresh.addActionListener(e -> refreshAccount()); wallet.add(refresh); JButton recharge = soft("充值"); recharge.setIcon(resourceIconContained("PlusLucide.png", 15, 15, true)); recharge.addActionListener(e -> browse("https://tokenpro.work/purchase")); wallet.add(recharge);
         JPanel row = transparent(new FlowLayout(FlowLayout.LEFT, 0, 0)); row.add(wallet); panel.add(row, BorderLayout.CENTER); return panel;
@@ -767,7 +766,7 @@ final class TokenProFrame extends JFrame {
     }
 
     private RoundedPanel card() {
-        RoundedPanel panel = new RoundedPanel(22, new Color(12, 23, 55, 188)); panel.setBorder(new EmptyBorder(16, 19, 16, 19));
+        RoundedPanel panel = new RoundedPanel(22, new Color(23, 40, 82, 222)); panel.setBorder(new EmptyBorder(16, 19, 16, 19));
         panel.setAlignmentX(Component.LEFT_ALIGNMENT); panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 104)); return panel;
     }
 
@@ -780,7 +779,7 @@ final class TokenProFrame extends JFrame {
 
     private JButton soft(String text) { JButton button = new ActionButton(text, false); soft(button); return button; }
     private void soft(JButton button) {
-        button.setFont(appFont(13, Font.BOLD)); button.setForeground(new Color(222, 228, 249)); button.setBackground(new Color(24, 31, 58));
+        button.setFont(appFont(13, Font.BOLD)); button.setForeground(new Color(235, 240, 255)); button.setBackground(new Color(37, 50, 91));
         button.setBorder(new EmptyBorder(9, 15, 9, 15)); button.setFocusPainted(false);
         button.setMaximumSize(button.getPreferredSize());
     }
@@ -881,14 +880,14 @@ final class TokenProFrame extends JFrame {
     private static JTree modelTree(boolean multiple) {
         JTree tree = new JTree(new DefaultMutableTreeNode("可用分组"));
         tree.setRootVisible(false); tree.setShowsRootHandles(true); tree.setRowHeight(34); tree.setOpaque(true);
-        tree.setBackground(new Color(8, 13, 31)); tree.setForeground(TEXT); tree.setCellRenderer(new ModelTreeRenderer());
+        tree.setBackground(new Color(19, 33, 69)); tree.setForeground(TEXT); tree.setCellRenderer(new ModelTreeRenderer());
         tree.getSelectionModel().setSelectionMode(multiple ? TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION : TreeSelectionModel.SINGLE_TREE_SELECTION);
         return tree;
     }
 
     private static JScrollPane modelScroll(JTree tree, int height) {
         JScrollPane scroll = new JScrollPane(tree); scroll.setPreferredSize(new Dimension(640, height)); scroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, height));
-        scroll.getViewport().setBackground(new Color(8, 13, 31)); scroll.setBorder(BorderFactory.createLineBorder(new Color(134, 151, 214, 55))); return scroll;
+        scroll.getViewport().setBackground(new Color(19, 33, 69)); scroll.setBorder(BorderFactory.createLineBorder(new Color(156, 176, 235, 82))); return scroll;
     }
 
     private static int populateModelTree(JTree tree, List<PricedModel> models) {
@@ -928,7 +927,7 @@ final class TokenProFrame extends JFrame {
     }
 
     private static final class ModelTreeRenderer extends DefaultTreeCellRenderer {
-        ModelTreeRenderer() { setOpaque(true); setBorderSelectionColor(null); setBackgroundNonSelectionColor(new Color(8, 13, 31)); setTextNonSelectionColor(new Color(222, 228, 249)); }
+        ModelTreeRenderer() { setOpaque(true); setBorderSelectionColor(null); setBackgroundNonSelectionColor(new Color(19, 33, 69)); setTextNonSelectionColor(new Color(235, 240, 255)); }
         public Component getTreeCellRendererComponent(JTree tree, Object value, boolean selected, boolean expanded, boolean leaf, int row, boolean focus) {
             JLabel label = (JLabel) super.getTreeCellRendererComponent(tree, value, selected, expanded, leaf, row, focus);
             Object item = value instanceof DefaultMutableTreeNode node ? node.getUserObject() : value;
@@ -936,7 +935,7 @@ final class TokenProFrame extends JFrame {
             if (item instanceof PricedModel model) label.setText(model.displayName());
             label.setIcon(null);
             label.setBorder(new EmptyBorder(4, group ? 8 : 14, 4, 10)); label.setFont(appFont(group ? 13 : 12, group ? Font.BOLD : Font.PLAIN));
-            label.setBackground(selected ? new Color(56, 50, 116) : new Color(8, 13, 31));
+            label.setBackground(selected ? new Color(76, 67, 148) : new Color(19, 33, 69));
             label.setForeground(group ? new Color(161, 174, 255) : selected ? Color.WHITE : new Color(222, 228, 249));
             return label;
         }
@@ -953,7 +952,7 @@ final class TokenProFrame extends JFrame {
         protected void paintComponent(Graphics graphics) {
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g.setColor(new Color(8, 13, 32, 248));
+            g.setColor(new Color(20, 34, 70, 250));
             g.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 16, 16);
             g.setColor(new Color(144, 164, 235, 58));
             g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 16, 16);
@@ -1001,7 +1000,7 @@ final class TokenProFrame extends JFrame {
     private static final class SidebarPanel extends JPanel {
         SidebarPanel() { setOpaque(false); }
         protected void paintComponent(Graphics g) {
-            Graphics2D g2 = (Graphics2D) g.create(); g2.setPaint(new GradientPaint(0, 0, new Color(5, 13, 36, 224), getWidth(), getHeight(), new Color(16, 11, 48, 212))); g2.fillRect(0, 0, getWidth(), getHeight()); g2.setColor(new Color(170, 188, 255, 42)); g2.drawLine(getWidth() - 1, 0, getWidth() - 1, getHeight()); g2.dispose(); super.paintComponent(g);
+            Graphics2D g2 = (Graphics2D) g.create(); g2.setPaint(new GradientPaint(0, 0, new Color(15, 34, 76, 238), getWidth(), getHeight(), new Color(34, 25, 88, 230))); g2.fillRect(0, 0, getWidth(), getHeight()); g2.setColor(new Color(185, 202, 255, 68)); g2.drawLine(getWidth() - 1, 0, getWidth() - 1, getHeight()); g2.dispose(); super.paintComponent(g);
         }
     }
 
@@ -1011,15 +1010,15 @@ final class TokenProFrame extends JFrame {
         protected void paintComponent(Graphics g) {
             super.paintComponent(g); Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-            if (cosmos != null) { double scale = Math.max(getWidth() / (double) cosmos.getWidth(), getHeight() / (double) cosmos.getHeight()); int w = (int) Math.ceil(cosmos.getWidth() * scale), h = (int) Math.ceil(cosmos.getHeight() * scale); g2.setComposite(AlphaComposite.SrcOver.derive(.60f)); g2.drawImage(cosmos, (getWidth() - w) / 2, (getHeight() - h) / 2, w, h, null); }
-            g2.setComposite(AlphaComposite.SrcOver); g2.setPaint(new GradientPaint(0, 0, new Color(2, 8, 28, 72), getWidth(), getHeight(), new Color(13, 8, 40, 132))); g2.fillRect(0, 0, getWidth(), getHeight()); g2.dispose();
+            if (cosmos != null) { double scale = Math.max(getWidth() / (double) cosmos.getWidth(), getHeight() / (double) cosmos.getHeight()); int w = (int) Math.ceil(cosmos.getWidth() * scale), h = (int) Math.ceil(cosmos.getHeight() * scale); g2.setComposite(AlphaComposite.SrcOver.derive(.82f)); g2.drawImage(cosmos, (getWidth() - w) / 2, (getHeight() - h) / 2, w, h, null); }
+            g2.setComposite(AlphaComposite.SrcOver); g2.setPaint(new GradientPaint(0, 0, new Color(24, 52, 108, 48), getWidth(), getHeight(), new Color(49, 31, 112, 72))); g2.fillRect(0, 0, getWidth(), getHeight()); g2.dispose();
         }
     }
 
     private static class RoundedPanel extends JPanel {
         private final int radius; private final Color fill;
         RoundedPanel(int radius, Color fill) { this.radius = radius; this.fill = fill; setOpaque(false); }
-        protected void paintComponent(Graphics g) { Graphics2D g2 = (Graphics2D) g.create(); g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON); g2.setColor(fill); g2.fill(new RoundRectangle2D.Double(.5, .5, getWidth()-1, getHeight()-1, radius, radius)); g2.setColor(new Color(194,208,255,34)); g2.draw(new RoundRectangle2D.Double(.5, .5, getWidth()-1, getHeight()-1, radius, radius)); g2.dispose(); super.paintComponent(g); }
+        protected void paintComponent(Graphics g) { Graphics2D g2 = (Graphics2D) g.create(); g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON); g2.setColor(fill); g2.fill(new RoundRectangle2D.Double(.5, .5, getWidth()-1, getHeight()-1, radius, radius)); g2.setColor(new Color(205,218,255,58)); g2.draw(new RoundRectangle2D.Double(.5, .5, getWidth()-1, getHeight()-1, radius, radius)); g2.dispose(); super.paintComponent(g); }
     }
 
     private static final class GradientPanel extends JPanel {
@@ -1034,7 +1033,7 @@ final class TokenProFrame extends JFrame {
         protected void paintComponent(Graphics graphics) {
             Graphics2D g = (Graphics2D) graphics.create(); g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             if (prominent && isEnabled()) g.setPaint(new GradientPaint(0, 0, new Color(111, 91, 255), getWidth(), 0, new Color(64, 142, 255)));
-            else g.setColor(prominent ? new Color(62, 60, 112, 190) : (isEnabled() ? new Color(23, 31, 62, 220) : new Color(18, 24, 45, 190)));
+            else g.setColor(prominent ? new Color(76, 72, 132, 205) : (isEnabled() ? new Color(39, 53, 96, 235) : new Color(27, 36, 65, 210)));
             g.fillRoundRect(0, 0, getWidth(), getHeight(), 18, 18); g.setColor(new Color(190, 205, 255, prominent ? 32 : 24)); g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 18, 18);
             g.setFont(getFont()); g.setColor(isEnabled() ? getForeground() : new Color(137, 145, 177)); FontMetrics fm = g.getFontMetrics(); Icon icon = getIcon(); int textWidth = fm.stringWidth(getText()); int iconWidth = icon == null ? 0 : icon.getIconWidth(); int gap = icon == null || getText().isBlank() ? 0 : getIconTextGap(); int total = iconWidth + gap + textWidth; int x = (getWidth() - total) / 2; if (icon != null) { icon.paintIcon(this, g, x, (getHeight() - icon.getIconHeight()) / 2); x += iconWidth + gap; } g.drawString(getText(), x, (getHeight() - fm.getHeight()) / 2 + fm.getAscent()); g.dispose();
         }

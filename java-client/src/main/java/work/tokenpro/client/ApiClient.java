@@ -73,13 +73,27 @@ final class ApiClient {
                     groupName,
                     groupId,
                     text(pricing.getOrDefault("billing_mode", "token")),
-                    decimal(officialPricing.get("output_price"))
+                    decimal(pricing.get("input_price")),
+                    decimal(officialPricing.get("output_price")),
+                    imagePrices(pricing)
                 ));
             }
         }
         result.sort(Comparator.comparingLong(PricedModel::groupId).reversed()
             .thenComparing(ApiClient::compareModelPriceDescending));
         return result;
+    }
+
+    private static List<PricedModel.ImagePrice> imagePrices(Map<String, Object> pricing) {
+        if (!(pricing.get("intervals") instanceof List<?> intervals)) return List.of();
+        List<PricedModel.ImagePrice> result = new ArrayList<>();
+        for (Object raw : intervals) {
+            Map<String, Object> interval = Json.object(raw);
+            String label = text(interval.get("tier_label"));
+            Double price = decimal(interval.get("per_request_price"));
+            if (!label.isBlank() && price != null) result.add(new PricedModel.ImagePrice(label, price));
+        }
+        return List.copyOf(result);
     }
 
     static int compareModelPriceDescending(PricedModel left, PricedModel right) {
