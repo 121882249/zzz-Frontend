@@ -74,6 +74,7 @@ final class ModelPickerDialog extends JDialog {
             .sorted(ModelPickerDialog::compareGroups)
             .toList();
         for (List<PricedModel> groupModels : orderedGroups) {
+            groupModels.sort(ApiClient::compareSelectablePriceDescending);
             PricedModel first = groupModels.getFirst();
             JPanel group = new GroupPanel();
             group.setLayout(new BoxLayout(group, BoxLayout.Y_AXIS));
@@ -148,41 +149,53 @@ final class ModelPickerDialog extends JDialog {
     }
 
     private void addImageChoices(JPanel groups, List<PricedModel> models, Set<String> selectedIds) {
-        List<PricedModel> imageModels = models.stream().filter(PricedModel::isImageGeneration).toList();
+        List<PricedModel> imageModels = models.stream()
+            .filter(PricedModel::isImageGeneration)
+            .sorted(ApiClient::compareSelectablePriceDescending)
+            .toList();
         if (imageModels.isEmpty()) return;
-        JPanel imageGroup = new GroupPanel();
-        imageGroup.setLayout(new BoxLayout(imageGroup, BoxLayout.Y_AXIS));
-        imageGroup.setBorder(new EmptyBorder(14, 16, 12, 16));
-        imageGroup.setAlignmentX(Component.LEFT_ALIGNMENT);
-        JLabel imageTitle = new JLabel("Image");
-        imageTitle.setFont(font(13, Font.BOLD));
-        imageTitle.setForeground(new Color(105, 220, 194));
-        imageTitle.setAlignmentX(Component.LEFT_ALIGNMENT);
-        JLabel imageHint = new JLabel("必选 1 个 · 固定搭配所有已选 LLM");
-        imageHint.setFont(font(11, Font.PLAIN));
-        imageHint.setForeground(MUTED);
-        imageHint.setAlignmentX(Component.LEFT_ALIGNMENT);
-        imageGroup.add(imageTitle);
-        imageGroup.add(Box.createVerticalStrut(4));
-        imageGroup.add(imageHint);
-        imageGroup.add(Box.createVerticalStrut(8));
-        boolean restored = false;
+
+        Map<String, List<PricedModel>> grouped = new LinkedHashMap<>();
         for (PricedModel model : imageModels) {
-            ModelCheckBox choice = new ModelCheckBox(model);
-            boolean selected = !restored && matchesSelectedImage(model, selectedIds);
-            choice.setSelected(selected);
-            restored |= selected;
-            imageChoices.add(choice);
-            choices.add(choice);
-            choice.addActionListener(event -> {
-                if (!choice.isSelected()) return;
-                for (ModelCheckBox other : imageChoices) if (other != choice) other.setSelected(false);
-            });
-            imageGroup.add(choice);
+            grouped.computeIfAbsent(groupKey(model), ignored -> new ArrayList<>()).add(model);
         }
-        imageGroup.setMaximumSize(new Dimension(Integer.MAX_VALUE, imageGroup.getPreferredSize().height));
-        groups.add(imageGroup);
-        groups.add(Box.createVerticalStrut(14));
+        boolean restored = false;
+        for (List<PricedModel> groupModels : grouped.values()) {
+            groupModels.sort(ApiClient::compareSelectablePriceDescending);
+            JPanel imageGroup = new GroupPanel();
+            imageGroup.setLayout(new BoxLayout(imageGroup, BoxLayout.Y_AXIS));
+            imageGroup.setBorder(new EmptyBorder(14, 16, 12, 16));
+            imageGroup.setAlignmentX(Component.LEFT_ALIGNMENT);
+            JLabel imageTitle = new JLabel(groupModels.getFirst().displayGroupName());
+            imageTitle.setFont(font(13, Font.BOLD));
+            imageTitle.setForeground(new Color(105, 220, 194));
+            imageTitle.setAlignmentX(Component.LEFT_ALIGNMENT);
+            JLabel imageHint = new JLabel("Image Model · 必选 1 个 · 固定搭配所有已选 LLM");
+            imageHint.setFont(font(11, Font.PLAIN));
+            imageHint.setForeground(MUTED);
+            imageHint.setAlignmentX(Component.LEFT_ALIGNMENT);
+            imageGroup.add(imageTitle);
+            imageGroup.add(Box.createVerticalStrut(4));
+            imageGroup.add(imageHint);
+            imageGroup.add(Box.createVerticalStrut(8));
+            for (PricedModel model : groupModels) {
+                ModelCheckBox choice = new ModelCheckBox(model);
+                boolean selected = !restored && matchesSelectedImage(model, selectedIds);
+                choice.setSelected(selected);
+                restored |= selected;
+                imageChoices.add(choice);
+                choices.add(choice);
+                choice.addActionListener(event -> {
+                    if (!choice.isSelected()) return;
+                    for (ModelCheckBox other : imageChoices) if (other != choice) other.setSelected(false);
+                });
+                imageGroup.add(choice);
+            }
+            imageGroup.setMaximumSize(new Dimension(Integer.MAX_VALUE, imageGroup.getPreferredSize().height));
+            groups.add(imageGroup);
+            groups.add(Box.createVerticalStrut(14));
+        }
+        if (!restored) imageChoices.getFirst().setSelected(true);
     }
 
     private List<PricedModel> selected() {

@@ -60,18 +60,23 @@ final class SelfTest {
         check(ApiClient.compareModelPriceDescending(premium, standard) < 0, "models sort by output price descending"); passed++;
         check(ApiClient.compareModelPriceDescending(standard, image) < 0, "token models sort before non-token models"); passed++;
         PricedModel inputPriced = new PricedModel("gpt-5.6-sol", "openai", "GPT", 60, "token", 0.000004, 0.00003, List.of());
+        PricedModel lowerInputPriced = new PricedModel("gpt-5.6-terra", "openai", "GPT", 60, "token", 0.000002, 0.00005, List.of());
+        check(ApiClient.compareSelectablePriceDescending(inputPriced, lowerInputPriced) < 0, "picker models sort by displayed input price descending"); passed++;
         check("Input ¥4.00/M".equals(inputPriced.priceLabel()), "LLM input price label"); passed++;
         PricedModel imagePriced = new PricedModel("gpt-image-2.5", "openai", "Image", 60, "image", null, null,
             List.of(new PricedModel.ImagePrice("1K", 0.03), new PricedModel.ImagePrice("2K", 0.05), new PricedModel.ImagePrice("4K", 0.10)));
         check("1K ¥0.03/IMG · 2K ¥0.05/IMG · 4K ¥0.10/IMG".equals(imagePriced.priceLabel()), "image resolution prices"); passed++;
+        PricedModel cheaperImage = new PricedModel("gpt-image-2", "openai", "Image", 60, "image", null, null,
+            List.of(new PricedModel.ImagePrice("1K", 0.01), new PricedModel.ImagePrice("2K", 0.02)));
+        check(ApiClient.compareSelectablePriceDescending(imagePriced, cheaperImage) < 0, "image models sort by displayed per-image price descending"); passed++;
         check(ModelPickerDialog.groupRank(new PricedModel("gpt-5.6", "openai", "GPT", 1))
             < ModelPickerDialog.groupRank(new PricedModel("claude-5", "anthropic", "Claude", 2)), "GPT groups precede Claude"); passed++;
         check(ModelPickerDialog.groupRank(new PricedModel("gemini-3", "google", "Gemini", 3))
             < ModelPickerDialog.groupRank(new PricedModel("mistral-large", "mistral", "Mistral", 4)), "other groups follow Gemini"); passed++;
         check(ModuleLayer.boot().findModule("jdk.crypto.ec").isPresent(), "packaged runtime supports ECDSA TLS certificates"); passed++;
-        String releasePayload = "{\"tag_name\":\"v1.2.25\",\"downloads\":{\"windows-x64\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe\",\"sha256\":\"abc\"}}}";
+        String releasePayload = "{\"tag_name\":\"v1.2.26\",\"downloads\":{\"windows-x64\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe\",\"sha256\":\"abc\"}}}";
         TokenProFrame.ReleaseInfo release = TokenProFrame.releaseForPlatform(releasePayload, "windows-x64");
-        check("1.2.25".equals(release.version()) && release.downloadUrl().endsWith(".exe") && "abc".equals(release.sha256()), "automatic update manifest"); passed++;
+        check("1.2.26".equals(release.version()) && release.downloadUrl().endsWith(".exe") && "abc".equals(release.sha256()), "automatic update manifest"); passed++;
         check(Updater.platformKey().startsWith(Platform.OS_KIND == Platform.OS.MAC ? "macos-" : Platform.OS_KIND == Platform.OS.WINDOWS ? "windows-" : "linux-"), "automatic update platform mapping"); passed++;
         ClaudeBridgeConfig.Route route = ClaudeBridgeConfig.Route.from(priced);
         check(route.alias().matches("claude-tokenpro-[0-9a-f]{24}"), "Claude alias"); passed++;

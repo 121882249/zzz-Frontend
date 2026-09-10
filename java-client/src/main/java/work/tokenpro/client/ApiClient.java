@@ -80,7 +80,7 @@ final class ApiClient {
             }
         }
         result.sort(Comparator.comparingLong(PricedModel::groupId).reversed()
-            .thenComparing(ApiClient::compareModelPriceDescending));
+            .thenComparing(ApiClient::compareSelectablePriceDescending));
         return result;
     }
 
@@ -104,6 +104,23 @@ final class ApiClient {
         if (a != null) return -1;
         if (b != null) return 1;
         return compareModelVersionDescending(left.name(), right.name());
+    }
+
+    /** Sorts by the price shown in the picker: charged input price for LLMs and per-image price for image models. */
+    static int compareSelectablePriceDescending(PricedModel left, PricedModel right) {
+        Double a = selectablePrice(left);
+        Double b = selectablePrice(right);
+        if (a != null && b != null && Double.compare(a, b) != 0) return Double.compare(b, a);
+        if (a != null) return -1;
+        if (b != null) return 1;
+        return compareModelVersionDescending(left.name(), right.name());
+    }
+
+    private static Double selectablePrice(PricedModel model) {
+        if (model.isImageGeneration() && !model.imagePrices().isEmpty()) {
+            return model.imagePrices().stream().mapToDouble(PricedModel.ImagePrice::perImage).max().orElse(0d);
+        }
+        return model.inputPrice();
     }
 
     static int compareModelVersionDescending(String left, String right) {
