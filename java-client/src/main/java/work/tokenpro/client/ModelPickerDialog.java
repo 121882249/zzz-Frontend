@@ -199,23 +199,72 @@ final class ModelPickerDialog extends JDialog {
 
     private static final class ModelCheckBox extends JCheckBox {
         private final PricedModel model;
+        private boolean hovered;
         ModelCheckBox(PricedModel model) {
-            super(model.displayName());
+            super("");
             this.model = model;
             setFont(font(13, Font.PLAIN));
             setForeground(TEXT);
-            setBackground(PANEL);
             setOpaque(false);
             setFocusPainted(false);
-            setBorder(new EmptyBorder(7, 2, 7, 2));
+            setContentAreaFilled(false);
+            setBorderPainted(false);
+            setPreferredSize(new Dimension(520, 44));
+            setMinimumSize(new Dimension(240, 44));
+            setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
             setAlignmentX(Component.LEFT_ALIGNMENT);
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
             addMouseListener(new MouseAdapter() {
-                public void mouseEntered(MouseEvent event) { setForeground(new Color(187, 199, 255)); }
-                public void mouseExited(MouseEvent event) { setForeground(TEXT); }
+                public void mouseEntered(MouseEvent event) { hovered = true; repaint(); }
+                public void mouseExited(MouseEvent event) { hovered = false; repaint(); }
             });
         }
         PricedModel model() { return model; }
+
+        protected void paintComponent(Graphics graphics) {
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            int width = getWidth() - 1, height = getHeight() - 2;
+            if (isSelected()) {
+                g.setPaint(new GradientPaint(0, 0, new Color(91, 73, 220, 155), width, 0, new Color(44, 130, 229, 105)));
+            } else {
+                g.setColor(hovered ? new Color(35, 47, 91, 175) : new Color(15, 24, 55, 150));
+            }
+            g.fillRoundRect(0, 1, width, height, 14, 14);
+            g.setColor(isSelected() ? new Color(152, 178, 255, 180) : new Color(151, 169, 226, hovered ? 92 : 42));
+            g.drawRoundRect(0, 1, width, height, 14, 14);
+
+            int cx = 19, cy = getHeight() / 2;
+            if (isSelected()) {
+                g.setPaint(new GradientPaint(cx - 8, cy - 8, new Color(138, 102, 255), cx + 8, cy + 8, new Color(69, 178, 255)));
+                g.fillOval(cx - 8, cy - 8, 16, 16);
+                g.setColor(Color.WHITE);
+                g.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                g.drawLine(cx - 4, cy, cx - 1, cy + 3);
+                g.drawLine(cx - 1, cy + 3, cx + 5, cy - 4);
+            } else {
+                g.setColor(new Color(181, 194, 235, 105));
+                g.setStroke(new BasicStroke(1.4f));
+                g.drawOval(cx - 8, cy - 8, 16, 16);
+            }
+
+            g.setFont(getFont());
+            g.setColor(isSelected() ? Color.WHITE : hovered ? new Color(232, 237, 255) : TEXT);
+            FontMetrics metrics = g.getFontMetrics();
+            g.drawString(model.displayName(), 38, (getHeight() - metrics.getHeight()) / 2 + metrics.getAscent());
+            if (model.isImageGeneration()) {
+                String tag = "生图";
+                g.setFont(font(10, Font.BOLD));
+                FontMetrics tagMetrics = g.getFontMetrics();
+                int tagWidth = tagMetrics.stringWidth(tag) + 16;
+                int tagX = getWidth() - tagWidth - 13;
+                g.setColor(new Color(65, 214, 190, isSelected() ? 56 : 28));
+                g.fillRoundRect(tagX, cy - 10, tagWidth, 20, 10, 10);
+                g.setColor(new Color(112, 235, 211));
+                g.drawString(tag, tagX + 8, cy + (tagMetrics.getAscent() - tagMetrics.getDescent()) / 2);
+            }
+            g.dispose();
+        }
     }
 
     private static final class CosmosPanel extends JPanel {
@@ -225,6 +274,16 @@ final class ModelPickerDialog extends JDialog {
             Graphics2D g = (Graphics2D) graphics.create();
             g.setPaint(new GradientPaint(0, 0, new Color(12, 20, 51), getWidth(), getHeight(), new Color(9, 8, 35)));
             g.fillRect(0, 0, getWidth(), getHeight());
+            g.setPaint(new RadialGradientPaint(getWidth() * .78f, getHeight() * .08f, Math.max(180, getWidth() * .52f),
+                new float[]{0f, 1f}, new Color[]{new Color(82, 66, 220, 72), new Color(20, 15, 67, 0)}));
+            g.fillRect(0, 0, getWidth(), getHeight());
+            g.setColor(new Color(198, 218, 255, 105));
+            for (int i = 0; i < 28; i++) {
+                int x = Math.floorMod(i * 83 + 31, Math.max(1, getWidth()));
+                int y = Math.floorMod(i * 47 + 19, Math.max(1, getHeight()));
+                int size = i % 7 == 0 ? 2 : 1;
+                g.fillOval(x, y, size, size);
+            }
             g.setColor(new Color(184, 199, 255, 45));
             g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 24, 24);
             g.dispose();
@@ -258,9 +317,9 @@ final class ModelPickerDialog extends JDialog {
         protected void paintComponent(Graphics graphics) {
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g.setColor(new Color(8, 14, 35, 226));
+            g.setColor(new Color(13, 23, 54, 196));
             g.fillRoundRect(0, 0, getWidth(), getHeight(), 18, 18);
-            g.setColor(new Color(187, 201, 255, 34));
+            g.setColor(new Color(187, 201, 255, 54));
             g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 18, 18);
             g.dispose();
             super.paintComponent(graphics);

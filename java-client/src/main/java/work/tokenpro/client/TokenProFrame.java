@@ -720,7 +720,7 @@ final class TokenProFrame extends JFrame {
     }
 
     private RoundedPanel card() {
-        RoundedPanel panel = new RoundedPanel(22, new Color(8, 14, 35, 218)); panel.setBorder(new EmptyBorder(16, 19, 16, 19));
+        RoundedPanel panel = new RoundedPanel(22, new Color(12, 23, 55, 188)); panel.setBorder(new EmptyBorder(16, 19, 16, 19));
         panel.setAlignmentX(Component.LEFT_ALIGNMENT); panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 104)); return panel;
     }
 
@@ -956,7 +956,7 @@ final class TokenProFrame extends JFrame {
     private static final class SidebarPanel extends JPanel {
         SidebarPanel() { setOpaque(false); }
         protected void paintComponent(Graphics g) {
-            Graphics2D g2 = (Graphics2D) g.create(); g2.setColor(new Color(3, 7, 23, 238)); g2.fillRect(0, 0, getWidth(), getHeight()); g2.setColor(new Color(170, 188, 255, 24)); g2.drawLine(getWidth() - 1, 0, getWidth() - 1, getHeight()); g2.dispose(); super.paintComponent(g);
+            Graphics2D g2 = (Graphics2D) g.create(); g2.setPaint(new GradientPaint(0, 0, new Color(5, 13, 36, 224), getWidth(), getHeight(), new Color(16, 11, 48, 212))); g2.fillRect(0, 0, getWidth(), getHeight()); g2.setColor(new Color(170, 188, 255, 42)); g2.drawLine(getWidth() - 1, 0, getWidth() - 1, getHeight()); g2.dispose(); super.paintComponent(g);
         }
     }
 
@@ -966,8 +966,8 @@ final class TokenProFrame extends JFrame {
         protected void paintComponent(Graphics g) {
             super.paintComponent(g); Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-            if (cosmos != null) { double scale = Math.max(getWidth() / (double) cosmos.getWidth(), getHeight() / (double) cosmos.getHeight()); int w = (int) Math.ceil(cosmos.getWidth() * scale), h = (int) Math.ceil(cosmos.getHeight() * scale); g2.setComposite(AlphaComposite.SrcOver.derive(.34f)); g2.drawImage(cosmos, (getWidth() - w) / 2, (getHeight() - h) / 2, w, h, null); }
-            g2.setComposite(AlphaComposite.SrcOver); g2.setPaint(new GradientPaint(0, 0, new Color(2, 6, 20, 145), getWidth(), getHeight(), new Color(4, 6, 22, 205))); g2.fillRect(0, 0, getWidth(), getHeight()); g2.dispose();
+            if (cosmos != null) { double scale = Math.max(getWidth() / (double) cosmos.getWidth(), getHeight() / (double) cosmos.getHeight()); int w = (int) Math.ceil(cosmos.getWidth() * scale), h = (int) Math.ceil(cosmos.getHeight() * scale); g2.setComposite(AlphaComposite.SrcOver.derive(.60f)); g2.drawImage(cosmos, (getWidth() - w) / 2, (getHeight() - h) / 2, w, h, null); }
+            g2.setComposite(AlphaComposite.SrcOver); g2.setPaint(new GradientPaint(0, 0, new Color(2, 8, 28, 72), getWidth(), getHeight(), new Color(13, 8, 40, 132))); g2.fillRect(0, 0, getWidth(), getHeight()); g2.dispose();
         }
     }
 
@@ -980,7 +980,7 @@ final class TokenProFrame extends JFrame {
     private static final class GradientPanel extends JPanel {
         private final BufferedImage cosmos = resourceImage("LoginCosmos-v2.png");
         GradientPanel() { setOpaque(false); }
-        protected void paintComponent(Graphics g) { Graphics2D g2 = (Graphics2D) g.create(); if (cosmos != null) { g2.setComposite(AlphaComposite.SrcOver.derive(.32f)); g2.drawImage(cosmos, 0, -cosmos.getHeight() / 4, getWidth(), getHeight() * 2, null); } g2.setComposite(AlphaComposite.SrcOver); g2.setPaint(new GradientPaint(0, 0, new Color(11, 22, 56, 215), getWidth(), getHeight(), new Color(32, 18, 76, 220))); g2.fillRect(0, 0, getWidth(), getHeight()); g2.dispose(); super.paintComponent(g); }
+        protected void paintComponent(Graphics g) { Graphics2D g2 = (Graphics2D) g.create(); if (cosmos != null) { g2.setComposite(AlphaComposite.SrcOver.derive(.58f)); g2.drawImage(cosmos, 0, -cosmos.getHeight() / 4, getWidth(), getHeight() * 2, null); } g2.setComposite(AlphaComposite.SrcOver); g2.setPaint(new GradientPaint(0, 0, new Color(13, 30, 73, 148), getWidth(), getHeight(), new Color(47, 24, 103, 158))); g2.fillRect(0, 0, getWidth(), getHeight()); g2.dispose(); super.paintComponent(g); }
     }
 
     private static final class ActionButton extends JButton {
