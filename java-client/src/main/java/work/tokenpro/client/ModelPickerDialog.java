@@ -17,6 +17,8 @@ final class ModelPickerDialog extends JDialog {
     private static final Color MUTED = new Color(145, 154, 185);
     private static final Color PANEL = new Color(8, 14, 35);
     private final List<ModelCheckBox> choices = new ArrayList<>();
+    private final List<ModelCheckBox> imageChoices = new ArrayList<>();
+    private final List<ModelCheckBox> chatChoices = new ArrayList<>();
 
     ModelPickerDialog(JFrame owner, String client, List<PricedModel> models,
                       Set<String> selectedIds, Consumer<List<PricedModel>> onApply) {
@@ -53,7 +55,7 @@ final class ModelPickerDialog extends JDialog {
         title.setFont(font(23, Font.BOLD));
         title.setForeground(TEXT);
         boolean codex = "Codex".equals(client);
-        JLabel detail = new JLabel(codex ? "LLM Model 和 Image Model 各至少选择 1 个，可自由搭配" : "按可用分组展示，可直接点选多个模型");
+        JLabel detail = new JLabel(codex ? "请选择 1 个 LLM Model 和 1 个 Image Model" : "按可用分组展示，可直接点选多个模型");
         detail.setFont(font(12, Font.PLAIN));
         detail.setForeground(MUTED);
         header.add(title);
@@ -70,13 +72,14 @@ final class ModelPickerDialog extends JDialog {
             grouped.computeIfAbsent(groupKey(model), ignored -> new ArrayList<>()).add(model);
         }
         if (codex && !grouped.isEmpty()) {
-            JLabel llmTitle = new JLabel("LLM Model（至少选择 1 个）");
+            JLabel llmTitle = new JLabel("LLM Model（必选 1 个）");
             llmTitle.setFont(font(13, Font.BOLD));
             llmTitle.setForeground(new Color(172, 183, 255));
             llmTitle.setAlignmentX(Component.LEFT_ALIGNMENT);
             groups.add(llmTitle);
             groups.add(Box.createVerticalStrut(8));
         }
+        boolean restoredChat = false;
         for (List<PricedModel> groupModels : grouped.values()) {
             PricedModel first = groupModels.getFirst();
             JPanel group = new GroupPanel();
@@ -91,7 +94,17 @@ final class ModelPickerDialog extends JDialog {
             group.add(Box.createVerticalStrut(8));
             for (PricedModel model : groupModels) {
                 ModelCheckBox choice = new ModelCheckBox(model);
-                choice.setSelected(selectedIds.contains(id(model)));
+                boolean selected = selectedIds.contains(id(model));
+                if (codex) {
+                    selected = !restoredChat && selected;
+                    restoredChat |= selected;
+                    chatChoices.add(choice);
+                    choice.addActionListener(event -> {
+                        if (!choice.isSelected()) return;
+                        for (ModelCheckBox other : chatChoices) if (other != choice) other.setSelected(false);
+                    });
+                }
+                choice.setSelected(selected);
                 choices.add(choice);
                 group.add(choice);
             }
@@ -106,7 +119,7 @@ final class ModelPickerDialog extends JDialog {
                 imageGroup.setLayout(new BoxLayout(imageGroup, BoxLayout.Y_AXIS));
                 imageGroup.setBorder(new EmptyBorder(14, 16, 12, 16));
                 imageGroup.setAlignmentX(Component.LEFT_ALIGNMENT);
-                JLabel imageTitle = new JLabel("Image Model（至少选择 1 个）");
+                JLabel imageTitle = new JLabel("Image Model（必选 1 个）");
                 imageTitle.setFont(font(13, Font.BOLD));
                 imageTitle.setForeground(new Color(105, 220, 194));
                 imageTitle.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -118,10 +131,18 @@ final class ModelPickerDialog extends JDialog {
                 imageGroup.add(Box.createVerticalStrut(4));
                 imageGroup.add(imageHint);
                 imageGroup.add(Box.createVerticalStrut(8));
+                boolean restored = false;
                 for (PricedModel model : imageModels) {
                     ModelCheckBox choice = new ModelCheckBox(model);
-                    choice.setSelected(matchesSelectedImage(model, selectedIds));
+                    boolean selected = !restored && matchesSelectedImage(model, selectedIds);
+                    choice.setSelected(selected);
+                    restored |= selected;
+                    imageChoices.add(choice);
                     choices.add(choice);
+                    choice.addActionListener(event -> {
+                        if (!choice.isSelected()) return;
+                        for (ModelCheckBox other : imageChoices) if (other != choice) other.setSelected(false);
+                    });
                     imageGroup.add(choice);
                 }
                 imageGroup.setMaximumSize(new Dimension(Integer.MAX_VALUE, imageGroup.getPreferredSize().height));
@@ -149,7 +170,7 @@ final class ModelPickerDialog extends JDialog {
         Runnable updateCount = () -> {
             long imageCount = selected().stream().filter(PricedModel::isImageGeneration).count();
             long chatCount = selected().size() - imageCount;
-            count.setText(codex ? "LLM Model 已选 " + chatCount + " 个 · Image Model 已选 " + imageCount + " 个" : "已选择 " + selected().size() + " 个模型");
+            count.setText(codex ? "LLM Model " + (chatCount == 1 ? "已选" : "未选") + " · Image Model " + (imageCount == 1 ? "已选" : "未选") : "已选择 " + selected().size() + " 个模型");
         };
         choices.forEach(choice -> choice.addActionListener(event -> updateCount.run()));
         updateCount.run();
@@ -162,8 +183,8 @@ final class ModelPickerDialog extends JDialog {
             List<PricedModel> selected = selected();
             long imageCount = selected.stream().filter(PricedModel::isImageGeneration).count();
             long chatCount = selected.size() - imageCount;
-            if (selected.isEmpty() || codex && (chatCount < 1 || imageCount < 1)) {
-                JOptionPane.showMessageDialog(this, codex ? "LLM Model 和 Image Model 必须各选择至少 1 个" : "请至少选择一个模型", "TokenPro", JOptionPane.WARNING_MESSAGE);
+            if (selected.isEmpty() || codex && (chatCount != 1 || imageCount != 1)) {
+                JOptionPane.showMessageDialog(this, codex ? "请分别选择 1 个 LLM Model 和 1 个 Image Model" : "请至少选择一个模型", "TokenPro", JOptionPane.WARNING_MESSAGE);
                 return;
             }
             dispose();
