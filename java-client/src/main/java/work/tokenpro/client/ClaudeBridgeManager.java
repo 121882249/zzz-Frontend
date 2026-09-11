@@ -26,4 +26,20 @@ final class ClaudeBridgeManager {
         for (int i = 0; i < 35; i++) { Thread.sleep(100); if (healthy(store)) return; }
         throw new IllegalStateException("Claude 本地桥接未能启动，端口 23179 可能被占用");
     }
+
+    static void stop(SecureStore store) throws Exception {
+        if (!healthy(store)) return;
+        ClaudeBridgeConfig config = ClaudeBridgeConfig.load(store);
+        HttpRequest request = HttpRequest.newBuilder(URI.create(config.baseUrl() + "/shutdown"))
+            .timeout(Duration.ofSeconds(2)).header("Authorization", "Bearer " + config.localToken())
+            .POST(HttpRequest.BodyPublishers.noBody()).build();
+        HttpResponse<String> response = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(1)).build()
+            .send(request, HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() != 200) throw new IllegalStateException("Claude 本地桥接无法停止");
+        for (int i = 0; i < 30; i++) {
+            Thread.sleep(100);
+            if (!healthy(store)) return;
+        }
+        throw new IllegalStateException("Claude 本地桥接停止超时");
+    }
 }

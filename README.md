@@ -11,7 +11,7 @@ TokenPro 现在只有一套 Java 21/Swing 客户端源码，支持 Windows、mac
 - 从模型广场选择 Codex 模型，自动创建专用 Key、应用配置，并可一键恢复官方配置。
 - 通过纯 Java 本地桥接把 TokenPro 模型接入 Claude Desktop，支持模型分组自动切换、工具调用和流式响应。
 - API Key 保存在当前系统用户的 TokenPro 私有配置目录，不写入 `config.toml`。
-- 桌面客户端提供“选择模型 / 恢复官方配置 / 打开应用”；命令行客户端提供下载入口和打开命令行。
+- “我的应用”提供“选择模型 / 恢复官方配置 / 连接客户端”；命令行工具提供下载入口和连接命令行。
 - 在 TokenPro 内置浏览器中打开后台管理、使用文档、充值页和版本下载页。
 - 启动后自动检查更新并提醒，也可手动检查；支持启动 Codex、Claude、Codex CLI 与 Claude Code。
 

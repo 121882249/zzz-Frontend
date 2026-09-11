@@ -12,7 +12,7 @@
 - 登录后的“我的账户”仅显示账户余额和退出账户操作。
 - 纯 Java 本地桥接仅监听 `127.0.0.1`，支持 Anthropic Messages、OpenAI Responses、工具调用和 SSE 流式响应。
 - Claude 桥接复用 TokenPro 全局 Key，并按当前选中的模型动态路由，无需切换 Key 分组。
-- 桌面客户端提供“选择模型 / 恢复官方配置 / 打开应用”；命令行客户端提供下载入口和打开命令行。
+- “我的应用”提供“选择模型 / 恢复官方配置 / 连接客户端”；命令行工具提供下载入口和连接命令行。
 - 使用系统默认浏览器打开后台管理、使用文档、充值页和 GitHub 版本页。
 - 内置 GitHub Releases 更新检查。
 - 配置目录自动适配 `%APPDATA%`、macOS Application Support 和 Linux XDG。

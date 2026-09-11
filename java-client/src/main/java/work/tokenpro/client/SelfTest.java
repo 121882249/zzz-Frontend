@@ -144,6 +144,8 @@ final class SelfTest {
                 check(counted.statusCode() == 200 && Boolean.TRUE.equals(Json.object(Json.parse(counted.body())).get("tokenpro_estimated")), "bridge token count"); passed++;
                 HttpRequest browser = HttpRequest.newBuilder(health).header("Authorization", "Bearer local-test-token").header("Origin", "https://example.com").GET().build();
                 check(http.send(browser, HttpResponse.BodyHandlers.ofString()).statusCode() == 403, "bridge rejects browser origin"); passed++;
+                HttpRequest shutdown = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/shutdown")).header("Authorization", "Bearer local-test-token").POST(HttpRequest.BodyPublishers.noBody()).build();
+                check(http.send(shutdown, HttpResponse.BodyHandlers.ofString()).statusCode() == 200, "bridge accepts authenticated shutdown"); passed++;
             }
         } finally {
             try (var files = Files.walk(temporary)) { files.sorted(Comparator.reverseOrder()).forEach(path -> { try { Files.deleteIfExists(path); } catch (Exception ignored) {} }); }

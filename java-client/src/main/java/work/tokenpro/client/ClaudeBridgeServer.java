@@ -38,6 +38,14 @@ final class ClaudeBridgeServer implements AutoCloseable {
             if (exchange.getRequestHeaders().getFirst("Origin") != null) { error(exchange, 403, "permission_error", "Browser requests are not allowed"); return; }
             String method = exchange.getRequestMethod(); String path = exchange.getRequestURI().getPath();
             if (method.equals("GET") && path.equals("/health")) { json(exchange, 200, Map.of("service", "tokenpro-claude-bridge-v1")); return; }
+            if (method.equals("POST") && path.equals("/shutdown")) {
+                json(exchange, 200, Map.of("stopped", true));
+                Thread.ofVirtual().start(() -> {
+                    try { Thread.sleep(50); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
+                    close();
+                });
+                return;
+            }
             if (method.equals("GET") && path.equals("/v1/models")) {
                 List<Map<String, Object>> models = config.routes().stream().map(route -> Map.<String, Object>of("id", route.alias(), "type", "model", "display_name", PricedModel.displayCase(route.name()), "created_at", "2026-01-01T00:00:00Z")).toList();
                 json(exchange, 200, Map.of("data", models, "has_more", false)); return;
@@ -147,7 +155,10 @@ final class ClaudeBridgeServer implements AutoCloseable {
                 observed = true;
                 absentChecks = 0;
             } else if (observed) {
-                if (++absentChecks >= 6) return;
+                // Two consecutive checks avoid reacting to a transient process
+                // lookup miss while still cancelling upstream work within ~1s
+                // when the user manually quits Claude.
+                if (++absentChecks >= 2) return;
             } else if (System.nanoTime() >= startupDeadline) {
                 return;
             }

@@ -125,6 +125,23 @@ final class Platform {
         return openApplication(name);
     }
 
+    static boolean reconnectApplication(String name) throws Exception {
+        if (OS_KIND == OS.MAC && !applicationRunning(macApplicationTarget(name))) return openApplication(name);
+        return restartApplication(name);
+    }
+
+    static boolean quitClaudeThirdParty() throws Exception {
+        if (!claudeThirdPartyRunning()) return true;
+        Process quit;
+        if (OS_KIND == OS.MAC) quit = new ProcessBuilder("osascript", "-e", "tell application \"Claude\" to quit").start();
+        else if (OS_KIND == OS.WINDOWS) quit = new ProcessBuilder("taskkill", "/IM", "Claude.exe", "/F").start();
+        else quit = new ProcessBuilder("pkill", "-x", "claude").start();
+        if (!quit.waitFor(5, TimeUnit.SECONDS) || (quit.exitValue() != 0 && claudeThirdPartyRunning())) return false;
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (claudeThirdPartyRunning() && System.nanoTime() < deadline) Thread.sleep(200);
+        return !claudeThirdPartyRunning();
+    }
+
     private static boolean applicationRunning(String name) throws Exception {
         Process process = new ProcessBuilder("pgrep", "-x", name).start();
         return process.waitFor(2, TimeUnit.SECONDS) && process.exitValue() == 0;
