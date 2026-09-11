@@ -1527,7 +1527,8 @@ final class TokenProFrame extends JFrame {
         new SwingWorker<Void,Void>() {
             protected Void doInBackground() throws Exception {
                 BridgeLifecycle.update(BridgeLifecycle.running(store), () -> {
-                    if(release.hasIncrementalUpdate()) Updater.installIncremental(installer, release.version());
+                    if(release.hasIncrementalUpdate() && Platform.OS_KIND == Platform.OS.WINDOWS) WindowsUpdater.installDelta(installer, release.version());
+                    else if(release.hasIncrementalUpdate()) Updater.installIncremental(installer, release.version());
                     else Updater.install(installer);
                 });
                 return null;

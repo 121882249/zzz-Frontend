@@ -1,18 +1,32 @@
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
+$compilerCandidates = @(
+  $env:INNO_ISCC,
+  "${env:ProgramFiles(x86)}/Inno Setup 6/ISCC.exe",
+  "$env:ProgramFiles/Inno Setup 6/ISCC.exe",
+  "$env:LOCALAPPDATA/Programs/Inno Setup 6/ISCC.exe"
+)
+$compiler = $compilerCandidates | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
+if (-not $compiler) { throw '需要 Inno Setup 6.7.1+。请安装构建工具或用 INNO_ISCC 指定 ISCC.exe；脚本不会自动下载或安装工具。' }
+$compilerVersion = [version](Get-Item -LiteralPath $compiler).VersionInfo.FileVersion
+if ($compilerVersion -lt [version]'6.7.1') { throw "编译器版本 $compilerVersion 过旧，中文星空主题需要 Inno Setup 6.7.1+。" }
 & ./build.ps1
 if ($LASTEXITCODE -ne 0) { throw "build.ps1 failed with exit code $LASTEXITCODE" }
-Remove-Item -Recurse -Force dist -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Force dist | Out-Null
-Remove-Item -Recurse -Force build/input -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Force build/input | Out-Null
-Copy-Item build/TokenPro.jar build/input/TokenPro.jar -Force
-& "$env:JAVA_HOME/bin/jpackage.exe" --type exe --name TokenPro --app-version 1.2.64 `
-  --input build/input --main-jar TokenPro.jar --main-class work.tokenpro.client.Main `
+$packageRoot = Join-Path $PSScriptRoot ('build/windows-package-' + [Guid]::NewGuid().ToString('N'))
+$inputRoot = Join-Path $packageRoot 'input'
+$imageRoot = Join-Path $packageRoot 'image'
+New-Item -ItemType Directory -Path $inputRoot -Force | Out-Null
+New-Item -ItemType Directory -Path $imageRoot -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $PSScriptRoot 'dist') -Force | Out-Null
+Copy-Item -LiteralPath 'build/TokenPro.jar' -Destination (Join-Path $inputRoot 'TokenPro.jar')
+& "$env:JAVA_HOME/bin/jpackage.exe" --type app-image --name TokenPro --app-version 1.2.65 `
+  --input $inputRoot --main-jar TokenPro.jar --main-class work.tokenpro.client.Main `
   --module-path "$env:JAVA_HOME/jmods" `
   --add-modules java.base,java.desktop,java.net.http,jdk.httpserver,jdk.crypto.ec `
   --icon ../Router.ico `
-  --vendor TokenPro --description "TokenPro cross-platform desktop client" --dest dist `
-  --win-menu --win-shortcut --win-dir-chooser
+  --vendor TokenPro --description 'TokenPro · AI 模型接入与用量管理' --dest $imageRoot
 if ($LASTEXITCODE -ne 0) { throw "jpackage failed with exit code $LASTEXITCODE" }
-Write-Host "Created Windows installer in java-client/dist"
+& $compiler ("/DAppImageDir=" + (Join-Path $imageRoot 'TokenPro')) `
+  ("/DOutputDirPath=" + (Join-Path $PSScriptRoot 'dist')) 'installer/windows/TokenPro.iss'
+if ($LASTEXITCODE -ne 0) { throw "中文安装包编译失败，退出码 $LASTEXITCODE" }
+Write-Host '已生成中文星空主题 Windows 安装包，默认仅为当前用户安装。'
