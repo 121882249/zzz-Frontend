@@ -66,6 +66,8 @@ final class TokenProFrame extends JFrame {
     private final JPanel subscriptionSlot = transparent(new BorderLayout());
     private final JLabel homeClaudeStatus = new ClientStatusLabel("请先选择模型");
     private final JLabel homeCodexStatus = new ClientStatusLabel("请先选择模型");
+    private final SupportCountLabel homeCodexSupport = new SupportCountLabel();
+    private final SupportCountLabel homeClaudeSupport = new SupportCountLabel();
     private JButton codexLaunch;
     private JButton claudeLaunch;
     private JButton updateButton;
@@ -199,6 +201,7 @@ final class TokenProFrame extends JFrame {
         JLabel badge = new JLabel(clientIcon(iconName, 48)); badge.setHorizontalAlignment(SwingConstants.CENTER); badge.setPreferredSize(new Dimension(52, 52)); card.add(badge, BorderLayout.WEST);
         JPanel words = transparent(); words.setLayout(new BoxLayout(words, BoxLayout.Y_AXIS)); JPanel nameLine = transparent(new FlowLayout(FlowLayout.LEFT, 10, 0)); nameLine.setAlignmentX(Component.LEFT_ALIGNMENT); nameLine.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24)); JLabel heading = new JLabel(title); heading.setFont(appFont(17, Font.BOLD)); JLabel installedLabel = new JLabel(installed ? "已安装" : "未安装"); installedLabel.setFont(appFont(11, Font.BOLD)); installedLabel.setForeground(installed ? new Color(97, 222, 165) : MUTED); nameLine.add(heading); nameLine.add(installedLabel); JLabel detail = new JLabel(subtitle); detail.setAlignmentX(Component.LEFT_ALIGNMENT); detail.setFont(appFont(11, Font.PLAIN)); detail.setForeground(MUTED); words.add(Box.createVerticalStrut(3)); words.add(nameLine); words.add(Box.createVerticalStrut(6)); words.add(detail); card.add(words, BorderLayout.CENTER);
         JPanel actions = transparent(); actions.setLayout(new BoxLayout(actions, BoxLayout.Y_AXIS)); JPanel buttons = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        buttons.add(iconName.equals("Codex") ? homeCodexSupport : homeClaudeSupport);
         JButton menu = soft("模型选择  ▾");
         menu.addActionListener(e -> showModelMenu(menu, chooseModel, restore));
         JButton launch = primary("连接 " + iconName + " 客户端"); launch.addActionListener(e -> open.run());
@@ -334,6 +337,7 @@ final class TokenProFrame extends JFrame {
         try {
             store.delete("java-session.json"); accessToken = null; refreshToken = ""; tokenExpiresAt = 0; sessionUser = Map.of(); accountId = ""; keys.clear();
             account.setText("尚未登录"); headerUser.setText("登录账户"); accountEmail.setText("登录账户"); headerBalance.setText("—"); accountBalance.setText("—"); showSubscriptions(List.of());
+            homeCodexSupport.reset(); homeClaudeSupport.reset();
             homeCodexStatus.setText("请先选择模型"); homeClaudeStatus.setText("请先选择模型"); if (codexLaunch != null) codexLaunch.setEnabled(false); if (claudeLaunch != null) claudeLaunch.setEnabled(false);
             showPage("首页"); showLoginScreen(); status("已退出账户");
         } catch (Exception ex) { error(ex); }
@@ -363,6 +367,7 @@ final class TokenProFrame extends JFrame {
         if (accessToken == null || accountId.isBlank()) { error(new IllegalStateException("请先登录 TokenPro")); return; }
         async("正在加载可用分组与模型…", () -> api.pricedModels(accessToken), models -> {
             if (models.isEmpty()) { error(new IllegalStateException("当前账户没有可用模型")); return; }
+            updateSupportedModelCounts(models);
             Set<String> selected = selectedModelIds(client);
             ModelPickerDialog dialog = new ModelPickerDialog(this, client, models, selected,
                 chosen -> { if ("Codex".equals(client)) applyCodex(chosen); else applyClaude(chosen); });
@@ -680,7 +685,35 @@ final class TokenProFrame extends JFrame {
         password.setText("");
         status("就绪");
         try { if (!emailValue.isBlank()) codex.updateActor(emailValue); } catch (Exception ignored) {}
+        refreshSupportedModelCounts();
         refreshSubscriptions();
+    }
+
+    private void refreshSupportedModelCounts() {
+        if (accessToken == null || accessToken.isBlank()) {
+            homeCodexSupport.reset();
+            homeClaudeSupport.reset();
+            return;
+        }
+        String token = accessToken;
+        new SwingWorker<List<PricedModel>, Void>() {
+            protected List<PricedModel> doInBackground() throws Exception { return api.pricedModels(token); }
+            protected void done() {
+                try {
+                    if (Objects.equals(token, accessToken)) updateSupportedModelCounts(get());
+                } catch (Exception ignored) {
+                    homeCodexSupport.reset();
+                    homeClaudeSupport.reset();
+                }
+            }
+        }.execute();
+    }
+
+    private void updateSupportedModelCounts(List<PricedModel> models) {
+        long codexCount = models.stream().filter(model -> ModelPickerDialog.supportsClient(model, "Codex")).map(PricedModel::name).distinct().count();
+        long claudeCount = models.stream().filter(model -> ModelPickerDialog.supportsClient(model, "Claude")).map(PricedModel::name).distinct().count();
+        homeCodexSupport.setCount(codexCount);
+        homeClaudeSupport.setCount(claudeCount);
     }
 
     private void saveSession(Map<String, Object> user) throws Exception {
@@ -1315,6 +1348,35 @@ final class TokenProFrame extends JFrame {
             g.fillRoundRect(1, 1, getWidth() - 2, getHeight() - 2, 14, 14);
             g.setColor(new Color(179, 191, 255, 145));
             g.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, 14, 14);
+            g.dispose();
+            super.paintComponent(graphics);
+        }
+    }
+
+    private static final class SupportCountLabel extends JLabel {
+        SupportCountLabel() {
+            super("✦ 多款模型可连接", SwingConstants.CENTER);
+            setFont(appFont(10, Font.BOLD));
+            setForeground(new Color(152, 240, 218));
+            setPreferredSize(new Dimension(126, 36));
+            setMinimumSize(getPreferredSize());
+            setToolTipText("登录后显示当前账户可连接的模型数量");
+            setOpaque(false);
+        }
+
+        void setCount(long count) {
+            setText(count > 0 ? "✦ 支持 " + count + " 款模型" : "✦ 暂无可用模型");
+        }
+
+        void reset() { setText("✦ 多款模型可连接"); }
+
+        protected void paintComponent(Graphics graphics) {
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setPaint(new GradientPaint(0, 0, new Color(28, 120, 114, 120), getWidth(), getHeight(), new Color(76, 58, 155, 145)));
+            g.fillRoundRect(1, 1, getWidth() - 2, getHeight() - 2, 16, 16);
+            g.setColor(new Color(103, 222, 195, 150));
+            g.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, 16, 16);
             g.dispose();
             super.paintComponent(graphics);
         }
