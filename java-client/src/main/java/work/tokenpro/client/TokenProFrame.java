@@ -10,6 +10,8 @@ import javax.swing.tree.TreeSelectionModel;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.geom.Area;
+import java.awt.geom.Rectangle2D;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BaseMultiResolutionImage;
 import java.awt.image.BufferedImage;
@@ -66,6 +68,8 @@ final class TokenProFrame extends JFrame {
     private final JPanel subscriptionSlot = transparent(new BorderLayout());
     private final JLabel homeClaudeStatus = new ClientStatusLabel("请先选择模型");
     private final JLabel homeCodexStatus = new ClientStatusLabel("请先选择模型");
+    private final boolean codexClientInstalled = Platform.applicationInstalled("Codex");
+    private final boolean claudeClientInstalled = Platform.applicationInstalled("Claude");
     private final SupportCountLabel homeCodexSupport = new SupportCountLabel();
     private final SupportCountLabel homeClaudeSupport = new SupportCountLabel();
     private JButton codexLaunch;
@@ -180,35 +184,44 @@ final class TokenProFrame extends JFrame {
         JPanel panel = vertical();
         JPanel heading = transparent(new BorderLayout()); heading.setAlignmentX(Component.LEFT_ALIGNMENT); heading.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
         JLabel title = new JLabel("我的应用"); title.setFont(appFont(15, Font.BOLD)); heading.add(title, BorderLayout.WEST); heading.add(supportedModelBadges(), BorderLayout.EAST); panel.add(heading); panel.add(Box.createVerticalStrut(13));
-        panel.add(desktopClientCard("Codex 客户端", "桌面应用 · 独立登录", Platform.applicationInstalled("Codex"), "Codex", () -> chooseModels("Codex"), this::restoreCodex, () -> reconnectApp("Codex"), homeCodexStatus)); panel.add(Box.createVerticalStrut(12));
-        panel.add(desktopClientCard("Claude 客户端", "桌面应用 · 独立登录", Platform.applicationInstalled("Claude"), "Claude", () -> chooseModels("Claude"), this::restoreClaude, this::reconnectClaude, homeClaudeStatus)); panel.add(Box.createVerticalStrut(12));
+        panel.add(desktopClientCard("Codex 客户端", "桌面应用 · 独立登录", codexClientInstalled, "Codex", "https://openai.com/codex/", () -> chooseModels("Codex"), this::restoreCodex, () -> reconnectApp("Codex"), homeCodexStatus)); panel.add(Box.createVerticalStrut(12));
+        panel.add(desktopClientCard("Claude 客户端", "桌面应用 · 独立登录", claudeClientInstalled, "Claude", "https://claude.ai/download", () -> chooseModels("Claude"), this::restoreClaude, this::reconnectClaude, homeClaudeStatus)); panel.add(Box.createVerticalStrut(12));
         panel.add(commandClientCard("Codex 命令行", "命令行工具 · Codex CLI", "Codex", "codex", "https://learn.chatgpt.com/docs/codex/cli")); panel.add(Box.createVerticalStrut(12));
         panel.add(commandClientCard("Claude 命令行", "命令行工具 · Claude Code", "Claude", "claude", "https://docs.anthropic.com/en/docs/claude-code/getting-started")); panel.add(Box.createVerticalGlue()); return panel;
     }
 
     private JComponent supportedModelBadges() {
-        JPanel badges = transparent(new FlowLayout(FlowLayout.RIGHT, 7, 0));
-        badges.add(new MiniModelBadge(resourceIconContained("OpenAIBlossomRuntime.png", 18, 18, true), new Color(91, 225, 201), "支持 GPT / OpenAI 模型"));
-        badges.add(new MiniModelBadge(resourceIconContained("ClaudeSparkRuntime.png", 18, 18, false), new Color(238, 126, 82), "支持 Claude 模型"));
-        badges.add(new MiniModelBadge(resourceIconContained("GeminiSparkTransparent.png", 18, 18, false), new Color(107, 145, 255), "支持 Gemini 模型"));
-        badges.add(new MiniModelBadge(resourceIconContained("GrokMarkTransparent.png", 18, 18, false), new Color(184, 155, 255), "支持 Grok 模型"));
-        badges.add(new MoreModelsBadge());
-        return badges;
+        return new OverlappingModelBadges(List.of(
+            new MiniModelBadge(resourceIconContained("OpenAIBlossomRuntime.png", 18, 18, true), new Color(91, 225, 201), "支持 GPT / OpenAI 模型"),
+            new MiniModelBadge(resourceIconContained("ClaudeSparkRuntime.png", 18, 18, false), new Color(238, 126, 82), "支持 Claude 模型"),
+            new MiniModelBadge(resourceIconContained("GeminiSparkTransparent.png", 18, 18, false), new Color(107, 145, 255), "支持 Gemini 模型"),
+            new MiniModelBadge(resourceIconContained("GrokMarkTransparent.png", 18, 18, false), new Color(184, 155, 255), "支持 Grok 模型")
+        ));
     }
 
-    private JComponent desktopClientCard(String title, String subtitle, boolean installed, String iconName, Runnable chooseModel, Runnable restore, Runnable open, JLabel state) {
+    private JComponent desktopClientCard(String title, String subtitle, boolean installed, String iconName, String downloadUrl, Runnable chooseModel, Runnable restore, Runnable open, JLabel state) {
         RoundedPanel card = card(); card.setLayout(new BorderLayout(18, 0));
         JLabel badge = new JLabel(clientIcon(iconName, 48)); badge.setHorizontalAlignment(SwingConstants.CENTER); badge.setPreferredSize(new Dimension(52, 52)); card.add(badge, BorderLayout.WEST);
         JPanel words = transparent(); words.setLayout(new BoxLayout(words, BoxLayout.Y_AXIS)); JPanel nameLine = transparent(new FlowLayout(FlowLayout.LEFT, 10, 0)); nameLine.setAlignmentX(Component.LEFT_ALIGNMENT); nameLine.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24)); JLabel heading = new JLabel(title); heading.setFont(appFont(17, Font.BOLD)); JLabel installedLabel = new JLabel(installed ? "已安装" : "未安装"); installedLabel.setFont(appFont(11, Font.BOLD)); installedLabel.setForeground(installed ? new Color(97, 222, 165) : MUTED); nameLine.add(heading); nameLine.add(installedLabel); JLabel detail = new JLabel(subtitle); detail.setAlignmentX(Component.LEFT_ALIGNMENT); detail.setFont(appFont(11, Font.PLAIN)); detail.setForeground(MUTED); words.add(Box.createVerticalStrut(3)); words.add(nameLine); words.add(Box.createVerticalStrut(6)); words.add(detail); card.add(words, BorderLayout.CENTER);
         JPanel actions = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         actions.add(iconName.equals("Codex") ? homeCodexSupport : homeClaudeSupport);
         JButton menu = soft("模型选择  ▾");
-        menu.addActionListener(e -> showModelMenu(menu, chooseModel, restore));
+        menu.addActionListener(e -> {
+            if (!installed) {
+                state.setText("请先安装应用");
+                status("请先安装 " + iconName + " 客户端");
+                return;
+            }
+            showModelMenu(menu, chooseModel, restore);
+        });
         JPanel modelControl = transparent(); modelControl.setLayout(new BoxLayout(modelControl, BoxLayout.Y_AXIS));
         menu.setAlignmentX(Component.CENTER_ALIGNMENT); state.setFont(appFont(11, Font.BOLD)); state.setAlignmentX(Component.CENTER_ALIGNMENT); state.setHorizontalAlignment(SwingConstants.CENTER);
+        if (!installed) state.setText("请先安装应用");
         modelControl.add(menu); modelControl.add(Box.createVerticalStrut(7)); modelControl.add(state); actions.add(modelControl);
-        JButton launch = primary("连接 " + iconName + " 客户端"); launch.addActionListener(e -> open.run());
-        launch.setEnabled(installed && iconName.equals("Claude"));
+        JButton launch = primary(installed ? "连接 " + iconName + " 客户端" : "去官方下载");
+        launch.setToolTipText(installed ? "重新连接 " + iconName + " 客户端" : "官方下载：" + downloadUrl);
+        launch.addActionListener(e -> { if (installed) open.run(); else browse(downloadUrl); });
+        launch.setEnabled(!installed || iconName.equals("Claude"));
         if (iconName.equals("Codex")) codexLaunch = launch; else claudeLaunch = launch;
         actions.add(launch); card.add(actions, BorderLayout.EAST); return card;
     }
@@ -341,7 +354,8 @@ final class TokenProFrame extends JFrame {
             store.delete("java-session.json"); accessToken = null; refreshToken = ""; tokenExpiresAt = 0; sessionUser = Map.of(); accountId = ""; keys.clear();
             account.setText("尚未登录"); headerUser.setText("登录账户"); accountEmail.setText("登录账户"); headerBalance.setText("—"); accountBalance.setText("—"); showSubscriptions(List.of());
             homeCodexSupport.reset(); homeClaudeSupport.reset();
-            homeCodexStatus.setText("请先选择模型"); homeClaudeStatus.setText("请先选择模型"); if (codexLaunch != null) codexLaunch.setEnabled(false); if (claudeLaunch != null) claudeLaunch.setEnabled(false);
+            setDesktopCardState("Codex", "请先选择模型", false);
+            setDesktopCardState("Claude", "请先选择模型", false);
             showPage("首页"); showLoginScreen(); status("已退出账户");
         } catch (Exception ex) { error(ex); }
     }
@@ -403,8 +417,7 @@ final class TokenProFrame extends JFrame {
             store.write("codex-selected.json", Json.stringify(saved));
             return chosen;
         }, configured -> {
-            homeCodexStatus.setText(selectionStatus(chosen.size()));
-            if (codexLaunch != null) codexLaunch.setEnabled(true);
+            setDesktopCardState("Codex", selectionStatus(chosen.size()), true);
             status("Codex 配置已安全替换，已接入 " + configured.size() + " 个模型");
             reconnectApp("Codex");
         });
@@ -412,8 +425,8 @@ final class TokenProFrame extends JFrame {
 
     private void restoreCodex() {
         try {
-            codex.restore(); store.delete("codex-selected.json"); homeCodexStatus.setText("请先选择模型");
-            if (codexLaunch != null) codexLaunch.setEnabled(false);
+            codex.restore(); store.delete("codex-selected.json");
+            setDesktopCardState("Codex", "请先选择模型", false);
             status("Codex 已恢复官方配置，正在切回应用…");
             reconnectApp("Codex");
         }
@@ -488,22 +501,21 @@ final class TokenProFrame extends JFrame {
             config.save(store); ClaudeDesktopConfig.install(store, config, accountLabel); ClaudeBridgeManager.ensureRunning(store); return config;
         }, config -> {
             bridgeStatus.setText("桥接状态：运行中 · " + config.routes().size() + " 个模型 · " + config.baseUrl());
-            homeClaudeStatus.setText("已选 " + config.routes().size() + " 个模型");
-            if (claudeLaunch != null) claudeLaunch.setEnabled(true);
+            setDesktopCardState("Claude", "已选 " + config.routes().size() + " 个模型", true);
             status("Claude 已配置 " + config.routes().size() + " 个模型");
             reconnectClaude();
         });
     }
 
     private void updateBridgeStatus() {
-        try { ClaudeBridgeConfig config = ClaudeBridgeConfig.load(store); boolean healthy = ClaudeBridgeManager.healthy(store); bridgeStatus.setText("桥接状态：" + (healthy ? "运行中" : "已配置") + " · " + config.routes().size() + " 个模型"); homeClaudeStatus.setText("已选 " + config.routes().size() + " 个模型"); if (claudeLaunch != null) claudeLaunch.setEnabled(true); }
-        catch (Exception e) { bridgeStatus.setText("桥接状态：未配置"); homeClaudeStatus.setText("请先选择模型"); if (claudeLaunch != null) claudeLaunch.setEnabled(Platform.applicationInstalled("Claude")); }
+        try { ClaudeBridgeConfig config = ClaudeBridgeConfig.load(store); boolean healthy = ClaudeBridgeManager.healthy(store); bridgeStatus.setText("桥接状态：" + (healthy ? "运行中" : "已配置") + " · " + config.routes().size() + " 个模型"); setDesktopCardState("Claude", "已选 " + config.routes().size() + " 个模型", true); }
+        catch (Exception e) { bridgeStatus.setText("桥接状态：未配置"); setDesktopCardState("Claude", "请先选择模型", false); }
     }
 
     private void restoreClaude() {
         try {
             ClaudeDesktopConfig.restoreOfficial(store); bridgeStatus.setText("桥接状态：Claude 已恢复官方配置");
-            homeClaudeStatus.setText("请先选择模型"); if (claudeLaunch != null) claudeLaunch.setEnabled(false);
+            setDesktopCardState("Claude", "请先选择模型", false);
             status("Claude 已恢复官方配置，正在切回应用…");
             reconnectApp("Claude");
         }
@@ -587,14 +599,21 @@ final class TokenProFrame extends JFrame {
             if (raw.isEmpty()) throw new IllegalStateException("未选择");
             Map<String, Object> saved = Json.object(Json.parse(raw.get()));
             if (saved.get("models") instanceof List<?> models && !models.isEmpty()) {
-                homeCodexStatus.setText(selectionStatus(models.size()));
+                setDesktopCardState("Codex", selectionStatus(models.size()), true);
             }
             else {
                 String selected = string(saved.get("model")); if (selected.isBlank()) throw new IllegalStateException("未选择");
-                homeCodexStatus.setText(selectionStatus(1));
+                setDesktopCardState("Codex", selectionStatus(1), true);
             }
-            if (codexLaunch != null) codexLaunch.setEnabled(true);
-        } catch (Exception ignored) { homeCodexStatus.setText("请先选择模型"); if (codexLaunch != null) codexLaunch.setEnabled(false); }
+        } catch (Exception ignored) { setDesktopCardState("Codex", "请先选择模型", false); }
+    }
+
+    private void setDesktopCardState(String client, String installedText, boolean canConnect) {
+        boolean installed = client.equals("Codex") ? codexClientInstalled : claudeClientInstalled;
+        JLabel state = client.equals("Codex") ? homeCodexStatus : homeClaudeStatus;
+        JButton launch = client.equals("Codex") ? codexLaunch : claudeLaunch;
+        state.setText(installed ? installedText : "请先安装应用");
+        if (launch != null) launch.setEnabled(installed ? canConnect : true);
     }
 
     private static String selectionStatus(int count) { return count > 0 ? "已选 " + count + " 个模型" : "请先选择模型"; }
@@ -1299,6 +1318,7 @@ final class TokenProFrame extends JFrame {
 
     private static final class MiniModelBadge extends JLabel {
         private final Color glow;
+        private int occludingCardOffset = -1;
 
         MiniModelBadge(Icon icon, Color glow, String tooltip) {
             super(icon, SwingConstants.CENTER);
@@ -1309,8 +1329,18 @@ final class TokenProFrame extends JFrame {
             setOpaque(false);
         }
 
+        void setOccludingCardOffset(int occludingCardOffset) {
+            this.occludingCardOffset = occludingCardOffset;
+        }
+
         protected void paintComponent(Graphics graphics) {
             Graphics2D g = (Graphics2D) graphics.create();
+            if (occludingCardOffset >= 0) {
+                Area visibleArea = new Area(new Rectangle2D.Float(0, 0, getWidth(), getHeight()));
+                visibleArea.subtract(new Area(new RoundRectangle2D.Float(
+                    occludingCardOffset + 1, 1, getWidth() - 2, getHeight() - 2, 13, 13)));
+                g.clip(visibleArea);
+            }
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g.setPaint(new GradientPaint(2, 2, new Color(glow.getRed(), glow.getGreen(), glow.getBlue(), 118), getWidth(), getHeight(), new Color(39, 45, 99, 165)));
             g.fillRoundRect(1, 1, getWidth() - 2, getHeight() - 2, 13, 13);
@@ -1318,8 +1348,32 @@ final class TokenProFrame extends JFrame {
             g.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, 13, 13);
             g.setColor(new Color(255, 255, 255, 190));
             g.fillOval(getWidth() - 7, 4, 2, 2);
+            super.paintComponent(g);
             g.dispose();
-            super.paintComponent(graphics);
+        }
+    }
+
+    private static final class OverlappingModelBadges extends JPanel {
+        private static final int CARD_WIDTH = 32;
+        private static final int CARD_HEIGHT = 28;
+        private static final int STEP = 19;
+
+        OverlappingModelBadges(List<MiniModelBadge> cards) {
+            super(null);
+            setOpaque(false);
+            int cardsWidth = CARD_WIDTH + Math.max(0, cards.size() - 1) * STEP;
+            MoreModelsBadge more = new MoreModelsBadge();
+            setPreferredSize(new Dimension(cardsWidth + 8 + more.getPreferredSize().width, 32));
+            setMinimumSize(getPreferredSize());
+            for (int index = 0; index < cards.size(); index++) {
+                MiniModelBadge card = cards.get(index);
+                card.setOccludingCardOffset(index < cards.size() - 1 ? STEP : -1);
+                card.setBounds(index * STEP, 2, CARD_WIDTH, CARD_HEIGHT);
+                add(card);
+                setComponentZOrder(card, 0);
+            }
+            more.setBounds(cardsWidth + 8, 2, more.getPreferredSize().width, more.getPreferredSize().height);
+            add(more);
         }
     }
 
