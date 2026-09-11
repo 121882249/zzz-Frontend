@@ -28,12 +28,15 @@ final class CodexConfig {
         Files.createDirectories(target.getParent());
         String current = Files.exists(target) ? Files.readString(target) : "";
         if (store.read("codex-original.toml").isEmpty()) store.write("codex-original.toml", current);
-        String clean = stripRootOverrides(stripManaged(current));
         // Image models stay in their own picker group and are also written to
         // Codex's catalog so they can run directly without a selected LLM.
         Path catalog = writeModelCatalog(models);
         String block = managedBlock(url, primaryModel, imageModel, catalog, key.trim(), actor);
-        writeAtomic(target, block + (clean.isBlank() ? "" : "\n" + clean.stripLeading()));
+        validate(block);
+        // TokenPro owns the active Codex config while connected. Replacing the
+        // file avoids ambiguous TOML merges and duplicate keys; restore() puts
+        // the byte-for-byte original configuration back.
+        writeAtomic(target, block);
     }
 
     void restore() throws Exception {
@@ -41,8 +44,7 @@ final class CodexConfig {
         if (original.isEmpty()) throw new IllegalStateException("没有可恢复的 Codex 配置备份");
         Path target = Platform.codexConfig();
         Files.createDirectories(target.getParent());
-        String current = Files.exists(target) ? Files.readString(target) : "";
-        writeAtomic(target, restoreRootOverrides(stripManaged(current), original.get()));
+        writeAtomic(target, original.get());
         store.delete("codex-original.toml");
         store.delete("codex-model-catalog.json");
     }
@@ -108,10 +110,13 @@ final class CodexConfig {
     private Path writeModelCatalog(List<PricedModel> models) throws Exception {
         Path executable = Platform.codexExecutable().orElseThrow(() -> new IllegalStateException("没有找到 Codex 程序，无法生成兼容的模型列表"));
         Path output = Files.createTempFile("tokenpro-codex-models-", ".json");
+        Path cleanHome = Files.createTempDirectory("tokenpro-codex-home-");
         Map<String, Object> bundled;
         try {
-            Process process = new ProcessBuilder(executable.toString(), "debug", "models", "--bundled")
-                .redirectOutput(output.toFile()).redirectError(ProcessBuilder.Redirect.DISCARD).start();
+            ProcessBuilder builder = new ProcessBuilder(executable.toString(), "debug", "models", "--bundled")
+                .redirectOutput(output.toFile()).redirectError(ProcessBuilder.Redirect.DISCARD);
+            builder.environment().put("CODEX_HOME", cleanHome.toString());
+            Process process = builder.start();
             if (!process.waitFor(20, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
                 throw new IllegalStateException("读取 Codex 模型格式超时");
@@ -120,6 +125,7 @@ final class CodexConfig {
             bundled = Json.object(Json.parse(Files.readString(output, StandardCharsets.UTF_8)));
         } finally {
             Files.deleteIfExists(output);
+            deleteTree(cleanHome);
         }
         Object raw = bundled.get("models");
         if (!(raw instanceof List<?> templates) || templates.isEmpty()) throw new IllegalStateException("Codex 模型格式为空");
@@ -271,6 +277,34 @@ final class CodexConfig {
         if (rootOverrides.isEmpty()) return clean;
         if (rootOverrides.charAt(rootOverrides.length() - 1) != '\n') rootOverrides.append('\n');
         return rootOverrides + clean.stripLeading();
+    }
+
+    private void validate(String candidate) throws Exception {
+        Path executable = Platform.codexExecutable().orElseThrow(() -> new IllegalStateException("没有找到 Codex 程序，无法校验配置"));
+        Path validationHome = Files.createTempDirectory("tokenpro-codex-validate-");
+        Path output = Files.createTempFile("tokenpro-codex-validate-", ".json");
+        try {
+            Files.writeString(validationHome.resolve("config.toml"), candidate, StandardCharsets.UTF_8);
+            ProcessBuilder builder = new ProcessBuilder(executable.toString(), "debug", "models", "--bundled")
+                .redirectOutput(output.toFile()).redirectError(ProcessBuilder.Redirect.DISCARD);
+            builder.environment().put("CODEX_HOME", validationHome.toString());
+            Process process = builder.start();
+            if (!process.waitFor(20, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                throw new IllegalStateException("Codex 配置校验超时，未修改原配置");
+            }
+            if (process.exitValue() != 0) throw new IllegalStateException("Codex 配置校验失败，未修改原配置");
+        } finally {
+            Files.deleteIfExists(output);
+            deleteTree(validationHome);
+        }
+    }
+
+    private static void deleteTree(Path root) throws IOException {
+        if (root == null || !Files.exists(root)) return;
+        try (var paths = Files.walk(root)) {
+            for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path);
+        }
     }
 
     private static String validateUrl(String raw) {

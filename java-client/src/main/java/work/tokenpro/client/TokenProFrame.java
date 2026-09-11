@@ -385,7 +385,7 @@ final class TokenProFrame extends JFrame {
         }, configured -> {
             homeCodexStatus.setText(codexSelectionStatus(chatModels.size(), imageModels.size(), imageModel == null ? "" : imageModel.name()));
             if (codexLaunch != null) codexLaunch.setEnabled(true);
-            status("Codex 已配置 " + configured.size() + " 个模型");
+            status("Codex 配置已安全替换，已接入 " + configured.size() + " 个模型");
             openApp("Codex");
         });
     }
