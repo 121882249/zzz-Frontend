@@ -83,6 +83,10 @@ final class TokenProFrame extends JFrame {
     private JLabel claudeClientInstallLabel;
     private JLabel codexCliInstallLabel;
     private JLabel claudeCliInstallLabel;
+    private JButton codexClientScanButton;
+    private JButton claudeClientScanButton;
+    private JButton codexCliScanButton;
+    private JButton claudeCliScanButton;
     private JButton codexModelMenuButton;
     private JButton claudeModelMenuButton;
     private JButton codexLaunch;
@@ -227,7 +231,7 @@ final class TokenProFrame extends JFrame {
     private JComponent desktopClientCard(String title, String subtitle, String iconName, String downloadUrl, Runnable chooseModel, Runnable restore, Runnable open, JLabel state) {
         RoundedPanel card = card(); card.setLayout(new BorderLayout(18, 0));
         JLabel badge = new JLabel(clientIcon(iconName, 48)); badge.setHorizontalAlignment(SwingConstants.CENTER); badge.setPreferredSize(new Dimension(52, 52)); card.add(badge, BorderLayout.WEST);
-        JPanel words = transparent(); words.setLayout(new BoxLayout(words, BoxLayout.Y_AXIS)); JPanel nameLine = transparent(new FlowLayout(FlowLayout.LEFT, 10, 0)); nameLine.setAlignmentX(Component.LEFT_ALIGNMENT); nameLine.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24)); JLabel heading = new JLabel(title); heading.setFont(appFont(17, Font.BOLD)); JLabel installedLabel = installLabel(); if (iconName.equals("Codex")) codexClientInstallLabel = installedLabel; else claudeClientInstallLabel = installedLabel; nameLine.add(heading); nameLine.add(installedLabel); JLabel detail = new JLabel(subtitle); detail.setAlignmentX(Component.LEFT_ALIGNMENT); detail.setFont(appFont(11, Font.PLAIN)); detail.setForeground(MUTED); words.add(Box.createVerticalStrut(3)); words.add(nameLine); words.add(Box.createVerticalStrut(6)); words.add(detail); card.add(words, BorderLayout.CENTER);
+        JPanel words = transparent(); words.setLayout(new BoxLayout(words, BoxLayout.Y_AXIS)); JPanel nameLine = transparent(new FlowLayout(FlowLayout.LEFT, 10, 0)); nameLine.setAlignmentX(Component.LEFT_ALIGNMENT); nameLine.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26)); JLabel heading = new JLabel(title); heading.setFont(appFont(17, Font.BOLD)); JLabel installedLabel = installLabel(); String scanKey = iconName.equals("Codex") ? "codex-client" : "claude-client"; JButton scan = installScanButton(scanKey, iconName + " 客户端"); if (iconName.equals("Codex")) { codexClientInstallLabel = installedLabel; codexClientScanButton = scan; } else { claudeClientInstallLabel = installedLabel; claudeClientScanButton = scan; } nameLine.add(heading); nameLine.add(installedLabel); nameLine.add(scan); JLabel detail = new JLabel(subtitle); detail.setAlignmentX(Component.LEFT_ALIGNMENT); detail.setFont(appFont(11, Font.PLAIN)); detail.setForeground(MUTED); words.add(Box.createVerticalStrut(2)); words.add(nameLine); words.add(Box.createVerticalStrut(5)); words.add(detail); card.add(words, BorderLayout.CENTER);
         JPanel actions = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         actions.add(iconName.equals("Codex") ? homeCodexSupport : homeClaudeSupport);
         JButton menu = soft("模型选择  ▾");
@@ -300,7 +304,7 @@ final class TokenProFrame extends JFrame {
     private JComponent commandClientCard(String title, String subtitle, String iconName, String command, String downloadUrl) {
         RoundedPanel card = card(); card.setLayout(new BorderLayout(18, 0));
         JLabel badge = new JLabel(clientIcon(iconName, 48)); badge.setHorizontalAlignment(SwingConstants.CENTER); badge.setPreferredSize(new Dimension(52, 52)); card.add(badge, BorderLayout.WEST);
-        JPanel words = transparent(); words.setLayout(new BoxLayout(words, BoxLayout.Y_AXIS)); JPanel nameLine = transparent(new FlowLayout(FlowLayout.LEFT, 10, 0)); nameLine.setAlignmentX(Component.LEFT_ALIGNMENT); nameLine.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24)); JLabel heading = new JLabel(title); heading.setFont(appFont(17, Font.BOLD)); JLabel installedLabel = installLabel(); if (command.equals("codex")) codexCliInstallLabel = installedLabel; else claudeCliInstallLabel = installedLabel; nameLine.add(heading); nameLine.add(installedLabel); JLabel detail = new JLabel(subtitle); detail.setFont(appFont(11, Font.PLAIN)); detail.setForeground(MUTED); words.add(Box.createVerticalStrut(3)); words.add(nameLine); words.add(Box.createVerticalStrut(6)); words.add(detail); card.add(words, BorderLayout.CENTER);
+        JPanel words = transparent(); words.setLayout(new BoxLayout(words, BoxLayout.Y_AXIS)); JPanel nameLine = transparent(new FlowLayout(FlowLayout.LEFT, 10, 0)); nameLine.setAlignmentX(Component.LEFT_ALIGNMENT); nameLine.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26)); JLabel heading = new JLabel(title); heading.setFont(appFont(17, Font.BOLD)); JLabel installedLabel = installLabel(); String scanKey = command.equals("codex") ? "codex-cli" : "claude-cli"; JButton scan = installScanButton(scanKey, iconName + " 命令行"); if (command.equals("codex")) { codexCliInstallLabel = installedLabel; codexCliScanButton = scan; } else { claudeCliInstallLabel = installedLabel; claudeCliScanButton = scan; } nameLine.add(heading); nameLine.add(installedLabel); nameLine.add(scan); JLabel detail = new JLabel(subtitle); detail.setFont(appFont(11, Font.PLAIN)); detail.setForeground(MUTED); words.add(Box.createVerticalStrut(2)); words.add(nameLine); words.add(Box.createVerticalStrut(5)); words.add(detail); card.add(words, BorderLayout.CENTER);
         JPanel buttons = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0)); JButton download = soft("正在检测…"); download.setEnabled(false); download.addActionListener(e -> browse(downloadUrl)); JButton terminal = primary("连接 " + (iconName.equals("Codex") ? "Codex 命令行" : "Claude 命令行")); terminal.setEnabled(false); terminal.addActionListener(e -> openTerminal(command)); if (command.equals("codex")) { codexCliDownload = download; codexCliLaunch = terminal; } else { claudeCliDownload = download; claudeCliLaunch = terminal; } buttons.add(download); buttons.add(terminal); card.add(buttons, BorderLayout.EAST); return card;
     }
 
@@ -648,6 +652,83 @@ final class TokenProFrame extends JFrame {
         return label;
     }
 
+    private JButton installScanButton(String key, String target) {
+        JButton button = new ActionButton("检测中…", false);
+        button.setFont(appFont(10, Font.BOLD));
+        button.setForeground(new Color(205, 218, 250));
+        button.setIcon(resourceIconContained("RefreshCwLucide.png", 11, 11, true));
+        button.setIconTextGap(4);
+        button.setBorder(new EmptyBorder(4, 8, 4, 8));
+        button.setPreferredSize(new Dimension(82, 26));
+        button.setMinimumSize(button.getPreferredSize());
+        button.setMaximumSize(button.getPreferredSize());
+        button.setEnabled(false);
+        button.setToolTipText("重新查找 " + target + " 的安装位置");
+        button.addActionListener(event -> refreshInstallationTarget(key, target));
+        return button;
+    }
+
+    private void refreshInstallationTarget(String key, String target) {
+        if (!installationScanInProgress.compareAndSet(false, true)) return;
+        JButton button = switch (key) {
+            case "codex-client" -> codexClientScanButton;
+            case "claude-client" -> claudeClientScanButton;
+            case "codex-cli" -> codexCliScanButton;
+            default -> claudeCliScanButton;
+        };
+        JLabel label = switch (key) {
+            case "codex-client" -> codexClientInstallLabel;
+            case "claude-client" -> claudeClientInstallLabel;
+            case "codex-cli" -> codexCliInstallLabel;
+            default -> claudeCliInstallLabel;
+        };
+        boolean previousInstalled = switch (key) {
+            case "codex-client" -> codexClientInstalled;
+            case "claude-client" -> claudeClientInstalled;
+            case "codex-cli" -> codexCliInstalled;
+            default -> claudeCliInstalled;
+        };
+        button.setText("检测中…");
+        button.setForeground(new Color(168, 180, 213));
+        button.setEnabled(false);
+        label.setText("检测中…");
+        label.setForeground(MUTED);
+        status("正在查找 " + target + "…");
+        new SwingWorker<Boolean, Void>() {
+            @Override protected Boolean doInBackground() {
+                return switch (key) {
+                    case "codex-client" -> Platform.applicationInstalled("Codex");
+                    case "claude-client" -> Platform.applicationInstalled("Claude");
+                    case "codex-cli" -> Platform.commandInstalled("codex");
+                    default -> Platform.commandInstalled("claude");
+                };
+            }
+            @Override protected void done() {
+                try {
+                    boolean installed = get();
+                    switch (key) {
+                        case "codex-client" -> codexClientInstalled = installed;
+                        case "claude-client" -> claudeClientInstalled = installed;
+                        case "codex-cli" -> codexCliInstalled = installed;
+                        default -> claudeCliInstalled = installed;
+                    }
+                    updateInstallLabel(label, installed);
+                    updateInstallScanButton(button, installed);
+                    if (key.endsWith("client")) {
+                        String client = key.startsWith("codex") ? "Codex" : "Claude";
+                        updateDesktopLaunch(client, installed, client.equals("Codex") ? codexCanConnect : claudeCanConnect);
+                        if (client.equals("Codex")) updateCodexStatus(); else updateBridgeStatus();
+                    } else updateCommandControls(key.startsWith("codex") ? "codex" : "claude", installed);
+                    status(installed ? "已找到 " + target : "暂未找到 " + target);
+                } catch (Exception ignored) {
+                    updateInstallLabel(label, previousInstalled);
+                    updateInstallScanButton(button, previousInstalled);
+                    status(target + " 检测失败，请稍后重试");
+                } finally { installationScanInProgress.set(false); }
+            }
+        }.execute();
+    }
+
     private boolean desktopClientInstalled(String client) {
         return client.equals("Codex") ? codexClientInstalled : claudeClientInstalled;
     }
@@ -658,6 +739,7 @@ final class TokenProFrame extends JFrame {
         if (installationScanCompleted && now - lastInstallationScanAtNanos < java.util.concurrent.TimeUnit.SECONDS.toNanos(3)) return;
         if (!installationScanInProgress.compareAndSet(false, true)) return;
         lastInstallationScanAtNanos = now;
+        setInstallationScanState(true);
         Platform.InstallationSnapshot known = installationScanCompleted
             ? new Platform.InstallationSnapshot(codexClientInstalled, claudeClientInstalled, codexCliInstalled, claudeCliInstalled)
             : null;
@@ -666,9 +748,25 @@ final class TokenProFrame extends JFrame {
             @Override protected void done() {
                 try { applyInstallationSnapshot(get()); installationScanCompleted = true; }
                 catch (Exception ignored) { status("应用安装状态检测失败，请稍后切回 TokenPro 重试"); }
-                finally { installationScanInProgress.set(false); }
+                finally { installationScanInProgress.set(false); setInstallationScanState(false); }
             }
         }.execute();
+    }
+
+    private void setInstallationScanState(boolean scanning) {
+        if (!scanning) {
+            updateInstallScanButton(codexClientScanButton, codexClientInstalled);
+            updateInstallScanButton(claudeClientScanButton, claudeClientInstalled);
+            updateInstallScanButton(codexCliScanButton, codexCliInstalled);
+            updateInstallScanButton(claudeCliScanButton, claudeCliInstalled);
+            return;
+        }
+        JButton[] buttons = {codexClientScanButton, claudeClientScanButton, codexCliScanButton, claudeCliScanButton};
+        for (JButton button : buttons) if (button != null) {
+            button.setText("检测中…");
+            button.setForeground(new Color(168, 180, 213));
+            button.setEnabled(false);
+        }
     }
 
     private void applyInstallationSnapshot(Platform.InstallationSnapshot snapshot) {
@@ -680,6 +778,10 @@ final class TokenProFrame extends JFrame {
         updateInstallLabel(claudeClientInstallLabel, claudeClientInstalled);
         updateInstallLabel(codexCliInstallLabel, codexCliInstalled);
         updateInstallLabel(claudeCliInstallLabel, claudeCliInstalled);
+        updateInstallScanButton(codexClientScanButton, codexClientInstalled);
+        updateInstallScanButton(claudeClientScanButton, claudeClientInstalled);
+        updateInstallScanButton(codexCliScanButton, codexCliInstalled);
+        updateInstallScanButton(claudeCliScanButton, claudeCliInstalled);
         updateDesktopLaunch("Codex", codexClientInstalled, codexCanConnect);
         updateDesktopLaunch("Claude", claudeClientInstalled, claudeCanConnect);
         updateCommandControls("codex", codexCliInstalled);
@@ -692,6 +794,13 @@ final class TokenProFrame extends JFrame {
         if (label == null) return;
         label.setText(installed ? "已安装" : "未安装");
         label.setForeground(installed ? new Color(97, 222, 165) : MUTED);
+    }
+
+    private static void updateInstallScanButton(JButton button, boolean installed) {
+        if (button == null) return;
+        button.setText(installed ? "重新检测" : "查找程序");
+        button.setForeground(installed ? new Color(205, 218, 250) : STATUS_PENDING);
+        button.setEnabled(true);
     }
 
     private void updateDesktopLaunch(String client, boolean installed, boolean canConnect) {

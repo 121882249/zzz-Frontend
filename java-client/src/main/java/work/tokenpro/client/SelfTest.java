@@ -35,15 +35,19 @@ final class SelfTest {
             "ProgramFiles", "C:\\Program Files",
             "ProgramFiles(x86)", "C:\\Program Files (x86)",
             "ProgramData", "C:\\ProgramData",
+            "PUBLIC", "C:\\Users\\Public",
             "PATH", "C:\\Tools;C:\\Windows\\System32");
         check(pathsContain(Platform.applicationCandidates(Platform.OS.MAC, "/Users/test", Map.of(), "Codex"), "ChatGPT.app"), "macOS desktop app candidates"); passed++;
         check(pathsContain(Platform.applicationCandidates(Platform.OS.WINDOWS, "C:\\Users\\Test", windowsEnvironment, "Codex"), "Programs/ChatGPT/ChatGPT.exe"), "Windows Codex desktop candidates"); passed++;
         check(pathsContain(Platform.applicationCandidates(Platform.OS.WINDOWS, "C:\\Users\\Test", windowsEnvironment, "Claude"), "AnthropicClaude/Claude.exe"), "Windows Claude desktop candidates"); passed++;
         check(pathsContain(Platform.windowsVersionedInstallRoots("C:\\Users\\Test", windowsEnvironment, "Claude"), "AnthropicClaude"), "Windows versioned Claude install root"); passed++;
+        check(pathsContain(Platform.windowsVersionedInstallRoots("C:\\Users\\Test", windowsEnvironment, "Codex"), "WinGet/Packages"), "Windows desktop discovery includes WinGet packages"); passed++;
+        check(pathsContain(Platform.applicationCandidates(Platform.OS.WINDOWS, "C:\\Users\\Test", windowsEnvironment, "Claude"), "Users/Public/Desktop/Claude.lnk"), "Windows desktop discovery includes public shortcuts"); passed++;
         check(pathsContain(Platform.applicationCandidates(Platform.OS.LINUX, "/home/test", Map.of(), "Claude"), ".local/share/applications/claude.desktop"), "Linux desktop app candidates"); passed++;
         check(pathsContain(Platform.applicationCandidates(Platform.OS.LINUX, "/home/test", Map.of(), "Codex"), "/opt/chatgpt/chatgpt"), "Linux ChatGPT Codex desktop candidate"); passed++;
         check(pathsContain(Platform.commandCandidates(Platform.OS.MAC, "/Users/test", Map.of("PATH", ""), "claude"), ".claude/local/claude"), "macOS Claude CLI candidates"); passed++;
         check(pathsContain(Platform.commandCandidates(Platform.OS.WINDOWS, "C:\\Users\\Test", windowsEnvironment, "codex"), "npm/codex.cmd"), "Windows Codex CLI candidates"); passed++;
+        check(pathsContain(Platform.commandCandidates(Platform.OS.WINDOWS, "C:\\Users\\Test", windowsEnvironment, "claude"), "WinGet/Links/claude.exe"), "Windows CLI discovery includes WinGet links"); passed++;
         check(pathsContain(Platform.commandCandidates(Platform.OS.LINUX, "/home/test", Map.of("PATH", ""), "codex"), ".local/bin/codex"), "Linux Codex CLI candidates"); passed++;
         check(Platform.applicationEvidenceMatches("Codex", "OpenAI.ChatGPT_2026.9_x64"), "Windows Store ChatGPT evidence"); passed++;
         check(Platform.applicationEvidenceMatches("Claude", "AnthropicClaude | C:\\Apps\\Claude.exe"), "Windows Claude registry evidence"); passed++;

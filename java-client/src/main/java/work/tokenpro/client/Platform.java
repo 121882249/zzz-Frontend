@@ -236,8 +236,13 @@ final class Platform {
         List<String> executableNames = name.equals("Codex") ? List.of("codex.exe", "chatgpt.exe") : List.of("claude.exe");
         for (Path root : windowsVersionedInstallRoots(home, environment, name)) {
             if (!Files.isDirectory(root)) continue;
-            try (Stream<Path> paths = Files.walk(root, 3)) {
-                if (paths.filter(Files::isRegularFile).map(path -> path.getFileName().toString().toLowerCase(Locale.ROOT)).anyMatch(executableNames::contains)) return true;
+            try (Stream<Path> paths = Files.walk(root, 5)) {
+                if (paths.filter(Files::isRegularFile).anyMatch(path -> {
+                    String file = path.getFileName().toString().toLowerCase(Locale.ROOT);
+                    if (executableNames.contains(file)) return true;
+                    if (!file.endsWith(".lnk")) return false;
+                    return name.equals("Codex") ? file.contains("codex") || file.contains("chatgpt") : file.contains("claude");
+                })) return true;
             } catch (Exception ignored) {}
         }
         return false;
@@ -245,12 +250,30 @@ final class Platform {
 
     static List<Path> windowsVersionedInstallRoots(String home, Map<String, String> environment, String name) {
         String local = environment.getOrDefault("LOCALAPPDATA", home);
-        if (name.equals("Codex")) return List.of(
+        String roaming = environment.getOrDefault("APPDATA", home);
+        String programFiles = environment.getOrDefault("ProgramFiles", "C:\\Program Files");
+        String programFilesX86 = environment.getOrDefault("ProgramFiles(x86)", "C:\\Program Files (x86)");
+        String programData = environment.getOrDefault("ProgramData", "C:\\ProgramData");
+        String publicHome = environment.getOrDefault("PUBLIC", "C:\\Users\\Public");
+        List<Path> shared = List.of(
+            Path.of(local, "Microsoft", "WinGet", "Packages"),
+            Path.of(home, "scoop", "apps"),
+            Path.of(programData, "chocolatey", "lib"),
+            Path.of(roaming, "Microsoft", "Windows", "Start Menu", "Programs"),
+            Path.of(programData, "Microsoft", "Windows", "Start Menu", "Programs"),
+            Path.of(home, "Desktop"), Path.of(publicHome, "Desktop"));
+        List<Path> roots = new ArrayList<>();
+        if (name.equals("Codex")) roots.addAll(List.of(
             Path.of(local, "Codex"), Path.of(local, "ChatGPT"), Path.of(local, "OpenAI", "ChatGPT"),
-            Path.of(local, "Programs", "Codex"), Path.of(local, "Programs", "ChatGPT"));
-        return List.of(
+            Path.of(local, "Programs", "Codex"), Path.of(local, "Programs", "ChatGPT"),
+            Path.of(programFiles, "Codex"), Path.of(programFiles, "ChatGPT"), Path.of(programFiles, "OpenAI"),
+            Path.of(programFilesX86, "Codex"), Path.of(programFilesX86, "ChatGPT"), Path.of(programFilesX86, "OpenAI")));
+        else roots.addAll(List.of(
             Path.of(local, "Claude"), Path.of(local, "AnthropicClaude"), Path.of(local, "Anthropic", "Claude"),
-            Path.of(local, "Programs", "Claude"));
+            Path.of(local, "Programs", "Claude"), Path.of(programFiles, "Claude"), Path.of(programFiles, "Anthropic"),
+            Path.of(programFilesX86, "Claude"), Path.of(programFilesX86, "Anthropic")));
+        roots.addAll(shared);
+        return List.copyOf(roots);
     }
 
     static List<Path> applicationCandidates(OS os, String home, Map<String, String> environment, String name) {
@@ -281,6 +304,15 @@ final class Platform {
             for (String shortcut : shortcutNames) {
                 paths.add(Path.of(roaming, "Microsoft", "Windows", "Start Menu", "Programs", shortcut));
                 paths.add(Path.of(programData, "Microsoft", "Windows", "Start Menu", "Programs", shortcut));
+                paths.add(Path.of(home, "Desktop", shortcut));
+                paths.add(Path.of(environment.getOrDefault("PUBLIC", "C:\\Users\\Public"), "Desktop", shortcut));
+            }
+            if (name.equals("Codex")) {
+                paths.add(Path.of(roaming, "Microsoft", "Windows", "Start Menu", "Programs", "OpenAI", "ChatGPT.lnk"));
+                paths.add(Path.of(programData, "Microsoft", "Windows", "Start Menu", "Programs", "OpenAI", "ChatGPT.lnk"));
+            } else {
+                paths.add(Path.of(roaming, "Microsoft", "Windows", "Start Menu", "Programs", "Anthropic", "Claude.lnk"));
+                paths.add(Path.of(programData, "Microsoft", "Windows", "Start Menu", "Programs", "Anthropic", "Claude.lnk"));
             }
             return List.copyOf(paths);
         }
@@ -319,9 +351,13 @@ final class Platform {
         String script = "$ErrorActionPreference='SilentlyContinue';"
             + "$pattern='(?i)codex|chatgpt|openai|claude|anthropic';"
             + "Get-AppxPackage | Where-Object { \"$($_.Name)|$($_.PackageFamilyName)|$($_.InstallLocation)\" -match $pattern } | ForEach-Object { \"$($_.Name)|$($_.PackageFamilyName)|$($_.InstallLocation)\" };"
+            + "Get-StartApps | Where-Object { \"$($_.Name)|$($_.AppID)\" -match $pattern } | ForEach-Object { \"$($_.Name)|$($_.AppID)\" };"
+            + "Get-Command Codex.exe,ChatGPT.exe,Claude.exe -All | ForEach-Object { \"$($_.Name)|$($_.Source)|$($_.Path)\" };"
             + "$roots=@('HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*');"
             + "Get-ItemProperty $roots | Where-Object { \"$($_.DisplayName)|$($_.InstallLocation)|$($_.DisplayIcon)\" -match $pattern } | ForEach-Object { \"$($_.DisplayName)|$($_.InstallLocation)|$($_.DisplayIcon)\" };"
-            + "Get-ChildItem 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths','HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths' | Where-Object { $_.PSChildName -match $pattern } | ForEach-Object { $_.PSChildName }";
+            + "Get-ChildItem 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths','HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths' | Where-Object { $_.PSChildName -match $pattern } | ForEach-Object { $_.PSChildName };"
+            + "$shortcuts=@(\"$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs\",\"$env:ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\",\"$env:USERPROFILE\\Desktop\",\"$env:PUBLIC\\Desktop\");"
+            + "Get-ChildItem $shortcuts -Filter *.lnk -Recurse | Where-Object { $_.Name -match $pattern } | ForEach-Object { $_.FullName }";
         return commandOutput(List.of("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script), 10);
     }
 
@@ -377,6 +413,10 @@ final class Platform {
                 candidates.add(Path.of(home, ".bun", "bin", command + suffix));
                 candidates.add(Path.of(local, "pnpm", command + suffix));
                 candidates.add(Path.of(local, "Microsoft", "WindowsApps", command + suffix));
+                candidates.add(Path.of(local, "Microsoft", "WinGet", "Links", command + suffix));
+                candidates.add(Path.of(home, "scoop", "shims", command + suffix));
+                candidates.add(Path.of(environment.getOrDefault("ProgramData", "C:\\ProgramData"), "chocolatey", "bin", command + suffix));
+                candidates.add(Path.of(environment.getOrDefault("ProgramFiles", "C:\\Program Files"), "nodejs", command + suffix));
             }
         } else {
             for (String root : List.of("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", Path.of(home, ".local", "bin").toString(), Path.of(home, ".npm", "bin").toString(), Path.of(home, ".npm-global", "bin").toString(), Path.of(home, ".local", "share", "pnpm").toString(), Path.of(home, ".bun", "bin").toString(), Path.of(home, ".claude", "local").toString())) {
