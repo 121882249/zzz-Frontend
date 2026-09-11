@@ -233,6 +233,10 @@ final class Platform {
     static boolean filesystemApplicationInstalled(OS os, String home, Map<String, String> environment, String name) {
         if (applicationCandidates(os, home, environment, name).stream().anyMatch(Files::exists)) return true;
         if (os != OS.WINDOWS) return false;
+        // Store/MSIX applications live below the protected WindowsApps directory.
+        // Do not try to crawl that directory: query the current user's package
+        // registration directly, using the official package identities instead.
+        if (OS_KIND == OS.WINDOWS && windowsPackagedApplicationInstalled(name)) return true;
         List<String> executableNames = name.equals("Codex") ? List.of("codex.exe", "chatgpt.exe") : List.of("claude.exe");
         for (Path root : windowsVersionedInstallRoots(home, environment, name)) {
             if (!Files.isDirectory(root)) continue;
@@ -342,6 +346,26 @@ final class Platform {
             : normalized.contains("claude") || normalized.contains("anthropic");
     }
 
+    static List<String> windowsPackageNames(String name) {
+        return name.equals("Codex")
+            ? List.of("OpenAI.Codex", "OpenAI.ChatGPT", "OpenAI.ChatGPT-Desktop")
+            : List.of("Claude", "Anthropic.Claude");
+    }
+
+    private static boolean windowsPackagedApplicationInstalled(String name) {
+        String packages = windowsPackageNames(name).stream()
+            .map(value -> "'" + value.replace("'", "''") + "'")
+            .collect(java.util.stream.Collectors.joining(","));
+        String script = "$ErrorActionPreference='SilentlyContinue';"
+            + "$packages=@(" + packages + ");"
+            + "foreach($package in $packages){"
+            + "if(Get-AppxPackage -Name $package -ErrorAction SilentlyContinue){exit 0}"
+            + "};exit 1";
+        // This focused probe normally completes in under a second and emits no
+        // package listing, avoiding the old aggregate probe's timeout/output risk.
+        return commandSucceeded(List.of("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script), 6);
+    }
+
     private static boolean macApplicationRegistered(String name) {
         if (commandSucceeded(List.of("open", "-Ra", name), 3)) return true;
         return name.equals("Codex") && commandSucceeded(List.of("open", "-Ra", "ChatGPT"), 3);
@@ -352,7 +376,6 @@ final class Platform {
             + "$pattern='(?i)codex|chatgpt|openai|claude|anthropic';"
             + "Get-AppxPackage | Where-Object { \"$($_.Name)|$($_.PackageFamilyName)|$($_.InstallLocation)\" -match $pattern } | ForEach-Object { \"$($_.Name)|$($_.PackageFamilyName)|$($_.InstallLocation)\" };"
             + "Get-StartApps | Where-Object { \"$($_.Name)|$($_.AppID)\" -match $pattern } | ForEach-Object { \"$($_.Name)|$($_.AppID)\" };"
-            + "Get-Command Codex.exe,ChatGPT.exe,Claude.exe -All | ForEach-Object { \"$($_.Name)|$($_.Source)|$($_.Path)\" };"
             + "$roots=@('HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*');"
             + "Get-ItemProperty $roots | Where-Object { \"$($_.DisplayName)|$($_.InstallLocation)|$($_.DisplayIcon)\" -match $pattern } | ForEach-Object { \"$($_.DisplayName)|$($_.InstallLocation)|$($_.DisplayIcon)\" };"
             + "Get-ChildItem 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths','HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths' | Where-Object { $_.PSChildName -match $pattern } | ForEach-Object { $_.PSChildName };"

@@ -52,6 +52,8 @@ final class SelfTest {
         check(Platform.applicationEvidenceMatches("Codex", "OpenAI.ChatGPT_2026.9_x64"), "Windows Store ChatGPT evidence"); passed++;
         check(Platform.applicationEvidenceMatches("Claude", "AnthropicClaude | C:\\Apps\\Claude.exe"), "Windows Claude registry evidence"); passed++;
         check(!Platform.applicationEvidenceMatches("Claude", "OpenAI.ChatGPT"), "desktop evidence does not cross vendors"); passed++;
+        check(Platform.windowsPackageNames("Codex").contains("OpenAI.Codex"), "Windows Codex MSIX package identity"); passed++;
+        check(Platform.windowsPackageNames("Claude").contains("Claude"), "Windows Claude MSIX package identity"); passed++;
         Platform.InstallationSnapshot knownInstalled = new Platform.InstallationSnapshot(true, true, true, true);
         check(knownInstalled.equals(Platform.installationSnapshot(knownInstalled)), "installed application state is cached within a run"); passed++;
         Path installFixture = Files.createTempDirectory("tokenpro-install-detection-");
