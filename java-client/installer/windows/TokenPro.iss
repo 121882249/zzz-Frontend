@@ -1,4 +1,7 @@
 ; Requires Inno Setup 6.7.1+. Original Inno Setup copyright notices are retained.
+#if VER < EncodeVer(6, 7, 1)
+  #error This installer requires Inno Setup 6.7.1 or later
+#endif
 #ifndef AppImageDir
   #error AppImageDir must point to the jpackage app-image
 #endif

@@ -8,7 +8,8 @@ import java.util.concurrent.TimeUnit;
 final class WindowsUpdaterTest {
     static int run() throws Exception {
         int passed = 0;
-        Path root = Files.createTempDirectory("tokenpro-windows-update-test-").toAbsolutePath();
+        // macOS /var is a system alias; fixture paths use its resolved location.
+        Path root = Files.createTempDirectory("tokenpro-windows-update-test-").toRealPath();
         try {
             Path source = root.resolve("模拟磁盘根目录");
             image(source, "old-core");

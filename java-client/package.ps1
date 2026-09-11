@@ -8,8 +8,7 @@ $compilerCandidates = @(
 )
 $compiler = $compilerCandidates | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
 if (-not $compiler) { throw '需要 Inno Setup 6.7.1+。请安装构建工具或用 INNO_ISCC 指定 ISCC.exe；脚本不会自动下载或安装工具。' }
-$compilerVersion = [version](Get-Item -LiteralPath $compiler).VersionInfo.FileVersion
-if ($compilerVersion -lt [version]'6.7.1') { throw "编译器版本 $compilerVersion 过旧，中文星空主题需要 Inno Setup 6.7.1+。" }
+# ISCC.exe may report PE FileVersion 0.0.0.0; the .iss template checks the actual engine version.
 & ./build.ps1
 if ($LASTEXITCODE -ne 0) { throw "build.ps1 failed with exit code $LASTEXITCODE" }
 $packageRoot = Join-Path $PSScriptRoot ('build/windows-package-' + [Guid]::NewGuid().ToString('N'))
