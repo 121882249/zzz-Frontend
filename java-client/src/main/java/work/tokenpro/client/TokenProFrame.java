@@ -200,14 +200,17 @@ final class TokenProFrame extends JFrame {
         RoundedPanel card = card(); card.setLayout(new BorderLayout(18, 0));
         JLabel badge = new JLabel(clientIcon(iconName, 48)); badge.setHorizontalAlignment(SwingConstants.CENTER); badge.setPreferredSize(new Dimension(52, 52)); card.add(badge, BorderLayout.WEST);
         JPanel words = transparent(); words.setLayout(new BoxLayout(words, BoxLayout.Y_AXIS)); JPanel nameLine = transparent(new FlowLayout(FlowLayout.LEFT, 10, 0)); nameLine.setAlignmentX(Component.LEFT_ALIGNMENT); nameLine.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24)); JLabel heading = new JLabel(title); heading.setFont(appFont(17, Font.BOLD)); JLabel installedLabel = new JLabel(installed ? "已安装" : "未安装"); installedLabel.setFont(appFont(11, Font.BOLD)); installedLabel.setForeground(installed ? new Color(97, 222, 165) : MUTED); nameLine.add(heading); nameLine.add(installedLabel); JLabel detail = new JLabel(subtitle); detail.setAlignmentX(Component.LEFT_ALIGNMENT); detail.setFont(appFont(11, Font.PLAIN)); detail.setForeground(MUTED); words.add(Box.createVerticalStrut(3)); words.add(nameLine); words.add(Box.createVerticalStrut(6)); words.add(detail); card.add(words, BorderLayout.CENTER);
-        JPanel actions = transparent(); actions.setLayout(new BoxLayout(actions, BoxLayout.Y_AXIS)); JPanel buttons = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        buttons.add(iconName.equals("Codex") ? homeCodexSupport : homeClaudeSupport);
+        JPanel actions = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        actions.add(iconName.equals("Codex") ? homeCodexSupport : homeClaudeSupport);
         JButton menu = soft("模型选择  ▾");
         menu.addActionListener(e -> showModelMenu(menu, chooseModel, restore));
+        JPanel modelControl = transparent(); modelControl.setLayout(new BoxLayout(modelControl, BoxLayout.Y_AXIS));
+        menu.setAlignmentX(Component.CENTER_ALIGNMENT); state.setFont(appFont(11, Font.BOLD)); state.setAlignmentX(Component.CENTER_ALIGNMENT); state.setHorizontalAlignment(SwingConstants.CENTER);
+        modelControl.add(menu); modelControl.add(Box.createVerticalStrut(7)); modelControl.add(state); actions.add(modelControl);
         JButton launch = primary("连接 " + iconName + " 客户端"); launch.addActionListener(e -> open.run());
         launch.setEnabled(installed && iconName.equals("Claude"));
         if (iconName.equals("Codex")) codexLaunch = launch; else claudeLaunch = launch;
-        buttons.add(menu); buttons.add(launch); actions.add(buttons); state.setFont(appFont(11, Font.BOLD)); state.setAlignmentX(Component.RIGHT_ALIGNMENT); actions.add(Box.createVerticalStrut(7)); actions.add(state); card.add(actions, BorderLayout.EAST); return card;
+        actions.add(launch); card.add(actions, BorderLayout.EAST); return card;
     }
 
     private void showModelMenu(JButton anchor, Runnable chooseModel, Runnable restore) {
