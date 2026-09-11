@@ -104,7 +104,10 @@ final class SelfTest {
             for (String client : List.of("Codex", "Claude")) {
                 Path candidate = fixtureApplicationCandidate(Platform.applicationCandidates(Platform.OS_KIND, fixtureHome, fixtureEnvironment, client), installFixture);
                 if (candidate.toString().endsWith(".app")) Files.createDirectories(candidate);
-                else { Files.createDirectories(candidate.getParent()); Files.writeString(candidate, "fixture"); }
+                else {
+                    Files.createDirectories(candidate.getParent()); Files.writeString(candidate, "fixture");
+                    if(Platform.OS_KIND != Platform.OS.WINDOWS) candidate.toFile().setExecutable(true, true);
+                }
                 check(Platform.filesystemApplicationInstalled(Platform.OS_KIND, fixtureHome, fixtureEnvironment, client), Platform.OS_KIND + " " + client + " desktop fixture detection"); passed++;
             }
             for (String command : List.of("codex", "claude")) {
