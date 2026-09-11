@@ -29,6 +29,27 @@ final class SelfTest {
         String emailActor = CodexConfig.withActor(managedActor, "user@example.com");
         check(emailActor.contains("name = \"user@example.com\"") && emailActor.contains("\"x-openai-actor-authorization\" = \"user@example.com\""), "existing Codex actor migrates to account email"); passed++;
         check(Platform.dataDirectory().endsWith("TokenPro"), "platform data directory"); passed++;
+        Map<String, String> windowsEnvironment = Map.of(
+            "LOCALAPPDATA", "C:\\Users\\Test\\AppData\\Local",
+            "APPDATA", "C:\\Users\\Test\\AppData\\Roaming",
+            "ProgramFiles", "C:\\Program Files",
+            "ProgramFiles(x86)", "C:\\Program Files (x86)",
+            "ProgramData", "C:\\ProgramData",
+            "PATH", "C:\\Tools;C:\\Windows\\System32");
+        check(pathsContain(Platform.applicationCandidates(Platform.OS.MAC, "/Users/test", Map.of(), "Codex"), "ChatGPT.app"), "macOS desktop app candidates"); passed++;
+        check(pathsContain(Platform.applicationCandidates(Platform.OS.WINDOWS, "C:\\Users\\Test", windowsEnvironment, "Codex"), "Programs/ChatGPT/ChatGPT.exe"), "Windows Codex desktop candidates"); passed++;
+        check(pathsContain(Platform.applicationCandidates(Platform.OS.WINDOWS, "C:\\Users\\Test", windowsEnvironment, "Claude"), "AnthropicClaude/Claude.exe"), "Windows Claude desktop candidates"); passed++;
+        check(pathsContain(Platform.windowsVersionedInstallRoots("C:\\Users\\Test", windowsEnvironment, "Claude"), "AnthropicClaude"), "Windows versioned Claude install root"); passed++;
+        check(pathsContain(Platform.applicationCandidates(Platform.OS.LINUX, "/home/test", Map.of(), "Claude"), ".local/share/applications/claude.desktop"), "Linux desktop app candidates"); passed++;
+        check(pathsContain(Platform.applicationCandidates(Platform.OS.LINUX, "/home/test", Map.of(), "Codex"), "/opt/chatgpt/chatgpt"), "Linux ChatGPT Codex desktop candidate"); passed++;
+        check(pathsContain(Platform.commandCandidates(Platform.OS.MAC, "/Users/test", Map.of("PATH", ""), "claude"), ".claude/local/claude"), "macOS Claude CLI candidates"); passed++;
+        check(pathsContain(Platform.commandCandidates(Platform.OS.WINDOWS, "C:\\Users\\Test", windowsEnvironment, "codex"), "npm/codex.cmd"), "Windows Codex CLI candidates"); passed++;
+        check(pathsContain(Platform.commandCandidates(Platform.OS.LINUX, "/home/test", Map.of("PATH", ""), "codex"), ".local/bin/codex"), "Linux Codex CLI candidates"); passed++;
+        check(Platform.applicationEvidenceMatches("Codex", "OpenAI.ChatGPT_2026.9_x64"), "Windows Store ChatGPT evidence"); passed++;
+        check(Platform.applicationEvidenceMatches("Claude", "AnthropicClaude | C:\\Apps\\Claude.exe"), "Windows Claude registry evidence"); passed++;
+        check(!Platform.applicationEvidenceMatches("Claude", "OpenAI.ChatGPT"), "desktop evidence does not cross vendors"); passed++;
+        Platform.InstallationSnapshot knownInstalled = new Platform.InstallationSnapshot(true, true, true, true);
+        check(knownInstalled.equals(Platform.installationSnapshot(knownInstalled)), "installed application state is cached within a run"); passed++;
         check("user@example.com".equals(ClaudeDesktopConfig.deploymentDisplayName(" user@example.com "))
             && "用户账户".equals(ClaudeDesktopConfig.deploymentDisplayName("")), "Claude account display name"); passed++;
         PricedModel priced = new PricedModel("gpt-test", "openai", "GPT", 16);
@@ -67,6 +88,19 @@ final class SelfTest {
         PricedModel image = new PricedModel("gpt-image-2", "openai", "GPT", 60, "image", null);
         check(ApiClient.compareModelPriceDescending(premium, standard) < 0, "models sort by output price descending"); passed++;
         check(ApiClient.compareModelPriceDescending(standard, image) < 0, "token models sort before non-token models"); passed++;
+        List<PricedModel> tickerCandidates = List.of(
+            new PricedModel("gpt-top", "openai", "GPT", 1, "token", 30d),
+            new PricedModel("gpt-second", "openai", "GPT", 1, "token", 20d),
+            new PricedModel("gpt-third", "openai", "GPT", 1, "token", 10d),
+            new PricedModel("claude-top", "anthropic", "Claude", 2, "token", 40d),
+            new PricedModel("claude-second", "anthropic", "Claude", 2, "token", 15d),
+            new PricedModel("gemini-top", "google", "Gemini", 3, "token", 18d),
+            new PricedModel("gemini-second", "google", "Gemini", 3, "token", 12d),
+            new PricedModel("grok-top", "xai", "Grok", 4, "token", 22d),
+            new PricedModel("grok-second", "xai", "Grok", 4, "token", 11d),
+            image);
+        List<String> tickerNames = TokenProFrame.premiumTickerModels(tickerCandidates).stream().map(PricedModel::name).toList();
+        check(tickerNames.equals(List.of("gpt-top", "gpt-second", "claude-top", "claude-second", "gemini-top", "gemini-second", "grok-top", "grok-second")), "premium ticker keeps two highest-priced models per vendor"); passed++;
         PricedModel inputPriced = new PricedModel("gpt-5.6-sol", "openai", "GPT", 60, "token", 0.000004, 0.00003, List.of());
         PricedModel lowerInputPriced = new PricedModel("gpt-5.6-terra", "openai", "GPT", 60, "token", 0.000002, 0.00005, List.of());
         check(ApiClient.compareSelectablePriceDescending(inputPriced, lowerInputPriced) < 0, "picker models sort by displayed input price descending"); passed++;
@@ -151,6 +185,10 @@ final class SelfTest {
             try (var files = Files.walk(temporary)) { files.sorted(Comparator.reverseOrder()).forEach(path -> { try { Files.deleteIfExists(path); } catch (Exception ignored) {} }); }
         }
         System.out.println("TokenPro Java self-test: " + passed + " checks passed");
+    }
+    private static boolean pathsContain(List<Path> paths, String suffix) {
+        String normalizedSuffix = suffix.replace('\\', '/').toLowerCase(Locale.ROOT);
+        return paths.stream().map(Path::toString).map(value -> value.replace('\\', '/').toLowerCase(Locale.ROOT)).anyMatch(value -> value.contains(normalizedSuffix));
     }
     private static void check(boolean value, String label) { if (!value) throw new AssertionError(label); }
 }
