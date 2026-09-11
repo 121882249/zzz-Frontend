@@ -190,6 +190,7 @@ final class TokenProFrame extends JFrame {
         badges.add(new MiniModelBadge(resourceIconContained("ClaudeSparkRuntime.png", 18, 18, false), new Color(238, 126, 82), "支持 Claude 模型"));
         badges.add(new MiniModelBadge(resourceIconContained("GeminiSparkTransparent.png", 18, 18, false), new Color(107, 145, 255), "支持 Gemini 模型"));
         badges.add(new MiniModelBadge(resourceIconContained("GrokMarkTransparent.png", 18, 18, false), new Color(184, 155, 255), "支持 Grok 模型"));
+        badges.add(new MoreModelsBadge());
         return badges;
     }
 
@@ -1291,6 +1292,29 @@ final class TokenProFrame extends JFrame {
             g.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, 13, 13);
             g.setColor(new Color(255, 255, 255, 190));
             g.fillOval(getWidth() - 7, 4, 2, 2);
+            g.dispose();
+            super.paintComponent(graphics);
+        }
+    }
+
+    private static final class MoreModelsBadge extends JLabel {
+        MoreModelsBadge() {
+            super("✦  更多模型", SwingConstants.CENTER);
+            setFont(appFont(10, Font.BOLD));
+            setForeground(new Color(211, 219, 255));
+            setToolTipText("更多模型持续接入");
+            setPreferredSize(new Dimension(86, 28));
+            setMinimumSize(getPreferredSize());
+            setOpaque(false);
+        }
+
+        protected void paintComponent(Graphics graphics) {
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setPaint(new GradientPaint(0, 0, new Color(79, 96, 182, 150), getWidth(), getHeight(), new Color(91, 61, 153, 155)));
+            g.fillRoundRect(1, 1, getWidth() - 2, getHeight() - 2, 14, 14);
+            g.setColor(new Color(179, 191, 255, 145));
+            g.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, 14, 14);
             g.dispose();
             super.paintComponent(graphics);
         }
