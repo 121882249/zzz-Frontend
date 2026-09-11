@@ -54,11 +54,17 @@ final class SelfTest {
         check(!Platform.applicationEvidenceMatches("Claude", "OpenAI.ChatGPT"), "desktop evidence does not cross vendors"); passed++;
         check(Platform.windowsPackageNames("Codex").contains("OpenAI.Codex"), "Windows Codex MSIX package identity"); passed++;
         check(Platform.windowsPackageNames("Claude").contains("Claude"), "Windows Claude MSIX package identity"); passed++;
+        check(Platform.windowsPackageNames("Codex").equals(List.of("OpenAI.Codex", "OpenAI.ChatGPT-Desktop")), "Windows Codex MSIX identities stay exact"); passed++;
+        check(Platform.windowsPackageNames("Claude").equals(List.of("Claude")), "Windows Claude MSIX identity stays exact"); passed++;
         Platform.InstallationSnapshot knownInstalled = new Platform.InstallationSnapshot(true, true, true, true);
         check(knownInstalled.equals(Platform.installationSnapshot(knownInstalled)), "installed application state is cached within a run"); passed++;
         Path installFixture = Files.createTempDirectory("tokenpro-install-detection-");
         try {
             String fixtureHome = installFixture.resolve("home").toString();
+            check(!Platform.codexDesktopStatePresent(fixtureHome), "Codex config directory alone is not desktop evidence"); passed++;
+            Path desktopState = Path.of(fixtureHome, ".codex", ".codex-global-state.json");
+            Files.createDirectories(desktopState.getParent()); Files.writeString(desktopState, "{}");
+            check(Platform.codexDesktopStatePresent(fixtureHome), "Codex desktop state file detection"); passed++;
             Map<String, String> fixtureEnvironment = new HashMap<>();
             fixtureEnvironment.put("PATH", "");
             fixtureEnvironment.put("LOCALAPPDATA", installFixture.resolve("local").toString());

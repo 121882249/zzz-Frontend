@@ -196,6 +196,7 @@ final class Platform {
 
     static boolean applicationInstalled(String name) {
         String home = System.getProperty("user.home");
+        if (name.equals("Codex") && codexDesktopStatePresent(home)) return true;
         if (filesystemApplicationInstalled(OS_KIND, home, System.getenv(), name)) return true;
         return switch (OS_KIND) {
             case MAC -> macApplicationRegistered(name);
@@ -212,6 +213,7 @@ final class Platform {
         String home = System.getProperty("user.home");
         Map<String, String> environment = System.getenv();
         boolean codexClient = known != null && known.codexClient()
+            || codexDesktopStatePresent(home)
             || filesystemApplicationInstalled(OS_KIND, home, environment, "Codex");
         boolean claudeClient = known != null && known.claudeClient()
             || filesystemApplicationInstalled(OS_KIND, home, environment, "Claude");
@@ -228,6 +230,12 @@ final class Platform {
         boolean codexCli = known != null && known.codexCli() || commandInstalled("codex");
         boolean claudeCli = known != null && known.claudeCli() || commandInstalled("claude");
         return new InstallationSnapshot(codexClient, claudeClient, codexCli, claudeCli);
+    }
+
+    static boolean codexDesktopStatePresent(String home) {
+        // config.toml and the directory itself are shared with Codex CLI and can
+        // also be created by TokenPro. This UI state file is desktop-specific.
+        return Files.isRegularFile(Path.of(home, ".codex", ".codex-global-state.json"));
     }
 
     static boolean filesystemApplicationInstalled(OS os, String home, Map<String, String> environment, String name) {
@@ -348,22 +356,65 @@ final class Platform {
 
     static List<String> windowsPackageNames(String name) {
         return name.equals("Codex")
-            ? List.of("OpenAI.Codex", "OpenAI.ChatGPT", "OpenAI.ChatGPT-Desktop")
-            : List.of("Claude", "Anthropic.Claude");
+            ? List.of("OpenAI.Codex", "OpenAI.ChatGPT-Desktop")
+            : List.of("Claude");
     }
 
     private static boolean windowsPackagedApplicationInstalled(String name) {
+        if (windowsPackagedProcessRunning(name)) return true;
+        if (windowsProtocolRegistered(name)) return true;
+        if (windowsPackageRepositoryRegistered(name)) return true;
+
         String packages = windowsPackageNames(name).stream()
             .map(value -> "'" + value.replace("'", "''") + "'")
             .collect(java.util.stream.Collectors.joining(","));
+        String startApps = name.equals("Codex")
+            ? "$ids=@('OpenAI.Codex_2p2nqsd0c76g0!App','OpenAI.ChatGPT-Desktop_2p2nqsd0c76g0!App');"
+                + "if(@(Get-StartApps | Where-Object {$ids -contains $_.AppID}).Count -gt 0){exit 0};"
+            : "if(@(Get-StartApps | Where-Object {$_.AppID -match '(?i)^Claude_.*!Claude$'}).Count -gt 0){exit 0};";
         String script = "$ErrorActionPreference='SilentlyContinue';"
             + "$packages=@(" + packages + ");"
             + "foreach($package in $packages){"
-            + "if(Get-AppxPackage -Name $package -ErrorAction SilentlyContinue){exit 0}"
-            + "};exit 1";
-        // This focused probe normally completes in under a second and emits no
-        // package listing, avoiding the old aggregate probe's timeout/output risk.
-        return commandSucceeded(List.of("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script), 6);
+            + "if(@(Get-AppxPackage -Name $package -ErrorAction SilentlyContinue).Count -gt 0){exit 0}"
+            + "};" + startApps + "exit 1";
+        // Use the system executable explicitly because GUI applications do not
+        // always inherit the same PATH as an interactive Windows terminal.
+        return silentCommandSucceeded(List.of(windowsSystemExecutable("WindowsPowerShell\\v1.0\\powershell.exe"),
+            "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script), 15);
+    }
+
+    private static boolean windowsProtocolRegistered(String name) {
+        List<String> protocols = name.equals("Codex") ? List.of("codex", "chatgpt") : List.of("claude");
+        String reg = windowsSystemExecutable("reg.exe");
+        for (String protocol : protocols) {
+            if (silentCommandSucceeded(List.of(reg, "query", "HKCR\\" + protocol), 2)) return true;
+            if (silentCommandSucceeded(List.of(reg, "query", "HKCU\\Software\\Classes\\" + protocol), 2)) return true;
+        }
+        return false;
+    }
+
+    private static boolean windowsPackageRepositoryRegistered(String name) {
+        String reg = windowsSystemExecutable("reg.exe");
+        String repository = "HKCU\\Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\CurrentVersion\\AppModel\\Repository\\Packages";
+        for (String packageName : windowsPackageNames(name)) {
+            if (silentCommandSucceeded(List.of(reg, "query", repository, "/f", packageName + "_", "/k", "/s"), 4)) return true;
+        }
+        return false;
+    }
+
+    private static boolean windowsPackagedProcessRunning(String name) {
+        List<String> markers = name.equals("Codex")
+            ? List.of("\\windowsapps\\openai.codex_", "\\windowsapps\\openai.chatgpt-desktop_")
+            : List.of("\\windowsapps\\claude_");
+        return ProcessHandle.allProcesses().anyMatch(process -> {
+            String command = process.info().command().orElse("").replace('/', '\\').toLowerCase(Locale.ROOT);
+            return markers.stream().anyMatch(command::contains);
+        });
+    }
+
+    private static String windowsSystemExecutable(String relativePath) {
+        Path candidate = Path.of(System.getenv().getOrDefault("SystemRoot", "C:\\Windows"), "System32", relativePath);
+        return Files.isRegularFile(candidate) ? candidate.toString() : Path.of(relativePath).getFileName().toString();
     }
 
     private static boolean macApplicationRegistered(String name) {
@@ -468,6 +519,23 @@ final class Platform {
             Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
             if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
+                return false;
+            }
+            return process.exitValue() == 0;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private static boolean silentCommandSucceeded(List<String> command, int timeoutSeconds) {
+        try {
+            Process process = new ProcessBuilder(command)
+                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                .redirectError(ProcessBuilder.Redirect.DISCARD)
+                .start();
+            if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                process.waitFor(1, TimeUnit.SECONDS);
                 return false;
             }
             return process.exitValue() == 0;
