@@ -31,12 +31,22 @@ final class CodexConfig {
         // Image models stay in their own picker group and are also written to
         // Codex's catalog so they can run directly without a selected LLM.
         Path catalog = writeModelCatalog(models);
-        String block = managedBlock(url, primaryModel, imageModel, catalog, key.trim(), actor);
+        Optional<String> previousBridge = store.read(CodexImageBridge.FILE);
+        try {
+        String localToken = imageModel == null ? key.trim() : CodexImageBridge.configure(store, url, key.trim());
+        String block = managedBlock(imageModel == null ? url : CodexImageBridge.BASE, primaryModel, imageModel, catalog, localToken, actor);
         validate(block);
         // TokenPro owns the active Codex config while connected. Replacing the
         // file avoids ambiguous TOML merges and duplicate keys; restore() puts
         // the byte-for-byte original configuration back.
         writeAtomic(target, block);
+        } catch (Exception failure) {
+            if (imageModel != null) {
+                if (previousBridge.isPresent()) store.write(CodexImageBridge.FILE, previousBridge.get());
+                else { try { CodexImageBridge.stop(store); } catch (Exception ignored) {} store.delete(CodexImageBridge.FILE); }
+            }
+            throw failure;
+        }
     }
 
     void restore() throws Exception {
@@ -47,6 +57,8 @@ final class CodexConfig {
         writeAtomic(target, original.get());
         store.delete("codex-original.toml");
         store.delete("codex-model-catalog.json");
+        CodexImageBridge.stop(store);
+        store.delete(CodexImageBridge.FILE);
     }
 
     void updateActor(String accountEmail) throws Exception {

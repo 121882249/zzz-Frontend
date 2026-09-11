@@ -134,6 +134,10 @@ final class TokenProFrame extends JFrame {
         });
         refreshInstallationState();
         restoreSession();
+        new SwingWorker<Void, Void>() {
+            protected Void doInBackground() throws Exception { CodexImageBridge.resumeIfConfigured(store); return null; }
+            protected void done() { try { get(); } catch (Exception e) { status("本机生图连接未启动，请重新应用 Codex 模型"); } }
+        }.execute();
         javax.swing.Timer updateTimer = new javax.swing.Timer(2500, e -> checkForUpdates(null, true));
         updateTimer.setRepeats(false);
         updateTimer.start();
@@ -1337,6 +1341,7 @@ final class TokenProFrame extends JFrame {
                     setUpdateButtonState("checking", "正在完成更新…");
                     setUpdateProgress(100);
                     status("正在完成 TokenPro " + release.version() + " 更新，程序即将重启…");
+                    CodexImageBridge.stop(store);
                     if (release.hasIncrementalUpdate()) Updater.installIncremental(installer, release.version());
                     else Updater.install(installer);
                     dispose();
@@ -1474,7 +1479,10 @@ final class TokenProFrame extends JFrame {
             // checkpointing the active turn, and restarting it can reopen an
             // older history snapshot. `openApplication` raises the existing
             // single-instance app or starts it when it is not running.
-            protected Boolean doInBackground() throws Exception { return Platform.openApplication(app); }
+            protected Boolean doInBackground() throws Exception {
+                if ("Codex".equals(app)) CodexImageBridge.resumeIfConfigured(store);
+                return Platform.openApplication(app);
+            }
             protected void done() {
                 try {
                     if (!get()) throw new IllegalStateException("无法打开 " + app);

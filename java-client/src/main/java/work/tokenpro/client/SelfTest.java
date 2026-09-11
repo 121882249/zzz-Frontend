@@ -9,6 +9,7 @@ import java.util.*;
 final class SelfTest {
     static void run() throws Exception {
         int passed = 0;
+        passed += CodexImageTest.run();
         Map<String, Object> value = Json.object(Json.parse("{\"name\":\"TokenPro\",\"items\":[1,true,null],\"n\":12}"));
         check("TokenPro".equals(value.get("name")), "JSON string"); passed++;
         check(value.get("items") instanceof List<?> list && list.size() == 3, "JSON array"); passed++;

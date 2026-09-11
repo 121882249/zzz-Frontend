@@ -4,11 +4,15 @@ import javax.swing.*;
 import java.awt.*;
 
 public final class Main {
-    public static final String VERSION = "1.2.59";
+    public static final String VERSION = "1.2.60";
     private Main() {}
 
     public static void main(String[] args) throws Exception {
         SecureStore store = new SecureStore();
+        if (args.length == 1 && "--codex-image-bridge".equals(args[0])) {
+            try (CodexImageBridge bridge = new CodexImageBridge(store)) { bridge.await(); }
+            return;
+        }
         if ((args.length == 1 && "--claude-token".equals(args[0])) || System.getenv("CLAUDE_HELPER_CONTEXT") != null) {
             ClaudeBridgeManager.ensureRunning(store);
             System.out.print(ClaudeBridgeConfig.load(store).localToken());
