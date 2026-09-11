@@ -400,7 +400,7 @@ final class TokenProFrame extends JFrame {
             store.write("codex-selected.json", Json.stringify(saved));
             return chosen;
         }, configured -> {
-            homeCodexStatus.setText(codexSelectionStatus(chatModels.size(), imageModels.size(), imageModel == null ? "" : imageModel.name()));
+            homeCodexStatus.setText(selectionStatus(chosen.size()));
             if (codexLaunch != null) codexLaunch.setEnabled(true);
             status("Codex 配置已安全替换，已接入 " + configured.size() + " 个模型");
             reconnectApp("Codex");
@@ -584,27 +584,17 @@ final class TokenProFrame extends JFrame {
             if (raw.isEmpty()) throw new IllegalStateException("未选择");
             Map<String, Object> saved = Json.object(Json.parse(raw.get()));
             if (saved.get("models") instanceof List<?> models && !models.isEmpty()) {
-                String imageModel = string(saved.get("image_model"));
-                int imageCount = saved.get("image_models") instanceof List<?> imageModels
-                    ? imageModels.size() : imageModel.isBlank() ? 0 : 1;
-                int chatCount = Math.max(0, models.size() - imageCount);
-                homeCodexStatus.setText(codexSelectionStatus(chatCount, imageCount, imageModel));
+                homeCodexStatus.setText(selectionStatus(models.size()));
             }
             else {
                 String selected = string(saved.get("model")); if (selected.isBlank()) throw new IllegalStateException("未选择");
-                homeCodexStatus.setText(selected);
+                homeCodexStatus.setText(selectionStatus(1));
             }
             if (codexLaunch != null) codexLaunch.setEnabled(true);
         } catch (Exception ignored) { homeCodexStatus.setText("请先选择模型"); if (codexLaunch != null) codexLaunch.setEnabled(false); }
     }
 
-    private static String codexSelectionStatus(int chatCount, int imageCount, String firstImageModel) {
-        if (chatCount > 0 && imageCount > 0) return chatCount + " 个主模型 + " + imageCount + " 个生图模型";
-        if (chatCount > 0) return chatCount + " 个主模型";
-        if (imageCount > 1) return imageCount + " 个生图模型 · 直接生图";
-        if (imageCount == 1) return PricedModel.displayCase(firstImageModel) + " · 直接生图";
-        return "请重新选择模型";
-    }
+    private static String selectionStatus(int count) { return count > 0 ? "已选 " + count + " 个模型" : "请先选择模型"; }
 
     private Set<String> selectedModelIds(String client) {
         Set<String> ids = new HashSet<>();
