@@ -1,7 +1,9 @@
 # Windows 中文安装包
 
-沿用 `Router.ico`、`LoginCosmos-v2.png`、`TokenProCosmosIcon.png`，
-将 jpackage app-image 打包为中文、深色星空主题的当前用户安装包。
+沿用 `Router.ico`、`TokenProCosmosIcon.png`，以 `LoginCosmos-v2.png` 为风格参考，
+使用内置 image_gen 生成匹配安装窗口比例的横向星空背景 `cosmos-installer-v1.png`。
+提示词与生成说明见 `background-prompt.md`。将 jpackage app-image 打包为中文、
+深色星空主题的当前用户安装包，不改变应用原有运行时素材。
 
 ## 构建
 

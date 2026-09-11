@@ -37,11 +37,11 @@ OutputDir={#OutputDirPath}
 OutputBaseFilename=TokenPro-{#AppVersion}-Windows-x64
 Compression=lzma2
 SolidCompression=yes
-WizardStyle=modern dark stellar includetitlebar
+WizardStyle=modern dark polar includetitlebar
 WizardSizePercent=120
 WizardBackColor=#080D24
-WizardBackImageFile={#RepoRoot}\Resources\LoginCosmos-v2.png
-WizardBackImageOpacity=130
+WizardBackImageFile=cosmos-installer-v1.png
+WizardBackImageOpacity=225
 WizardImageFile=
 WizardSmallImageFile={#RepoRoot}\Resources\TokenProCosmosIcon.png
 DisableWelcomePage=no
@@ -56,7 +56,7 @@ AllowNoIcons=yes
 SetupLogging=yes
 
 [Languages]
-Name: "zh_CN"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+Name: "zh_CN"; MessagesFile: "ChineseSimplified.isl"
 
 [Messages]
 SetupWindowTitle=TokenPro · 安装
