@@ -295,6 +295,8 @@ final class SelfTest {
         passed += ApplicationLaunchTest.run();
         passed += ModelCapabilitiesTest.run();
         passed += ReleaseRegressionTest.run();
+        passed += ConnectionRegressionTest.run();
+        passed += ErrorAndRestoreTest.run();
         System.out.println("TokenPro Java self-test: " + passed + " checks passed");
     }
     private static boolean pathsContain(List<Path> paths, String suffix) {

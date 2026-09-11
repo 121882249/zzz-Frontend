@@ -17,15 +17,26 @@ final class CodexImageBridge implements AutoCloseable {
     static String baseUrl(SecureStore store) { return store.isCodexCli() ? "http://127.0.0.1:23182/v1" : BASE; }
     private static final String SERVICE = "tokenpro-codex-images-v1";
     private final SecureStore store;
+    private final String upstreamBase;
     private final HttpServer server;
     private final ExecutorService workers = Executors.newVirtualThreadPerTaskExecutor();
     private final CountDownLatch stopped = new CountDownLatch(1);
+    private final Set<InputStream> inFlightBodies = ConcurrentHashMap.newKeySet();
+    private final java.util.concurrent.atomic.AtomicBoolean closed = new java.util.concurrent.atomic.AtomicBoolean();
     private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(20)).followRedirects(HttpClient.Redirect.NEVER).build();
 
     CodexImageBridge(SecureStore store) throws Exception {
         this(store, store.isCodexCli() ? 23182 : 23180);
     }
     CodexImageBridge(SecureStore store, int port) throws Exception {
+        this(store, port, "https://tokenpro.work");
+    }
+    CodexImageBridge(SecureStore store, int port, String upstreamBase) throws Exception {
+        URI upstream = URI.create(upstreamBase);
+        if (!upstreamBase.equals("https://tokenpro.work") && !("http".equals(upstream.getScheme()) && "127.0.0.1".equals(upstream.getHost())
+            && upstream.getRawQuery() == null && upstream.getRawUserInfo() == null && upstream.getRawFragment() == null && upstream.getPath().isEmpty()))
+            throw new IllegalArgumentException("不支持的上游地址");
+        this.upstreamBase = upstreamBase;
         this.store = store;
         server = HttpServer.create(new InetSocketAddress(InetAddress.getByName("127.0.0.1"), port), 16);
         server.createContext("/", this::handle); server.setExecutor(workers); server.start();
@@ -37,7 +48,7 @@ final class CodexImageBridge implements AutoCloseable {
         String token = "";
         try { token = Objects.toString(load(store).get("token"), ""); } catch (Exception ignored) { }
         if (token.isBlank()) { byte[] bytes = new byte[32]; new SecureRandom().nextBytes(bytes); token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes); }
-        store.write(FILE, Json.stringify(Map.of("token", token, "key", key)));
+        store.write(FILE, Json.stringify(Map.of("token", token, "key", key, "revision", UUID.randomUUID().toString())));
         ensureRunning(store);
         return token;
     }
@@ -87,14 +98,23 @@ final class CodexImageBridge implements AutoCloseable {
             if (exchange.getRequestURI().getRawQuery() != null) { reply(exchange, 400, "Unexpected query"); return; }
             byte[] body = exchange.getRequestBody().readNBytes(32*1024*1024+1);
             if (body.length > 32*1024*1024) { reply(exchange, 413, "Request too large"); return; }
-            HttpRequest.Builder request = HttpRequest.newBuilder(URI.create("https://tokenpro.work"+path)).timeout(Duration.ofMinutes(10));
+            HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(upstreamBase+path)).timeout(Duration.ofMinutes(10));
             Set<String> skip = Set.of("authorization", "host", "content-length", "connection", "transfer-encoding", "upgrade", "expect", "cookie", "accept-encoding");
             exchange.getRequestHeaders().forEach((name, values) -> { if (!skip.contains(name.toLowerCase(Locale.ROOT))) for (String value : values) request.header(name, value); });
             request.header("Authorization", "Bearer "+Objects.toString(config.get("key"), ""));
             request.header("Accept-Encoding", "identity");
             request.method(method, method.equals("GET") ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofByteArray(body));
             HttpResponse<InputStream> response = client.send(request.build(), HttpResponse.BodyHandlers.ofInputStream());
-            try (InputStream input = response.body()) {
+            if (method.equals("POST") && path.equals("/v1/responses")) {
+                String model = "";
+                try { model = Objects.toString(Json.object(Json.parse(new String(body, StandardCharsets.UTF_8))).get("model"), ""); }
+                catch (Exception ignored) {}
+                ConnectionEvidence.received(store, Objects.toString(config.get("revision"), ""), model, response.statusCode(),
+                    response.headers().firstValue("x-request-id").orElse(""));
+            }
+            InputStream upstreamBody = response.body();
+            inFlightBodies.add(upstreamBody);
+            try (InputStream input = upstreamBody) {
                 String type = response.headers().firstValue("Content-Type").orElse("application/json");
                 exchange.getResponseHeaders().set("Content-Type", type);
                 response.headers().firstValue("x-request-id").ifPresent(v -> exchange.getResponseHeaders().set("x-request-id", v));
@@ -108,7 +128,7 @@ final class CodexImageBridge implements AutoCloseable {
                     if (response.statusCode() == 200 && path.equals("/v1/responses") && type.contains("json")) data = Json.stringify(adapter.transform(Json.object(Json.parse(new String(data, StandardCharsets.UTF_8))))).getBytes(StandardCharsets.UTF_8);
                     exchange.sendResponseHeaders(response.statusCode(), data.length); started = true; exchange.getResponseBody().write(data);
                 }
-            }
+            } finally { inFlightBodies.remove(upstreamBody); }
         } catch (Exception e) {
             // Never echo credentials, prompts, or upstream exception URLs.
             if (!started) reply(exchange, 502, "Codex 本机生图连接失败，请重试或重新应用模型");
@@ -119,5 +139,14 @@ final class CodexImageBridge implements AutoCloseable {
         byte[] bytes = message.getBytes(StandardCharsets.UTF_8); exchange.sendResponseHeaders(status, bytes.length); exchange.getResponseBody().write(bytes);
     }
     void await() throws InterruptedException { stopped.await(); }
-    public void close() { server.stop(0); workers.shutdownNow(); client.close(); stopped.countDown(); }
+    public void close() {
+        if (!closed.compareAndSet(false, true)) return;
+        server.stop(0);
+        workers.shutdownNow();
+        inFlightBodies.forEach(body -> { try { body.close(); } catch (IOException ignored) {} });
+        // close() waits for all response bodies indefinitely. An interrupted
+        // stream must not keep the old helper alive during an incremental update.
+        client.shutdownNow();
+        stopped.countDown();
+    }
 }

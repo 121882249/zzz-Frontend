@@ -106,6 +106,12 @@ final class TokenProFrame extends JFrame {
     private volatile ReleaseInfo availableUpdate;
     private final AtomicBoolean updateInProgress = new AtomicBoolean();
     private final AtomicBoolean installationScanInProgress = new AtomicBoolean();
+    private final AtomicBoolean accountRefreshInProgress = new AtomicBoolean();
+    private final ConnectionGate connectingClients = new ConnectionGate();
+    private final BrowserOpenGate browserOpenGate = new BrowserOpenGate();
+    private final List<JButton> guardedWebButtons = new ArrayList<>();
+    private final javax.swing.Timer webLinkTimer = new javax.swing.Timer(250, e -> updateWebButtons());
+    private long lastAccountRefresh;
     private volatile boolean installationScanCompleted;
     private volatile long lastInstallationScanAtNanos;
     private JComponent activeModelMenuOverlay;
@@ -139,8 +145,14 @@ final class TokenProFrame extends JFrame {
         setSize(1280, 820);
         setLocationRelativeTo(null);
         setContentPane(content());
+        addWindowListener(new WindowAdapter() {
+            @Override public void windowClosed(WindowEvent event) { webLinkTimer.stop(); }
+        });
         addWindowFocusListener(new WindowAdapter() {
-            @Override public void windowGainedFocus(WindowEvent event) { refreshInstallationState(); }
+            @Override public void windowGainedFocus(WindowEvent event) {
+                refreshInstallationState();
+                if (initializeServices) refreshAccountSilently();
+            }
         });
         if (!initializeServices) return;
         refreshInstallationState();
@@ -155,6 +167,11 @@ final class TokenProFrame extends JFrame {
         javax.swing.Timer updateTimer = new javax.swing.Timer(2500, e -> checkForUpdates(null, true));
         updateTimer.setRepeats(false);
         updateTimer.start();
+        javax.swing.Timer walletTimer = new javax.swing.Timer(30000, e -> refreshAccountSilently());
+        walletTimer.start();
+        addWindowListener(new WindowAdapter() {
+            @Override public void windowClosed(WindowEvent event) { walletTimer.stop(); }
+        });
     }
 
     private JComponent content() {
@@ -199,8 +216,8 @@ final class TokenProFrame extends JFrame {
         JPanel top = new JPanel(); top.setOpaque(false); top.setBorder(new EmptyBorder(25, 12, 10, 12)); top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
         JLabel brand = new JLabel("TokenPro", resourceIconContained("TokenProCosmosIcon.png", 28, 28, false), SwingConstants.LEFT); brand.setIconTextGap(11); brand.setFont(appFont(17, Font.BOLD)); brand.setForeground(TEXT); brand.setBorder(new EmptyBorder(0, 5, 24, 0)); top.add(brand);
         addNav(top, "首页", "SparklesLucide.png");
-        JButton backend = sideAction("后台管理", "WebCog.png"); backend.addActionListener(e -> browse("https://tokenpro.work/admin/dashboard")); top.add(backend); top.add(Box.createVerticalStrut(6));
-        JButton docs = sideAction("使用文档", "WebBook.png"); docs.addActionListener(e -> browse("https://tokenpro.work/docs")); top.add(docs); top.add(Box.createVerticalStrut(6));
+        JButton backend = sideAction("后台管理", "WebCog.png"); guardWebButton(backend); backend.addActionListener(e -> browse("https://tokenpro.work/admin/dashboard")); top.add(backend); top.add(Box.createVerticalStrut(6));
+        JButton docs = sideAction("使用文档", "WebBook.png"); guardWebButton(docs); docs.addActionListener(e -> browse("https://tokenpro.work/docs")); top.add(docs); top.add(Box.createVerticalStrut(6));
         panel.add(top, BorderLayout.NORTH);
         JPanel bottom = new JPanel(new BorderLayout()); bottom.setOpaque(false); bottom.setBorder(new EmptyBorder(0, 12, 18, 12)); NavButton accountNav = new NavButton("我的账户"); accountNav.setIcon(resourceIconContained("CircleUserLucide.png", 17, 17, true)); accountNav.setIconTextGap(12); accountNav.addActionListener(e -> openAccount()); navButtons.put("我的账户", accountNav); bottom.add(accountNav); panel.add(bottom, BorderLayout.SOUTH); return panel;
     }
@@ -219,7 +236,7 @@ final class TokenProFrame extends JFrame {
         RoundedPanel wallet = new RoundedPanel(20, new Color(22, 38, 78, 228), new Color(75, 190, 151, 145)); wallet.setLayout(new GridBagLayout()); wallet.setBorder(new EmptyBorder(0, 7, 0, 7)); wallet.setPreferredSize(headerCardSize); wallet.setMinimumSize(headerCardSize);
         JPanel walletContent = transparent(new FlowLayout(FlowLayout.CENTER, 14, 0));
         JPanel captions = transparent(); captions.setLayout(new BoxLayout(captions, BoxLayout.Y_AXIS)); JLabel balanceText = new JLabel("钱包余额"); balanceText.setFont(appFont(12, Font.PLAIN)); balanceText.setForeground(MUTED); JLabel rate = new JLabel("充值比例  1￥ = 1$"); rate.setFont(appFont(10, Font.PLAIN)); rate.setForeground(MUTED); captions.add(balanceText); captions.add(rate); walletContent.add(captions);
-        headerBalance.setFont(appFont(26, Font.BOLD)); headerBalance.setForeground(new Color(105, 220, 194)); walletContent.add(headerBalance); refreshAccountButton = soft("刷新"); refreshAccountButton.setToolTipText("刷新钱包余额和订阅信息"); refreshAccountButton.setIcon(resourceIconContained("RefreshCwLucide.png", 15, 15, true)); refreshAccountButton.addActionListener(e -> refreshAccount()); walletContent.add(refreshAccountButton); JButton recharge = soft("充值/订阅"); recharge.setIcon(resourceIconContained("PlusLucide.png", 15, 15, true)); recharge.addActionListener(e -> browse("https://tokenpro.work/purchase")); walletContent.add(recharge); wallet.add(walletContent);
+        headerBalance.setFont(appFont(26, Font.BOLD)); headerBalance.setForeground(new Color(105, 220, 194)); walletContent.add(headerBalance); refreshAccountButton = soft("刷新"); refreshAccountButton.setToolTipText("刷新钱包余额和订阅信息"); refreshAccountButton.setIcon(resourceIconContained("RefreshCwLucide.png", 15, 15, true)); refreshAccountButton.addActionListener(e -> refreshAccount()); walletContent.add(refreshAccountButton); JButton recharge = soft("充值/订阅"); guardWebButton(recharge); recharge.setIcon(resourceIconContained("PlusLucide.png", 15, 15, true)); recharge.addActionListener(e -> browse("https://tokenpro.work/purchase")); walletContent.add(recharge); wallet.add(walletContent);
         subscriptionSlot.setPreferredSize(headerCardSize); subscriptionSlot.setMinimumSize(headerCardSize);
         JPanel row = transparent(new GridBagLayout());
         GridBagConstraints walletConstraints = new GridBagConstraints(); walletConstraints.gridx = 0; walletConstraints.weightx = 1; walletConstraints.fill = GridBagConstraints.BOTH;
@@ -252,7 +269,7 @@ final class TokenProFrame extends JFrame {
         JPanel words = transparent(); words.setLayout(new BoxLayout(words, BoxLayout.Y_AXIS)); JPanel nameLine = transparent(new FlowLayout(FlowLayout.LEFT, 10, 0)); nameLine.setAlignmentX(Component.LEFT_ALIGNMENT); nameLine.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26)); JLabel heading = new JLabel(title); heading.setFont(appFont(17, Font.BOLD)); JLabel installedLabel = installLabel(); String scanKey = iconName.equals("Codex") ? "codex-client" : "claude-client"; JButton scan = installScanButton(scanKey, iconName + " 客户端"); if (iconName.equals("Codex")) { codexClientInstallLabel = installedLabel; codexClientScanButton = scan; } else { claudeClientInstallLabel = installedLabel; claudeClientScanButton = scan; } nameLine.add(heading); nameLine.add(installedLabel); nameLine.add(scan); JLabel detail = new JLabel(subtitle); detail.setAlignmentX(Component.LEFT_ALIGNMENT); detail.setFont(appFont(11, Font.PLAIN)); detail.setForeground(MUTED); words.add(Box.createVerticalStrut(2)); words.add(nameLine); words.add(Box.createVerticalStrut(5)); words.add(detail); card.add(words, BorderLayout.CENTER);
         JPanel actions = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         actions.add(iconName.equals("Codex") ? homeCodexSupport : homeClaudeSupport);
-        JButton menu = soft("模型选择  ▾");
+        JButton menu = soft("选择模型  ▾");
         menu.addActionListener(e -> {
             if (!desktopClientInstalled(iconName)) {
                 state.setText("请先安装应用");
@@ -274,10 +291,10 @@ final class TokenProFrame extends JFrame {
     }
 
     private void showModelMenu(JButton anchor, Runnable chooseModel, Runnable restore) {
-        showModelMenu(anchor, chooseModel, restore, null);
+        showModelMenu(anchor, chooseModel, restore, false);
     }
 
-    private void showModelMenu(JButton anchor, Runnable chooseModel, Runnable restore, Runnable copyCommand) {
+    private void showModelMenu(JButton anchor, Runnable chooseModel, Runnable restore, boolean cli) {
         hideModelMenu();
         JLayeredPane layered = getLayeredPane();
         JPanel overlay = new JPanel(null);
@@ -290,18 +307,13 @@ final class TokenProFrame extends JFrame {
         CosmosMenuPanel menu = new CosmosMenuPanel();
         CosmosMenuButton choose = new CosmosMenuButton("选择模型", false);
         choose.addActionListener(event -> { hideModelMenu(); chooseModel.run(); });
-        CosmosMenuButton official = new CosmosMenuButton(copyCommand == null ? "恢复官方配置" : "恢复命令行配置", true);
+        CosmosMenuButton official = new CosmosMenuButton("恢复配置", true);
         official.addActionListener(event -> { hideModelMenu(); restore.run(); });
         menu.add(choose);
         menu.add(official);
-        if(copyCommand != null) {
-            CosmosMenuButton copy = new CosmosMenuButton("复制独立启动命令", false);
-            copy.addActionListener(event -> { hideModelMenu(); copyCommand.run(); });
-            menu.add(copy);
-        }
 
         int width = 186;
-        int height = copyCommand == null ? 84 : 124;
+        int height = 84;
         Point point = SwingUtilities.convertPoint(anchor, 0, anchor.getHeight() + 6, layered);
         int x = Math.max(8, Math.min(point.x, layered.getWidth() - width - 8));
         int y = Math.max(8, Math.min(point.y, layered.getHeight() - height - 8));
@@ -350,13 +362,13 @@ final class TokenProFrame extends JFrame {
         JPanel buttons = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         buttons.add(codexCli ? homeCodexCliSupport : homeClaudeCliSupport);
         JLabel state = codexCli ? homeCodexCliStatus : homeClaudeCliStatus;
-        JButton menu = soft("模型选择  ▾");
+        JButton menu = soft("选择模型  ▾");
         menu.setName(command + "-cli-model-menu");
         menu.addActionListener(event -> {
             if(!(codexCli ? codexCliInstalled : claudeCliInstalled)) {
                 status("请先安装 " + iconName + " 命令行工具"); return;
             }
-            showModelMenu(menu, () -> chooseModels(iconName, true, false), () -> restoreCli(command), () -> copyCliCommand(command));
+            showModelMenu(menu, () -> chooseModels(iconName, true, false), () -> restoreCli(command), true);
         });
         if(codexCli) codexCliModelMenuButton = menu; else claudeCliModelMenuButton = menu;
         JPanel modelControl = transparent(); modelControl.setLayout(new BoxLayout(modelControl, BoxLayout.Y_AXIS));
@@ -528,17 +540,16 @@ final class TokenProFrame extends JFrame {
         }, configured -> {
             if (!cli) setDesktopCardState("Codex", selectionStatus(chosen.size()), true);
             else updateCommandControls("codex", codexCliInstalled);
-            status((cli ? "Codex 命令行独立配置" : "Codex 客户端配置") + "已接入 " + configured.size() + " 个模型");
+            status((cli ? "Codex 命令行独立配置" : "Codex 客户端配置") + "已保存 " + configured.size() + " 个模型；点击连接后加载，尚未验证实际请求通道");
             if (cli && launchCli) launchTerminal("codex");
         });
     }
 
     private void restoreCodex() {
         try {
-            codex.restore(); store.delete("codex-selected.json");
+            boolean changed = codex.restore(); store.delete("codex-selected.json");
             setDesktopCardState("Codex", "请先选择模型", false);
-            status("Codex 已恢复官方配置，正在切回应用…");
-            reconnectApp("Codex");
+            status(changed ? "Codex 配置已恢复；重新启动该客户端后生效" : "当前没有需要恢复的 Codex 配置，无需重复恢复");
         }
         catch (Exception ex) { error(ex); }
     }
@@ -552,6 +563,7 @@ final class TokenProFrame extends JFrame {
             new AbstractMap.SimpleEntry<>("打开 Codex", (Runnable) () -> openApp("Codex")),
             new AbstractMap.SimpleEntry<>("打开 Claude", (Runnable) this::openClaude))) {
             JButton button = new JButton(item.getKey());
+            if (item.getKey().equals("打开充值页面")) guardWebButton(button);
             soft(button);
             button.setAlignmentX(Component.LEFT_ALIGNMENT);
             button.addActionListener(e -> item.getValue().run());
@@ -612,7 +624,7 @@ final class TokenProFrame extends JFrame {
         }, config -> {
             bridgeStatus.setText("桥接状态：运行中 · " + config.routes().size() + " 个模型 · " + config.baseUrl());
             setDesktopCardState("Claude", "已选 " + config.routes().size() + " 个模型", true);
-            status("Claude 已配置 " + config.routes().size() + " 个模型；客户端保持运行");
+            status("Claude 已保存 " + config.routes().size() + " 个模型；点击连接加载新列表，当前程序未关闭");
         });
     }
 
@@ -623,10 +635,12 @@ final class TokenProFrame extends JFrame {
 
     private void restoreClaude() {
         try {
-            ClaudeDesktopConfig.restoreOfficial(store); bridgeStatus.setText("桥接状态：Claude 已恢复官方配置");
+            boolean configured = store.read(ClaudeBridgeConfig.FILE).isPresent();
+            if (configured) ClaudeDesktopConfig.restoreOfficial(store);
+            ClaudeBridgeManager.stop(store); store.delete(ClaudeBridgeConfig.FILE);
+            bridgeStatus.setText("桥接状态：未配置");
             setDesktopCardState("Claude", "请先选择模型", false);
-            status("Claude 已恢复官方配置，正在切回应用…");
-            reconnectApp("Claude");
+            status(configured ? "Claude 配置已恢复；重新启动该客户端后生效" : "当前没有需要恢复的 Claude 配置，无需重复恢复");
         }
         catch (Exception ex) { error(ex); }
     }
@@ -661,7 +675,7 @@ final class TokenProFrame extends JFrame {
     }
 
     private void reconnectClaude() {
-        openClaude();
+        reconnectApp("Claude");
     }
 
     private void restoreSession() {
@@ -883,9 +897,14 @@ final class TokenProFrame extends JFrame {
         JButton menu = client.equals("Codex") ? codexModelMenuButton : claudeModelMenuButton;
         JLabel state = client.equals("Codex") ? homeCodexStatus : homeClaudeStatus;
         if (launch == null) return;
+        if (connectingClients.blocked(client.toLowerCase(Locale.ROOT) + "-desktop")) {
+            launch.setText("连接中…"); launch.setEnabled(false);
+            if (menu != null) menu.setEnabled(false);
+            return;
+        }
         launch.setText(installed ? "连接 " + client + " 客户端" : "去官方下载");
         launch.setToolTipText(installed ? "重新连接 " + client + " 客户端" : "打开 " + client + " 官方下载页");
-        launch.setEnabled(!installed || canConnect || client.equals("Claude"));
+        launch.setEnabled(!installed || canConnect);
         if (menu != null) menu.setEnabled(true);
         if (!installed) state.setText("请先安装应用");
     }
@@ -896,12 +915,20 @@ final class TokenProFrame extends JFrame {
         JButton menu = command.equals("codex") ? codexCliModelMenuButton : claudeCliModelMenuButton;
         JLabel state = command.equals("codex") ? homeCodexCliStatus : homeClaudeCliStatus;
         int count = cliSelectedCount(command);
+        if (connectingClients.blocked(command + "-cli")) {
+            if (launch != null) { launch.setText("连接中…"); launch.setEnabled(false); }
+            if (menu != null) menu.setEnabled(false);
+            return;
+        }
         if(download != null) {
             download.setText("去官方下载"); download.setEnabled(!installed); download.setVisible(!installed);
         }
         if(menu != null) menu.setEnabled(installed);
         state.setText(installed ? selectionStatus(count) : "请先安装应用");
-        if(launch != null) launch.setEnabled(installed && count > 0);
+        if(launch != null) {
+            launch.setText("连接 " + (command.equals("codex") ? "Codex" : "Claude") + " 命令行");
+            launch.setEnabled(installed && count > 0);
+        }
     }
 
     private int cliSelectedCount(String command) {
@@ -925,17 +952,20 @@ final class TokenProFrame extends JFrame {
     private void restoreCli(String command) {
         async("正在恢复 " + command + " 命令行配置…", () -> {
             SecureStore cli = store.cli(command);
+            boolean changed;
             if(command.equals("codex")) {
-                new CodexConfig(cli, cli.root().resolve("home/config.toml")).restore();
+                changed = new CodexConfig(cli, cli.root().resolve("home/config.toml")).restore();
                 cli.delete("codex-selected.json");
             } else {
+                changed = cli.read(ClaudeCliConfig.FILE).isPresent() || cli.read(ClaudeBridgeConfig.FILE).isPresent();
                 ClaudeBridgeManager.stop(cli);
                 cli.delete(ClaudeCliConfig.FILE); cli.delete(ClaudeBridgeConfig.FILE);
             }
-            return true;
-        }, ignored -> {
+            return changed;
+        }, changed -> {
             updateCommandControls(command, command.equals("codex") ? codexCliInstalled : claudeCliInstalled);
-            status("仅已恢复 " + command + " 命令行配置；桌面客户端与会话记录保持不变");
+            status(changed ? "仅已恢复 " + command + " 命令行配置；桌面客户端与会话记录保持不变"
+                : "当前没有需要恢复的 " + command + " 命令行配置，无需重复恢复");
         });
     }
 
@@ -1014,19 +1044,50 @@ final class TokenProFrame extends JFrame {
     private void showAccount(Map<String, Object> user) {
         sessionUser = new LinkedHashMap<>(user);
         String emailValue = string(user.get("email"));
-        Object rawBalance = user.get("balance");
-        String balance = rawBalance instanceof Number number ? String.format(Locale.ROOT, "¥%.2f", number.doubleValue()) : "—";
-        account.setText("已登录：" + emailValue + "    余额：" + balance);
+        showBalance(user);
         headerUser.setText(emailValue.isBlank() ? "我的账户" : emailValue);
         accountEmail.setText(emailValue.isBlank() ? "我的账户" : emailValue);
-        headerBalance.setText(balance);
-        accountBalance.setText(balance);
         accountId = string(user.get("id"));
         password.setText("");
         status("就绪");
         try { if (!emailValue.isBlank()) codex.updateActor(emailValue); } catch (Exception ignored) {}
         refreshSupportedModelCounts();
         refreshSubscriptions();
+    }
+
+    private void showBalance(Map<String,Object> user) {
+        Object rawBalance = user.get("balance");
+        String balance = rawBalance instanceof Number number ? String.format(Locale.ROOT, "¥%.2f", number.doubleValue()) : "—";
+        account.setText("已登录：" + string(user.get("email")) + "    余额：" + balance);
+        headerBalance.setText(balance);
+        accountBalance.setText(balance);
+    }
+
+    private void refreshAccountSilently() {
+        if (accessToken == null || accessToken.isBlank() || System.currentTimeMillis() - lastAccountRefresh < 15000
+            || !accountRefreshInProgress.compareAndSet(false, true)) return;
+        String token = accessToken;
+        lastAccountRefresh = System.currentTimeMillis();
+        new SwingWorker<Map<String,Object>,Void>() {
+            protected Map<String,Object> doInBackground() throws Exception { return api.me(token); }
+            protected void done() {
+                try {
+                    if (!Objects.equals(token, accessToken)) return;
+                    Map<String,Object> user = get();
+                    if (!ClaudeBridgeServer.sameIdentifier(accountId, user.get("id"))) return;
+                    sessionUser = new LinkedHashMap<>(user);
+                    showBalance(user); saveSession(user);
+                    String tooltip = "余额自动刷新于 " + java.time.LocalTime.now().withNano(0);
+                    headerBalance.setToolTipText(tooltip); accountBalance.setToolTipText(tooltip);
+                    if (codexLaunch != null) codexLaunch.setToolTipText(ConnectionEvidence.verified(store)
+                        ? "已观察到当前配置的 TokenPro 请求；实际费用请查用量记录"
+                        : "尚未观察到当前配置的 TokenPro 请求；仅模型名称不能证明已接入");
+                } catch (Exception ignored) {
+                    headerBalance.setToolTipText("余额刷新失败，当前显示上次结果，请点击刷新重试");
+                    accountBalance.setToolTipText(headerBalance.getToolTipText());
+                } finally { accountRefreshInProgress.set(false); }
+            }
+        }.execute();
     }
 
     private void refreshSupportedModelCounts() {
@@ -1153,7 +1214,9 @@ final class TokenProFrame extends JFrame {
             protected void done() {
                 try {
                     if (!Objects.equals(token, accessToken)) return;
-                    showAccount(get());
+                    Map<String,Object> user = get();
+                    showAccount(user); saveSession(user);
+                    lastAccountRefresh = System.currentTimeMillis();
                     if (refreshAccountButton != null) {
                         refreshAccountButton.setText("已刷新");
                         javax.swing.Timer reset = new javax.swing.Timer(1200, event -> {
@@ -1585,17 +1648,49 @@ final class TokenProFrame extends JFrame {
     }
 
     private void browse(String url) {
-        if (accessToken == null || accessToken.isBlank()) {
-            try { Platform.browse(url); } catch (Exception e) { error(e); }
+        boolean guarded = BrowserOpenGate.protects(url);
+        if (guarded && !browserOpenGate.begin()) {
+            status(browserOpenGate.pending() ? "网页正在打开，请勿重复点击" : "网页入口冷却中，请 " + browserOpenGate.secondsRemaining() + " 秒后再试");
             return;
         }
-        async("正在打开网页…", () -> {
-            try { return api.browserLoginUrl(accessToken, url); }
-            catch (Exception ignored) { return url; }
-        }, target -> {
-            try { Platform.browse(target); status("已在系统浏览器打开 TokenPro"); }
-            catch (Exception e) { error(e); }
-        });
+        if (guarded) { updateWebButtons(); webLinkTimer.start(); }
+        String token = accessToken;
+        status("正在打开网页…");
+        new SwingWorker<String,Void>() {
+            protected String doInBackground() {
+                if (token == null || token.isBlank()) return url;
+                try { return api.browserLoginUrl(token, url); }
+                catch (Exception ignored) { return url; }
+            }
+            protected void done() {
+                try {
+                    if (!Objects.equals(token, accessToken)) throw new IllegalStateException("登录账户已变化，请重新点击网页入口");
+                    Platform.browse(get());
+                    if (guarded) browserOpenGate.opened();
+                    status(guarded ? "已打开网页，15 秒后可再次使用网页入口" : "已在系统浏览器打开网页");
+                } catch (Exception e) {
+                    if (guarded) browserOpenGate.failed();
+                    error(e.getCause() == null ? e : e.getCause());
+                } finally { if (guarded) updateWebButtons(); }
+            }
+        }.execute();
+    }
+
+    private void guardWebButton(JButton button) {
+        button.putClientProperty("tokenpro.webLabel", button.getText());
+        guardedWebButtons.add(button);
+    }
+
+    private void updateWebButtons() {
+        int seconds = browserOpenGate.secondsRemaining();
+        boolean pending = browserOpenGate.pending();
+        for (JButton button : guardedWebButtons) {
+            String label = Objects.toString(button.getClientProperty("tokenpro.webLabel"), "打开网页");
+            button.setEnabled(!pending && seconds == 0);
+            button.setText(pending ? label + "…" : seconds > 0 ? label + " (" + seconds + "s)" : label);
+            button.setToolTipText(pending ? "网页正在打开，请勿重复点击" : seconds > 0 ? "请 " + seconds + " 秒后再试" : "网页入口间隔 15 秒，防止重复打开窗口");
+        }
+        if (!pending && seconds == 0) webLinkTimer.stop();
     }
     private void openApp(String app) {
         status("正在打开 " + app + "…");
@@ -1617,7 +1712,7 @@ final class TokenProFrame extends JFrame {
         }.execute();
     }
     private void reconnectApp(String app) {
-        openApp(app);
+        connectClient(app, false);
     }
     private void openTerminal(String command) {
         if(cliSelectedCount(command) == 0) chooseModels(command.equals("codex") ? "Codex" : "Claude", true, true);
@@ -1644,14 +1739,106 @@ final class TokenProFrame extends JFrame {
     }
 
     private void launchTerminal(String command) {
-        async("正在打开独立命令行…", () -> {
-            Path launcher = CliLauncher.install(store, command);
-            Platform.openTerminalProgram(launcher, List.of(), Map.of());
-            return true;
-        }, ignored -> status("已打开 " + command + " 独立命令行；其他应用保持运行"));
+        connectClient(command.equals("codex") ? "Codex" : "Claude", true);
+    }
+
+    private void connectClient(String app, boolean cli) {
+        if (accessToken == null || accessToken.isBlank()) { error(new IllegalStateException("请先登录 TokenPro")); return; }
+        String command = app.toLowerCase(Locale.ROOT);
+        String identity = command + (cli ? "-cli" : "-desktop");
+        if (!connectingClients.begin(identity)) return;
+        refreshConnectControls();
+        String token = accessToken, owner = accountId, accountLabel = string(sessionUser.get("email"));
+        String label = app + (cli ? " 命令行" : " 客户端");
+        try {
+            boolean running = cli ? !ClientReconnect.cliProcesses(store, command).isEmpty()
+                : !ClientReconnect.desktopProcesses(app).isEmpty();
+            if (running && JOptionPane.showConfirmDialog(this,
+                "将重启 " + label + " 以加载模型和 TokenPro 通道。\n进行中的请求可能中断，请先保存；其他应用不会关闭。",
+                "重新连接", JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE) != JOptionPane.OK_OPTION) {
+                finishConnection(identity); return;
+            }
+        } catch (Exception e) { finishConnection(identity); error(e); return; }
+        status("正在核验账户并连接 " + label + "…");
+        new SwingWorker<Integer,Void>() {
+            protected Integer doInBackground() throws Exception {
+                SecureStore target = cli ? store.cli(command) : store;
+                Map<String,Object> user = api.me(token);
+                if (!ClaudeBridgeServer.sameIdentifier(owner, user.get("id"))) throw new IllegalStateException("账户已变化，请重新登录");
+                ApiClient.ManagedKey key = api.globalKey(token);
+                List<PricedModel> selected = app.equals("Codex") ? savedCodexModels(target)
+                    : ClaudeBridgeConfig.load(target).routes().stream()
+                        .map(r -> new PricedModel(r.name(), r.platform(), r.groupName(), r.groupId())).toList();
+                if (selected.isEmpty()) throw new IllegalStateException("请先选择模型");
+                ClientReconnect.reconnect(() -> {
+                    if (app.equals("Codex")) {
+                        CodexConfig config = cli ? new CodexConfig(target, target.root().resolve("home/config.toml")) : codex;
+                        config.apply("https://tokenpro.work/v1", selected, key.key(), accountLabel);
+                    } else {
+                        ClaudeBridgeConfig config = cli ? ClaudeBridgeConfig.createCli(owner, token, key, selected)
+                            : ClaudeBridgeConfig.create(owner, token, key, selected);
+                        config.save(target);
+                        if (cli) ClaudeCliConfig.install(target, selected, config);
+                        else ClaudeDesktopConfig.install(target, config, accountLabel);
+                    }
+                    if (cli) CliLauncher.install(store, command);
+                }, () -> {
+                    if (!Objects.equals(token, accessToken)) throw new IllegalStateException("账户已变化，连接已取消");
+                    if (cli) ClientReconnect.stopCli(store, command); else ClientReconnect.stopDesktop(app);
+                    // Restart only this profile's helper so an updated JAR is
+                    // actually loaded. Do not stop any other client's bridge.
+                    if (app.equals("Codex")) CodexImageBridge.stop(target); else ClaudeBridgeManager.stop(target);
+                }, () -> {
+                    if (app.equals("Codex")) CodexImageBridge.ensureRunning(target); else ClaudeBridgeManager.ensureRunning(target);
+                    if (cli) Platform.openTerminalProgram(CliLauncher.install(store, command), List.of(), Map.of());
+                    else if (!(app.equals("Claude") ? Platform.openClaudeThirdParty() : Platform.openApplication(app)))
+                        throw new IllegalStateException("无法启动 " + app);
+                });
+                ClientReconnect.awaitStarted(store, app, cli);
+                return selected.size();
+            }
+            protected void done() {
+                finishConnection(identity);
+                try {
+                    int count = get();
+                    if (!cli) setDesktopCardState(app, selectionStatus(count), true);
+                    else updateCommandControls(command, true);
+                    status(label + " 已启动，已配置 " + count + " 个模型；费用以 TokenPro 用量记录为准");
+                    if (app.equals("Codex") && !cli) JOptionPane.showMessageDialog(TokenProFrame.this,
+                        "已配置 TokenPro 通道并重新启动客户端。\n原先创建于官方通道的旧任务不保证自动切换，请新建对话使用 TokenPro。\n模型名称不代表计费通道；连接按钮提示会显示是否已观察到 TokenPro 请求，费用以用量记录为准。",
+                        "连接说明", JOptionPane.INFORMATION_MESSAGE);
+                    lastAccountRefresh = 0; refreshAccountSilently();
+                } catch (Exception e) { error(e.getCause() == null ? e : e.getCause()); }
+            }
+        }.execute();
+    }
+
+    private void refreshConnectControls() {
+        updateDesktopLaunch("Codex", codexClientInstalled, codexCanConnect);
+        updateDesktopLaunch("Claude", claudeClientInstalled, claudeCanConnect);
+        updateCommandControls("codex", codexCliInstalled);
+        updateCommandControls("claude", claudeCliInstalled);
+    }
+
+    private void finishConnection(String identity) {
+        connectingClients.finish(identity);
+        refreshConnectControls();
+        javax.swing.Timer cooldown = new javax.swing.Timer((int)ConnectionGate.COOLDOWN_MS + 100, e -> refreshConnectControls());
+        cooldown.setRepeats(false); cooldown.start();
+    }
+
+    static List<PricedModel> savedCodexModels(SecureStore store) throws Exception {
+        Map<String,Object> saved = Json.object(Json.parse(store.read("codex-selected.json").orElse("{}")));
+        List<PricedModel> models = new ArrayList<>();
+        for (Object raw : ClaudeAdapter.list(saved.get("models"))) {
+            Map<String,Object> row = Json.object(raw);
+            if (row.get("group_id") instanceof Number group && row.get("name") instanceof String name && !name.isBlank())
+                models.add(new PricedModel(name, string(row.get("platform")), string(row.get("group_name")), group.longValue()));
+        }
+        return uniqueModels(models);
     }
     private void status(String value) { status.setText(value); }
-    private void error(Throwable error) { status("错误：" + error.getMessage()); JOptionPane.showMessageDialog(this, error.getMessage(), "TokenPro", JOptionPane.ERROR_MESSAGE); }
+    private void error(Throwable error) { status("错误：" + ErrorMessages.describe(error)); ErrorMessages.show(this, error); }
     private static String string(Object value) { return value == null ? "" : String.valueOf(value); }
     private record KeyItem(long id, String name, String status) { public String toString() { return name + "  [" + status + "]"; } }
     private record SubscriptionItem(String name, double remaining, String expiresAt) {

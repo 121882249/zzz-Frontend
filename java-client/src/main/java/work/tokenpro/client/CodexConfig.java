@@ -37,8 +37,11 @@ final class CodexConfig {
         Optional<String> previousBridge = store.read(CodexImageBridge.FILE);
         try {
         Path catalog = writeModelCatalog(models);
-        String localToken = imageModel == null ? key.trim() : CodexImageBridge.configure(store, url, key.trim());
-        String block = managedBlock(imageModel == null ? url : CodexImageBridge.baseUrl(store), primaryModel, imageModel, catalog, localToken, actor, current);
+        // Every TokenPro connection uses the authenticated adapter, including
+        // an older chat whose model is changed to an image model inside Codex.
+        boolean bridged = url.equals("https://tokenpro.work/v1");
+        String localToken = bridged ? CodexImageBridge.configure(store, url, key.trim()) : key.trim();
+        String block = managedBlock(bridged ? CodexImageBridge.baseUrl(store) : url, primaryModel, imageModel, catalog, localToken, actor, current);
         validate(block);
         // TokenPro owns the active Codex config while connected. Replacing the
         // file avoids ambiguous TOML merges and duplicate keys; restore() puts
@@ -47,7 +50,7 @@ final class CodexConfig {
         } catch (Exception failure) {
             if (previousCatalog.isPresent()) store.write("codex-model-catalog.json", previousCatalog.get());
             else store.delete("codex-model-catalog.json");
-            if (imageModel != null) {
+            if (url.equals("https://tokenpro.work/v1")) {
                 if (previousBridge.isPresent()) store.write(CodexImageBridge.FILE, previousBridge.get());
                 else { try { CodexImageBridge.stop(store); } catch (Exception ignored) {} store.delete(CodexImageBridge.FILE); }
             }
@@ -55,16 +58,25 @@ final class CodexConfig {
         }
     }
 
-    void restore() throws Exception {
+    boolean restore() throws Exception {
         Optional<String> original = store.read("codex-original.toml");
-        if (original.isEmpty()) throw new IllegalStateException("没有可恢复的 Codex 配置备份");
         Path target = configPath;
-        Files.createDirectories(target.getParent());
-        writeAtomic(target, original.get());
+        String current = Files.exists(target) ? Files.readString(target) : "";
+        // No selected models / no backup is a normal, repeatable no-op. If a
+        // managed block survives without its backup, remove only that block.
+        // Never erase unrelated settings, history, or the user's auth file.
+        String restored = original.isPresent() ? original.get() : stripManaged(current);
+        boolean changed = !restored.equals(current);
+        if (changed) {
+            Files.createDirectories(target.getParent());
+            writeAtomic(target, restored);
+        }
         store.delete("codex-original.toml");
         store.delete("codex-model-catalog.json");
         CodexImageBridge.stop(store);
         store.delete(CodexImageBridge.FILE);
+        store.delete(ConnectionEvidence.FILE);
+        return changed;
     }
 
     void updateActor(String accountEmail) throws Exception {
@@ -81,12 +93,12 @@ final class CodexConfig {
         int end = start < 0 ? -1 : current.indexOf(END, start);
         if (start < 0 || end < 0) return current;
         String managed = current.substring(start, end);
-        managed = managed.replaceFirst("(?m)^name\\s*=.*$", Matcher.quoteReplacement("name = " + toml(actor)));
+        managed = managed.replaceAll("(?m)^name\\s*=.*$", Matcher.quoteReplacement("name = " + toml(actor)));
         Pattern header = Pattern.compile("(\\\"x-openai-actor-authorization\\\"\\s*=\\s*)\\\"(?:[^\\\"\\\\]|\\\\.)*\\\"");
         Matcher matcher = header.matcher(managed);
         if (matcher.find()) {
             String replacement = matcher.group(1) + toml(actor);
-            managed = matcher.replaceFirst(Matcher.quoteReplacement(replacement));
+            managed = matcher.replaceAll(Matcher.quoteReplacement(replacement));
         }
         return current.substring(0, start) + managed + current.substring(end);
     }
@@ -107,7 +119,17 @@ final class CodexConfig {
         out.append("model_context_window = 372000\n");
         out.append("model_auto_compact_token_limit = 372000\n\n");
         out.append("model_catalog_json = ").append(toml(catalog.toAbsolutePath().toString())).append("\n\n");
-        out.append("[model_providers.custom]\n");
+        out.append(providerConfiguration("custom", url, key, actor, imageModel));
+        // Codex reserves built-in provider IDs; never overwrite 'openai'.
+        // Official threads may retain their provider; the UI must not claim
+        // they have switched just because this default config was saved.
+        out.append(END).append('\n');
+        return out.toString();
+    }
+
+    static String providerConfiguration(String id, String url, String key, String actor, PricedModel imageModel) {
+        if (!id.equals("custom")) throw new IllegalArgumentException("不能覆盖 Codex 内置服务商");
+        StringBuilder out = new StringBuilder("[model_providers." + id + "]\n");
         out.append("name = ").append(toml(actor)).append('\n');
         // Keep /v1 in the provider URL. Codex appends /responses to this value;
         // dropping /v1 sends traffic through TokenPro's legacy generic endpoint,
@@ -120,7 +142,6 @@ final class CodexConfig {
         if (imageModel != null) out.append(", \"x-tokenpro-image-model\" = ").append(toml(imageModel.name()));
         out.append(" }\n");
         out.append("supports_websockets = false\n\n");
-        out.append(END).append('\n');
         return out.toString();
     }
 

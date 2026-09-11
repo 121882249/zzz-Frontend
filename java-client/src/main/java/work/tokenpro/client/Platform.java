@@ -219,7 +219,7 @@ final class Platform {
             String encoded = java.util.Base64.getEncoder().encodeToString(script.toString().getBytes(StandardCharsets.UTF_16LE));
             ProcessBuilder launcher = new ProcessBuilder("cmd", "/d", "/c", "start", "\"\"",
                 windowsSystemExecutable("WindowsPowerShell\\v1.0\\powershell.exe"),
-                "-NoProfile", "-NoExit", "-EncodedCommand", encoded);
+                "-NoProfile", "-EncodedCommand", encoded);
             applyCliEnvironment(launcher, environment);
             launcher.environment().put("TOKENPRO_CLI_EXECUTABLE", executable.toString());
             for(int i=0; i<arguments.size(); i++) launcher.environment().put("TOKENPRO_CLI_ARG_"+i, arguments.get(i));
@@ -232,7 +232,7 @@ final class Platform {
                 String terminal = Stream.of("x-terminal-emulator", "gnome-terminal", "konsole", "xterm")
                     .filter(Platform::commandInstalled).findFirst().orElseThrow(() -> new IOException("没有找到可用终端"));
                 new ProcessBuilder(terminal, terminal.equals("gnome-terminal") ? "--" : "-e",
-                    "bash", "-lc", command + "; exec bash").start();
+                    "bash", "-lc", command).start();
             }
         }
     }
@@ -372,7 +372,8 @@ final class Platform {
         if (value == null || value.isBlank() || cliInstallPath(value)) return false;
         String path = value.replace('\\', '/').toLowerCase(Locale.ROOT);
         String lower = name.toLowerCase(Locale.ROOT);
-        if (os == OS.MAC) return path.endsWith("/" + lower + ".app/contents/macos/" + lower);
+        if (os == OS.MAC) return path.endsWith("/" + lower + ".app/contents/macos/" + lower)
+            || (name.equals("Codex") && path.endsWith("/codex.app/contents/macos/chatgpt"));
         if (os == OS.WINDOWS) {
             if (name.equals("Claude")) return path.endsWith("/claude.exe")
                 && (path.contains("/windowsapps/claude_") || path.contains("/claude/")

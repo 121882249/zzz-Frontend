@@ -58,7 +58,33 @@ final class CodexImageTest {
                 if (client.send(HttpRequest.newBuilder(URI.create(url)).header("Authorization", "Bearer test-local-token").header("Origin", "https://example.com").build(), HttpResponse.BodyHandlers.ofString()).statusCode()!=403) throw new AssertionError("browser origin");
                 if (client.send(HttpRequest.newBuilder(URI.create(url)).header("Authorization", "Bearer test-local-token").build(), HttpResponse.BodyHandlers.ofString()).statusCode()!=200) throw new AssertionError("bridge health");
             }
-            return 7;
+            var headersSent = new java.util.concurrent.CountDownLatch(1);
+            var releaseUpstream = new java.util.concurrent.CountDownLatch(1);
+            var upstream = com.sun.net.httpserver.HttpServer.create(new InetSocketAddress("127.0.0.1",0),4);
+            upstream.createContext("/v1/responses",exchange -> {
+                try {
+                    exchange.getRequestBody().readAllBytes();
+                    exchange.getResponseHeaders().set("Content-Type","text/event-stream");
+                    exchange.sendResponseHeaders(200,0);
+                    exchange.getResponseBody().write(": still processing\n\n".getBytes(StandardCharsets.UTF_8));
+                    exchange.getResponseBody().flush(); headersSent.countDown();
+                    releaseUpstream.await(10,java.util.concurrent.TimeUnit.SECONDS);
+                } catch(Exception ignored) {} finally { exchange.close(); }
+            });
+            upstream.start();
+            try (CodexImageBridge bridge = new CodexImageBridge(store,0,"http://127.0.0.1:"+upstream.getAddress().getPort());
+                 HttpClient http=HttpClient.newHttpClient()) {
+                var request=HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+bridge.port()+"/v1/responses"))
+                    .header("Authorization","Bearer test-local-token").POST(HttpRequest.BodyPublishers.ofString("{}"))
+                    .timeout(java.time.Duration.ofSeconds(5)).build();
+                var response=http.sendAsync(request,HttpResponse.BodyHandlers.ofInputStream());
+                if(!headersSent.await(5,java.util.concurrent.TimeUnit.SECONDS))throw new AssertionError("stalled upstream did not start");
+                try(var body=response.get(5,java.util.concurrent.TimeUnit.SECONDS).body()) {
+                    long before=System.nanoTime(); bridge.close(); bridge.close(); bridge.await();
+                    if(System.nanoTime()-before>java.util.concurrent.TimeUnit.SECONDS.toNanos(2))throw new AssertionError("bridge shutdown waited on unfinished stream");
+                }
+            } finally {releaseUpstream.countDown();upstream.stop(0);}
+            return 9;
         } finally { try (var paths = Files.walk(root)) { for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path); } }
     }
 }

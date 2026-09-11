@@ -16,13 +16,21 @@ final class ClaudeBridgeServer implements AutoCloseable {
     private final SecureStore store;
     private final HttpServer server;
     private final HttpClient upstream = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(20)).followRedirects(HttpClient.Redirect.NEVER).build();
-    private final ApiClient api = new ApiClient();
+    private final String upstreamBase;
     private final Set<CompletableFuture<?>> inFlightRequests = ConcurrentHashMap.newKeySet();
     private final Set<Closeable> inFlightBodies = ConcurrentHashMap.newKeySet();
     private final Set<Thread> handlers = ConcurrentHashMap.newKeySet();
     private final AtomicBoolean closed = new AtomicBoolean();
 
     ClaudeBridgeServer(SecureStore store) throws Exception {
+        this(store, "https://tokenpro.work");
+    }
+
+    ClaudeBridgeServer(SecureStore store, String upstreamBase) throws Exception {
+        URI target = URI.create(upstreamBase);
+        if (!upstreamBase.equals("https://tokenpro.work") && !("http".equals(target.getScheme()) && "127.0.0.1".equals(target.getHost())))
+            throw new IllegalArgumentException("不支持的上游地址");
+        this.upstreamBase = upstreamBase;
         this.store = store; ClaudeBridgeConfig config = ClaudeBridgeConfig.load(store);
         server = HttpServer.create(new InetSocketAddress(InetAddress.getByName("127.0.0.1"), config.port()), 32);
         server.createContext("/", this::handle); server.setExecutor(Executors.newVirtualThreadPerTaskExecutor()); server.start();
@@ -57,10 +65,14 @@ final class ClaudeBridgeServer implements AutoCloseable {
             if (path.endsWith("count_tokens")) { json(exchange, 200, Map.of("input_tokens", ClaudeAdapter.estimateTokens(input), "tokenpro_estimated", true)); return; }
             ClaudeBridgeConfig latest = ClaudeBridgeConfig.load(store);
             if (latest.keyId() != config.keyId() || latest.route(alias) == null) throw new IllegalStateException("模型配置已变化，请重试");
-            verifyAccountAndKey(latest);
+            // Ownership is checked on Connect. Inference is authenticated and
+            // billed by the upstream API key, not the dashboard's expiring JWT.
+            // Re-checking /auth/me on every message breaks valid CLI/desktop
+            // requests once the UI access token expires.
             Map<String, Object> prepared = ClaudeAdapter.prepareHistory(input, route); prepared.put("model", route.name());
             Map<String, Object> payload = route.usesResponses() ? ClaudeAdapter.responsesRequest(prepared) : prepared;
-            HttpRequest.Builder request = HttpRequest.newBuilder(URI.create("https://tokenpro.work" + (route.usesResponses() ? "/v1/responses" : "/v1/messages")))
+            HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(upstreamBase + (route.usesResponses() ? "/v1/responses" : "/v1/messages")))
+                .timeout(Duration.ofMinutes(5))
                 .header("Authorization", "Bearer " + latest.key()).header("Content-Type", "application/json")
                 .header("anthropic-version", Optional.ofNullable(exchange.getRequestHeaders().getFirst("anthropic-version")).orElse("2023-06-01"))
                 .POST(HttpRequest.BodyPublishers.ofString(Json.stringify(payload)));
@@ -68,13 +80,6 @@ final class ClaudeBridgeServer implements AutoCloseable {
             if (!Boolean.TRUE.equals(input.get("stream"))) handleBuffered(exchange, request.build(), route); else { streaming = true; handleStream(exchange, request.build(), route); }
         } catch (Exception e) { String message = Optional.ofNullable(e.getMessage()).orElse("Claude 桥接请求失败"); if (!secret.isBlank()) message = message.replace(secret, "[redacted]"); if (!streaming) error(exchange, 502, "api_error", message); }
         finally { handlers.remove(handler); exchange.close(); }
-    }
-
-    private void verifyAccountAndKey(ClaudeBridgeConfig config) throws Exception {
-        Map<String, Object> user = api.me(config.accessToken());
-        if (!sameIdentifier(config.accountId(), user.get("id"))) throw new IllegalStateException("TokenPro 登录账户已变化，请重新应用 Claude 连接");
-        ApiClient.ManagedKey key = api.globalKey(config.accessToken());
-        if (key.id() != config.keyId()) throw new IllegalStateException("TokenPro 全局 Key 已变化，请重新应用 Claude 连接");
     }
 
     static boolean sameIdentifier(String expected, Object actual) {
@@ -88,7 +93,10 @@ final class ClaudeBridgeServer implements AutoCloseable {
         HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() != 200) { upstreamError(exchange, response.statusCode(), response.body()); return; }
         Map<String, Object> value = Json.object(Json.parse(response.body()));
-        json(exchange, 200, route.usesResponses() ? ClaudeAdapter.responsesResponse(value, route.name()) : ClaudeAdapter.tagNativeResponse(value, route.signatureId()));
+        Map<String,Object> adapted = route.usesResponses() ? ClaudeAdapter.responsesResponse(value, route.alias()) : ClaudeAdapter.tagNativeResponse(value, route.signatureId());
+        ClaudeAdapter.requireResponseContent(adapted);
+        adapted.put("model", route.alias());
+        json(exchange, 200, adapted);
     }
 
     private void handleStream(HttpExchange exchange, HttpRequest request, ClaudeBridgeConfig.Route route) throws IOException {
@@ -101,22 +109,26 @@ final class ClaudeBridgeServer implements AutoCloseable {
                 String contentType = response.headers().firstValue("content-type").orElse(""); if (!contentType.contains("text/event-stream")) throw new IllegalStateException("上游未返回流式响应");
                 exchange.getResponseHeaders().set("Content-Type", "text/event-stream; charset=utf-8"); exchange.getResponseHeaders().set("Cache-Control", "no-store"); exchange.sendResponseHeaders(200, 0); started = true;
                 output = exchange.getResponseBody();
-                ClaudeAdapter.ResponsesStream adapter = new ClaudeAdapter.ResponsesStream(route.name()); StringBuilder data = new StringBuilder(); String line;
+                ClaudeAdapter.ResponsesStream adapter = new ClaudeAdapter.ResponsesStream(route.alias());
+                ClaudeAdapter.NativeStream nativeAdapter = new ClaudeAdapter.NativeStream(route.alias(), route.signatureId());
+                StringBuilder data = new StringBuilder(); String line;
                 while ((line = reader.readLine()) != null) {
                     if (line.isEmpty()) {
                         if (!data.isEmpty() && !data.toString().equals("[DONE]")) {
                             Map<String, Object> event = Json.object(Json.parse(data.toString()));
                             if (route.usesResponses()) for (Map<String, Object> item : adapter.consume(event)) sendEvent(output, item);
-                            else {
-                                if (event.get("content_block") instanceof Map<?, ?>) event.put("content_block", ClaudeAdapter.tagBlock(Json.object(event.get("content_block")), route.signatureId()));
-                                if (event.get("delta") instanceof Map<?, ?> deltaRaw) { Map<String, Object> delta = new LinkedHashMap<>(Json.object(deltaRaw)); if ("signature_delta".equals(delta.get("type")) && delta.get("signature") instanceof String signature) delta.put("signature", ClaudeAdapter.prefix(route.signatureId()) + signature); event.put("delta", delta); }
-                                sendEvent(output, event);
-                            }
+                            else sendEvent(output, nativeAdapter.consume(event));
                         }
                         data.setLength(0);
                     } else if (line.startsWith("data:")) { if (!data.isEmpty()) data.append('\n'); data.append(line.substring(5).trim()); }
                     }
-                if (route.usesResponses() && !adapter.completed()) sendEvent(output, Map.of("type", "error", "error", Map.of("type", "api_error", "message", "上游连接提前结束")));
+                if (!data.isEmpty() && !data.toString().equals("[DONE]")) {
+                    Map<String,Object> event = Json.object(Json.parse(data.toString()));
+                    if (route.usesResponses()) for (Map<String,Object> item : adapter.consume(event)) sendEvent(output, item);
+                    else sendEvent(output, nativeAdapter.consume(event));
+                }
+                if (route.usesResponses() ? !adapter.completed() : !nativeAdapter.completed())
+                    sendEvent(output, Map.of("type", "error", "error", Map.of("type", "api_error", "message", "上游连接提前结束，请重试")));
             } finally {
                 inFlightBodies.remove(upstreamBody);
             }
@@ -169,7 +181,7 @@ final class ClaudeBridgeServer implements AutoCloseable {
     private static void sendEvent(OutputStream output, Map<String, Object> event) throws IOException {
         String value = "event: " + event.getOrDefault("type", "message") + "\ndata: " + Json.stringify(event) + "\n\n"; output.write(value.getBytes(StandardCharsets.UTF_8)); output.flush();
     }
-    private static void upstreamError(HttpExchange exchange, int status, String body) throws IOException { error(exchange, status >= 400 && status < 600 ? status : 502, "api_error", "TokenPro 上游返回 HTTP " + status); }
+    private static void upstreamError(HttpExchange exchange, int status, String body) throws IOException { error(exchange, status >= 400 && status < 600 ? status : 502, "api_error", ErrorMessages.http(status, "/v1/messages", body)); }
     private static void json(HttpExchange exchange, int status, Object value) throws IOException { byte[] bytes = Json.stringify(value).getBytes(StandardCharsets.UTF_8); exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8"); exchange.getResponseHeaders().set("Cache-Control", "no-store"); exchange.sendResponseHeaders(status, bytes.length); exchange.getResponseBody().write(bytes); }
     private static void error(HttpExchange exchange, int status, String type, String message) throws IOException { json(exchange, status, Map.of("type", "error", "error", Map.of("type", type, "message", message))); }
     public void close() {
@@ -178,5 +190,6 @@ final class ClaudeBridgeServer implements AutoCloseable {
         inFlightBodies.forEach(body -> { try { body.close(); } catch (IOException ignored) { } });
         handlers.forEach(Thread::interrupt);
         server.stop(0);
+        upstream.shutdownNow();
     }
 }

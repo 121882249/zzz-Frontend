@@ -4,7 +4,7 @@ import javax.swing.*;
 import java.awt.*;
 
 public final class Main {
-    public static final String VERSION = "1.2.63";
+    public static final String VERSION = "1.2.64";
     private Main() {}
 
     public static void main(String[] args) throws Exception {
@@ -60,6 +60,8 @@ public final class Main {
                 UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
                 UIManager.put("Panel.background", new Color(4, 7, 22));
                 UIManager.put("Label.foreground", new Color(242, 245, 255));
+                UIManager.put("OptionPane.background", new Color(4, 7, 22));
+                UIManager.put("OptionPane.messageForeground", new Color(242, 245, 255));
                 UIManager.put("Button.foreground", new Color(225, 231, 252));
                 UIManager.put("Button.disabledText", new Color(166, 174, 205));
                 UIManager.put("TextField.background", new Color(7, 11, 29));
@@ -70,7 +72,7 @@ public final class Main {
                 UIManager.put("List.foreground", new Color(225, 231, 252));
                 new TokenProFrame(store).setVisible(true);
             } catch (Exception e) {
-                JOptionPane.showMessageDialog(null, e.getMessage(), "TokenPro", JOptionPane.ERROR_MESSAGE);
+                ErrorMessages.show(null, e);
             }
         });
     }

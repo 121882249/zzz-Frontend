@@ -8,7 +8,11 @@ final class ClaudeDesktopConfig {
     private ClaudeDesktopConfig() {}
 
     static void install(SecureStore store, ClaudeBridgeConfig bridge, String accountLabel) throws Exception {
-        Path library = library();
+        String helper = RuntimeCommand.helperExecutable(store);
+        for (Path library : libraries()) installAt(store, bridge, accountLabel, helper, library);
+    }
+
+    static void installAt(SecureStore store, ClaudeBridgeConfig bridge, String accountLabel, String helper, Path library) throws Exception {
         Files.createDirectories(library);
         ensureThirdPartyMode(library.getParent());
         Map<String, Object> meta = readMeta(library);
@@ -25,21 +29,35 @@ final class ClaudeDesktopConfig {
         profile.put("deploymentDisplayName", deploymentDisplayName(accountLabel)); profile.put("endUserAttribution", false);
         profile.put("inferenceProvider", "gateway"); profile.put("inferenceGatewayBaseUrl", bridge.baseUrl());
         profile.put("inferenceGatewayAuthScheme", "bearer"); profile.put("inferenceCredentialKind", "helper-script");
-        profile.put("inferenceCredentialHelper", RuntimeCommand.helperExecutable(store));
+        profile.put("inferenceCredentialHelper", helper);
         profile.put("inferenceCredentialHelperTtlSec", 30); profile.put("inferenceCredentialHelperTimeoutSec", 10);
         profile.put("inferenceCredentialHelperSilentRefreshEnabled", true); profile.put("modelDiscoveryEnabled", false); profile.put("inferenceModels", models);
         writeJson(library.resolve(tokenPro + ".json"), profile);
         meta.put("appliedId", tokenPro); meta.remove("hybridPointer"); writeJson(library.resolve("_meta.json"), meta);
         store.write(STATE_FILE, Json.stringify(Map.of("official_profile_id", official, "tokenpro_profile_id", tokenPro)));
+        verifyLibrary(library, bridge);
+    }
+
+    static void verifyLibrary(Path library, ClaudeBridgeConfig bridge) throws Exception {
+        String id = validId(readMeta(library).get("appliedId"));
+        if (id == null) throw new IllegalStateException("Claude 未应用 TokenPro 配置");
+        Map<String,Object> profile = Json.object(Json.parse(Files.readString(library.resolve(id + ".json"))));
+        List<String> actual = ClaudeAdapter.list(profile.get("inferenceModels")).stream()
+            .map(Json::object).map(row -> Objects.toString(row.get("name"), "")).toList();
+        if (!actual.equals(bridge.routes().stream().map(ClaudeBridgeConfig.Route::alias).toList())
+            || !bridge.baseUrl().equals(profile.get("inferenceGatewayBaseUrl")))
+            throw new IllegalStateException("Claude 模型列表与桥接配置不一致，请重新连接");
     }
 
     static void restoreOfficial(SecureStore store) throws Exception {
         Map<String, Object> state = store.read(STATE_FILE).map(Json::parse).map(Json::object).orElseGet(LinkedHashMap::new);
         String official = validId(state.get("official_profile_id"));
         if (official == null) official = UUID.randomUUID().toString();
-        Path library = library(); Files.createDirectories(library);
-        Map<String, Object> meta = readMeta(library); ensureEntry(meta, official, "Claude 官方配置");
-        writeJson(library.resolve(official + ".json"), Map.of()); meta.put("appliedId", official); meta.remove("hybridPointer"); writeJson(library.resolve("_meta.json"), meta);
+        for (Path library : libraries()) {
+            Files.createDirectories(library);
+            Map<String, Object> meta = readMeta(library); ensureEntry(meta, official, "Claude 官方配置");
+            writeJson(library.resolve(official + ".json"), Map.of()); meta.put("appliedId", official); meta.remove("hybridPointer"); writeJson(library.resolve("_meta.json"), meta);
+        }
     }
 
     static Path library() {
@@ -49,6 +67,29 @@ final class ClaudeDesktopConfig {
             case WINDOWS -> Path.of(System.getenv().getOrDefault("APPDATA", home), "Claude-3p", "configLibrary");
             case LINUX -> Path.of(System.getenv().getOrDefault("XDG_CONFIG_HOME", Path.of(home, ".config").toString()), "Claude-3p", "configLibrary");
         };
+    }
+
+    static List<Path> libraries() {
+        if (Platform.OS_KIND != Platform.OS.WINDOWS) return List.of(library());
+        String family = Platform.registeredWindowsApplicationId("Claude").map(id -> id.split("!", 2)[0]).orElse("");
+        return windowsLibraries(System.getenv(), System.getProperty("user.home"), family);
+    }
+
+    static List<Path> windowsLibraries(Map<String,String> environment, String home, String family) {
+        Path local = Path.of(environment.getOrDefault("LOCALAPPDATA", home));
+        LinkedHashSet<Path> targets = new LinkedHashSet<>();
+        // Store builds use LocalCache/Local, not APPDATA/Claude-3p. Updating
+        // only the latter leaves a stale picker even after a full restart.
+        if (family.matches("Claude_[A-Za-z0-9]+")) {
+            Path cache = local.resolve("Packages").resolve(family).resolve("LocalCache");
+            targets.add(cache.resolve("Local/Claude-3p/configLibrary"));
+            Path virtualRoaming = cache.resolve("Roaming/Claude-3p/configLibrary");
+            if (Files.isDirectory(virtualRoaming)) targets.add(virtualRoaming);
+        }
+        Path unpackaged = local.resolve("Claude-3p/configLibrary");
+        if (Files.isDirectory(unpackaged)) targets.add(unpackaged);
+        targets.add(Path.of(environment.getOrDefault("APPDATA", home), "Claude-3p", "configLibrary"));
+        return List.copyOf(targets);
     }
 
     private static void ensureThirdPartyMode(Path root) throws Exception {

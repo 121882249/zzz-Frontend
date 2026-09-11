@@ -50,6 +50,13 @@ final class ClaudeAdapter {
         return result;
     }
 
+    static void requireResponseContent(Map<String,Object> response) {
+        boolean present = list(response.get("content")).stream().map(ClaudeAdapter::objectOrEmpty)
+            .anyMatch(block -> "tool_use".equals(block.get("type")) || "server_tool_use".equals(block.get("type"))
+                || ("text".equals(block.get("type")) && !text(block.get("text")).isBlank()));
+        if (!present) throw new IllegalArgumentException("模型没有返回正文或工具调用，请调整输出长度或模型后重试；本次未自动重复请求");
+    }
+
     static Map<String, Object> tagBlock(Map<String, Object> source, String alias) {
         Map<String, Object> block = deepMap(source); String type = text(block.get("type"));
         String field = type.equals("redacted_thinking") ? "data" : "signature";
@@ -144,13 +151,17 @@ final class ClaudeAdapter {
     @SuppressWarnings("unchecked") static Map<String, Object> deepMap(Map<String, Object> value) { return Json.object(Json.parse(Json.stringify(value))); }
 
     static final class ResponsesStream {
-        private final String model; private boolean started, tools, completed; private int next; private final Map<String, Integer> open = new LinkedHashMap<>();
+        private final String model; private boolean started, tools, completed, hasContent; private int next; private final Map<String, Integer> open = new LinkedHashMap<>();
         ResponsesStream(String model) { this.model = model; }
         boolean completed() { return completed; }
         List<Map<String, Object>> consume(Map<String, Object> event) {
             List<Map<String, Object>> out = new ArrayList<>(); Map<String, Object> response = objectOrEmpty(event.get("response"));
             if (!started) { started = true; Map<String, Object> message = new LinkedHashMap<>(); message.put("id", text(response.get("id")).isBlank() ? "msg_" + UUID.randomUUID() : response.get("id")); message.put("type", "message"); message.put("role", "assistant"); message.put("model", model); message.put("content", List.of()); message.put("stop_reason", null); message.put("stop_sequence", null); message.put("usage", Map.of("input_tokens", 0, "output_tokens", 0)); out.add(map("type", "message_start", "message", message)); }
             String type = text(event.get("type"));
+            if ((type.equals("response.output_text.delta") || type.equals("response.refusal.delta")) && !text(event.get("delta")).isBlank()) hasContent = true;
+            if (type.equals("response.output_item.added") && "function_call".equals(objectOrEmpty(event.get("item")).get("type"))) hasContent = true;
+            if ((type.equals("response.completed") || type.equals("response.incomplete")) && !hasContent)
+                throw new IllegalArgumentException("模型没有返回正文或工具调用，请调整输出长度或模型后重试；本次未自动重复请求");
             switch (type) {
                 case "response.output_text.delta", "response.refusal.delta" -> { String key = "text:" + event.getOrDefault("output_index", 0) + ":" + event.getOrDefault("content_index", 0); int index = begin(out, key, Map.of("type", "text", "text", "")); out.add(map("type", "content_block_delta", "index", index, "delta", Map.of("type", "text_delta", "text", text(event.get("delta"))))); }
                 case "response.output_item.added" -> { Map<String, Object> item = objectOrEmpty(event.get("item")); if ("function_call".equals(item.get("type"))) { tools = true; begin(out, text(item.get("id")), Map.of("type", "tool_use", "id", text(item.get("call_id")), "name", text(item.get("name")), "input", Map.of())); } }
@@ -162,6 +173,38 @@ final class ClaudeAdapter {
             return out;
         }
         private int begin(List<Map<String, Object>> out, String key, Map<String, Object> block) { Integer old = open.get(key); if (old != null) return old; int index = next++; open.put(key, index); out.add(map("type", "content_block_start", "index", index, "content_block", block)); return index; }
+    }
+
+    static final class NativeStream {
+        private final String alias, signatureId;
+        private boolean completed, hasContent;
+        NativeStream(String alias, String signatureId) { this.alias = alias; this.signatureId = signatureId; }
+        boolean completed() { return completed; }
+        Map<String,Object> consume(Map<String,Object> input) {
+            Map<String,Object> event = deepMap(input);
+            String type = text(event.get("type"));
+            if ("message_start".equals(type) && event.get("message") instanceof Map<?,?> raw) {
+                Map<String,Object> message = new LinkedHashMap<>(Json.object(raw));
+                message.put("model", alias); event.put("message", message);
+            }
+            if (event.get("content_block") instanceof Map<?,?> raw) {
+                Map<String,Object> block = tagBlock(Json.object(raw), signatureId);
+                event.put("content_block", block);
+                if ("tool_use".equals(block.get("type")) || !text(block.get("text")).isBlank()) hasContent = true;
+            }
+            if (event.get("delta") instanceof Map<?,?> raw) {
+                Map<String,Object> delta = new LinkedHashMap<>(Json.object(raw));
+                if ("text_delta".equals(delta.get("type")) && !text(delta.get("text")).isBlank()) hasContent = true;
+                if ("signature_delta".equals(delta.get("type")) && delta.get("signature") instanceof String signature)
+                    delta.put("signature", prefix(signatureId) + signature);
+                event.put("delta", delta);
+            }
+            if ("message_stop".equals(type)) {
+                if (!hasContent) throw new IllegalArgumentException("模型没有返回正文或工具调用，请调整输出长度或模型后重试；本次未自动重复请求");
+                completed = true;
+            }
+            return event;
+        }
     }
 
     static Map<String, Object> map(Object... values) { Map<String, Object> result = new LinkedHashMap<>(); for (int i = 0; i < values.length; i += 2) result.put(String.valueOf(values[i]), values[i + 1]); return result; }

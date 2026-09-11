@@ -312,17 +312,20 @@ final class ApiClient {
         if (body == null) request.method(method, HttpRequest.BodyPublishers.noBody());
         else request.header("Content-Type", "application/json").method(method, HttpRequest.BodyPublishers.ofString(Json.stringify(body)));
         HttpResponse<String> response = client.send(request.build(), HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            String message = responseMessage(response.body());
-            if (message.isBlank()) message = response.statusCode() == 401
-                ? "登录已失效，或邮箱密码不正确"
-                : "TokenPro 服务返回 HTTP " + response.statusCode();
-            throw new ApiException(response.statusCode(), message);
-        }
-        Map<String, Object> json = Json.object(Json.parse(response.body()));
+        return decodeResponse(response.statusCode(), path, response.body());
+    }
+
+    static Object decodeResponse(int status, String path, String body) {
+        if (status < 200 || status >= 300) throw new ApiException(status, ErrorMessages.http(status, path, body));
+        Map<String,Object> json;
+        try { json = Json.object(Json.parse(body)); }
+        catch (Exception malformed) { throw new ApiException(status, "服务返回了无法识别的数据，请稍后重试"); }
         Object code = json.get("code");
-        if (code instanceof Number number && number.intValue() != 0 && number.intValue() != 200) {
-            throw new IllegalStateException(String.valueOf(json.getOrDefault("message", "TokenPro 未接受此操作")));
+        if (code != null && !Set.of("0", "0.0", "200", "200.0").contains(String.valueOf(code))) {
+            int effectiveStatus = status;
+            try { int numeric = (int) Double.parseDouble(String.valueOf(code)); if (numeric >= 400 && numeric <= 599) effectiveStatus = numeric; }
+            catch (NumberFormatException ignored) { }
+            throw new ApiException(effectiveStatus, ErrorMessages.http(effectiveStatus, path, body));
         }
         Object data = json.containsKey("code") ? json.get("data") : json;
         return data == null ? Map.of() : data;
@@ -335,7 +338,9 @@ final class ApiClient {
     static String responseMessage(String body) {
         try {
             Map<String, Object> json = Json.object(Json.parse(body));
-            return text(json.getOrDefault("message", json.getOrDefault("error", "")));
+            if (json.get("message") instanceof String value && !value.isBlank()) return value;
+            if (json.get("error") instanceof Map<?,?> nested) return text(nested.get("message"));
+            return text(json.getOrDefault("error", ""));
         } catch (Exception ignored) { return ""; }
     }
 

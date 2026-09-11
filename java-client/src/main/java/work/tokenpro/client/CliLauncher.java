@@ -63,6 +63,10 @@ final class CliLauncher {
         validate(client);
         List<String> result = new ArrayList<>();
         if(client.equals("claude")) result.addAll(List.of("--settings", root.cli(client).root().resolve(ClaudeCliConfig.FILE).toAbsolutePath().toString()));
+        // Codex -c accepts a raw string when the value is not valid TOML.
+        // Absolute slash paths avoid nested quotes inside a Windows batch arg.
+        else result.addAll(List.of("-c", "model_catalog_json=" + ClientReconnect.cliMarker(root, client).replace('\\', '/'),
+            "-c", "model_provider=custom"));
         result.addAll(extra);
         return result;
     }
