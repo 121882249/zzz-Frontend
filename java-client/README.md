@@ -21,6 +21,33 @@ Claude 桥接配置和上游凭据保存在当前用户的 TokenPro 配置目录
 
 ## 构建
 
+### 命令行模型选择
+
+命令行卡片提供与客户端一致的“模型选择”菜单和独立“已选 N 个模型”状态；先应用模型，再点击“连接命令行”。
+再次连接会沿用已保存的 CLI 选择，不覆盖客户端配置，也不会关闭已运行的 Codex/Claude。
+Codex 使用客户端同一套排序规则生成独立的模型目录及 priority 顺序；Claude 使用同一排序生成
+`claude-cli-settings.json`，通过 `--settings` 设置内部 `/model` 列表。
+Claude 仅包含非生图模型，要求 Claude Code 2.1.242 或更新版本（支持 `modelPicker`）。
+订阅优先级、余额排序、厂商顺序及组内价格排序均沿用客户端逻辑。
+Claude 命令行通过本地桥接和凭据 helper 连接，不修改用户的全局 Claude settings.json。
+Windows 上该连接流程要求原生 CLI；WSL 环境需要单独配置。
+
+命令行配置位于 TokenPro 数据目录的 `cli/codex` 和 `cli/claude` 子目录，选择记录和备份也独立保存。
+从 TokenPro 启动时，Codex CLI 的 `CODEX_HOME` 指向 `cli/codex/home`，Claude CLI 的
+`CLAUDE_CONFIG_DIR` 指向 `cli/claude/home`。仅向新终端传入变量，不修改系统环境。
+Claude Desktop、Codex Desktop 生图、Claude CLI、Codex CLI 生图分别使用 23179、23180、23181、23182，拥有独立路由、令牌和 helper。
+桌面端重新选模型、恢复配置或关闭桥接，不会覆盖命令行配置，反之亦然。
+普通终端可使用模型菜单中的“复制独立启动命令”，运行 TokenPro 数据目录下的
+`bin/tokenpro-codex` 或 `bin/tokenpro-claude`（Windows 为 .cmd）。该入口在运行前恢复对应桥接并加载独立配置。
+直接输入系统原来的 `codex`/`claude` 仍采用原生配置；TokenPro 不覆盖它们，也不修改全局 PATH。
+
+### 思考强度与更新恢复
+
+Codex 的桌面端和 CLI 共用模型目录导出逻辑，保留本机原生模型声明的 Ultra 及快速服务档位。
+重新应用模型时保留该模型仍支持的思考强度和服务档位；不为新配置默认开启付费加速。
+更新前暂停已运行的四类本地桥接，立即更新失败则恢复原有连接；程序重新启动时分别恢复已配置桥接。
+模型推理参数和快速档位是否生效仍由实际客户端版本、上游模型及账户权限决定。
+
 安装 JDK 21 后：
 
 ```bash

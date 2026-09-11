@@ -88,7 +88,7 @@ final class ClaudeBridgeServer implements AutoCloseable {
         HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() != 200) { upstreamError(exchange, response.statusCode(), response.body()); return; }
         Map<String, Object> value = Json.object(Json.parse(response.body()));
-        json(exchange, 200, route.usesResponses() ? ClaudeAdapter.responsesResponse(value, route.name()) : ClaudeAdapter.tagNativeResponse(value, route.alias()));
+        json(exchange, 200, route.usesResponses() ? ClaudeAdapter.responsesResponse(value, route.name()) : ClaudeAdapter.tagNativeResponse(value, route.signatureId()));
     }
 
     private void handleStream(HttpExchange exchange, HttpRequest request, ClaudeBridgeConfig.Route route) throws IOException {
@@ -108,8 +108,8 @@ final class ClaudeBridgeServer implements AutoCloseable {
                             Map<String, Object> event = Json.object(Json.parse(data.toString()));
                             if (route.usesResponses()) for (Map<String, Object> item : adapter.consume(event)) sendEvent(output, item);
                             else {
-                                if (event.get("content_block") instanceof Map<?, ?>) event.put("content_block", ClaudeAdapter.tagBlock(Json.object(event.get("content_block")), route.alias()));
-                                if (event.get("delta") instanceof Map<?, ?> deltaRaw) { Map<String, Object> delta = new LinkedHashMap<>(Json.object(deltaRaw)); if ("signature_delta".equals(delta.get("type")) && delta.get("signature") instanceof String signature) delta.put("signature", ClaudeAdapter.prefix(route.alias()) + signature); event.put("delta", delta); }
+                                if (event.get("content_block") instanceof Map<?, ?>) event.put("content_block", ClaudeAdapter.tagBlock(Json.object(event.get("content_block")), route.signatureId()));
+                                if (event.get("delta") instanceof Map<?, ?> deltaRaw) { Map<String, Object> delta = new LinkedHashMap<>(Json.object(deltaRaw)); if ("signature_delta".equals(delta.get("type")) && delta.get("signature") instanceof String signature) delta.put("signature", ClaudeAdapter.prefix(route.signatureId()) + signature); event.put("delta", delta); }
                                 sendEvent(output, event);
                             }
                         }
@@ -151,7 +151,7 @@ final class ClaudeBridgeServer implements AutoCloseable {
         boolean observed = false;
         int absentChecks = 0;
         while (!closed.get()) {
-            if (Platform.claudeThirdPartyRunning()) {
+            if (store.isClaudeCli() ? Platform.claudeCliRunning() : Platform.claudeThirdPartyRunning()) {
                 observed = true;
                 absentChecks = 0;
             } else if (observed) {

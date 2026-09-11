@@ -26,9 +26,9 @@ final class RuntimeCommand {
         List<String> base = withArgs();
         String executable = base.getFirst();
         String lower = Path.of(executable).getFileName().toString().toLowerCase(Locale.ROOT);
-        if (base.size() == 1 && !lower.equals("java") && !lower.equals("java.exe") && !lower.equals("javaw.exe")) return executable;
+        if (!store.isClaudeCli() && base.size() == 1 && !lower.equals("java") && !lower.equals("java.exe") && !lower.equals("javaw.exe")) return executable;
         Path helper = store.root().resolve(Platform.OS_KIND == Platform.OS.WINDOWS ? "claude-token.cmd" : "claude-token");
-        String command = quote(base) + " --claude-token";
+        String command = quote(base) + (store.isClaudeCli() ? " --claude-cli-token" : " --claude-token");
         String contents = Platform.OS_KIND == Platform.OS.WINDOWS ? "@echo off\r\n" + command + "\r\n" : "#!/bin/sh\nexec " + command + "\n";
         Files.writeString(helper, contents, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         Platform.privateFile(helper);

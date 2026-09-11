@@ -14,6 +14,7 @@ import java.util.concurrent.*;
 final class CodexImageBridge implements AutoCloseable {
     static final String FILE = "codex-image-bridge.json";
     static final String BASE = "http://127.0.0.1:23180/v1";
+    static String baseUrl(SecureStore store) { return store.isCodexCli() ? "http://127.0.0.1:23182/v1" : BASE; }
     private static final String SERVICE = "tokenpro-codex-images-v1";
     private final SecureStore store;
     private final HttpServer server;
@@ -22,7 +23,7 @@ final class CodexImageBridge implements AutoCloseable {
     private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(20)).followRedirects(HttpClient.Redirect.NEVER).build();
 
     CodexImageBridge(SecureStore store) throws Exception {
-        this(store, 23180);
+        this(store, store.isCodexCli() ? 23182 : 23180);
     }
     CodexImageBridge(SecureStore store, int port) throws Exception {
         this.store = store;
@@ -46,17 +47,17 @@ final class CodexImageBridge implements AutoCloseable {
     static boolean healthy(SecureStore store) {
         try {
             String token = Objects.toString(load(store).get("token"), "");
-            HttpRequest request = HttpRequest.newBuilder(URI.create(BASE+"/health")).timeout(Duration.ofSeconds(1)).header("Authorization", "Bearer "+token).build();
+            HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl(store)+"/health")).timeout(Duration.ofSeconds(1)).header("Authorization", "Bearer "+token).build();
             HttpResponse<String> r = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(1)).build().send(request, HttpResponse.BodyHandlers.ofString());
             return r.statusCode() == 200 && r.body().equals(SERVICE);
         } catch (Exception e) { return false; }
     }
     static synchronized void ensureRunning(SecureStore store) throws Exception {
         if (healthy(store)) return;
-        Process process = new ProcessBuilder(RuntimeCommand.withArgs("--codex-image-bridge")).redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(ProcessBuilder.Redirect.DISCARD).start();
+        Process process = new ProcessBuilder(RuntimeCommand.withArgs(store.isCodexCli() ? "--codex-cli-image-bridge" : "--codex-image-bridge")).redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(ProcessBuilder.Redirect.DISCARD).start();
         process.getOutputStream().close();
         for (int i=0; i<30; i++) { Thread.sleep(100); if (healthy(store)) return; if (!process.isAlive()) break; }
-        throw new IOException("本机生图连接未启动，请检查端口 23180 是否被占用");
+        throw new IOException("本机生图连接未启动，请检查端口 " + URI.create(baseUrl(store)).getPort() + " 是否被占用");
     }
     static void resumeIfConfigured(SecureStore store) throws Exception {
         if (store.read(FILE).isPresent()) ensureRunning(store);
@@ -64,7 +65,12 @@ final class CodexImageBridge implements AutoCloseable {
     static void stop(SecureStore store) throws Exception {
         if (!healthy(store)) return;
         String token = Objects.toString(load(store).get("token"), "");
-        HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create(BASE+"/shutdown")).timeout(Duration.ofSeconds(3)).header("Authorization", "Bearer "+token).POST(HttpRequest.BodyPublishers.noBody()).build(), HttpResponse.BodyHandlers.discarding());
+        HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create(baseUrl(store)+"/shutdown")).timeout(Duration.ofSeconds(3)).header("Authorization", "Bearer "+token).POST(HttpRequest.BodyPublishers.noBody()).build(), HttpResponse.BodyHandlers.discarding());
+        for(int i=0; i<30; i++) {
+            Thread.sleep(100);
+            if(!healthy(store)) return;
+        }
+        throw new IOException("Codex 本机连接停止超时");
     }
     private void handle(HttpExchange exchange) throws IOException {
         boolean started = false;

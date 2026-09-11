@@ -13,9 +13,12 @@ final class CodexConfig {
     private static final String END = "# <<< TokenPro managed <<<";
     private static final Pattern MANAGED_ROOT_KEY = Pattern.compile("^(model|model_provider|review_model|model_catalog_json|model_reasoning_effort|model_context_window|model_auto_compact_token_limit)\\s*=.*$");
     private final SecureStore store;
-    CodexConfig(SecureStore store) { this.store = store; }
+    private final Path configPath;
+    CodexConfig(SecureStore store) { this(store, Platform.codexConfig()); }
+    CodexConfig(SecureStore store, Path configPath) { this.store = store; this.configPath = configPath; }
 
     void apply(String baseUrl, List<PricedModel> models, String key, String accountEmail) throws Exception {
+        models = ModelPickerDialog.orderedModels(models, "Codex");
         String url = validateUrl(baseUrl);
         String actor = required(accountEmail, "账户邮箱");
         if (models.isEmpty()) throw new IllegalArgumentException("请至少选择一个 Codex 模型");
@@ -24,23 +27,26 @@ final class CodexConfig {
         PricedModel imageModel = imageModels.isEmpty() ? null : imageModels.getFirst();
         PricedModel primaryModel = chatModels.isEmpty() ? imageModel : chatModels.getFirst();
         required(primaryModel.name(), "模型 ID");
-        Path target = Platform.codexConfig();
+        Path target = configPath;
         Files.createDirectories(target.getParent());
         String current = Files.exists(target) ? Files.readString(target) : "";
         if (store.read("codex-original.toml").isEmpty()) store.write("codex-original.toml", current);
         // Image models stay in their own picker group and are also written to
         // Codex's catalog so they can run directly without a selected LLM.
-        Path catalog = writeModelCatalog(models);
+        Optional<String> previousCatalog = store.read("codex-model-catalog.json");
         Optional<String> previousBridge = store.read(CodexImageBridge.FILE);
         try {
+        Path catalog = writeModelCatalog(models);
         String localToken = imageModel == null ? key.trim() : CodexImageBridge.configure(store, url, key.trim());
-        String block = managedBlock(imageModel == null ? url : CodexImageBridge.BASE, primaryModel, imageModel, catalog, localToken, actor);
+        String block = managedBlock(imageModel == null ? url : CodexImageBridge.baseUrl(store), primaryModel, imageModel, catalog, localToken, actor, current);
         validate(block);
         // TokenPro owns the active Codex config while connected. Replacing the
         // file avoids ambiguous TOML merges and duplicate keys; restore() puts
         // the byte-for-byte original configuration back.
         writeAtomic(target, block);
         } catch (Exception failure) {
+            if (previousCatalog.isPresent()) store.write("codex-model-catalog.json", previousCatalog.get());
+            else store.delete("codex-model-catalog.json");
             if (imageModel != null) {
                 if (previousBridge.isPresent()) store.write(CodexImageBridge.FILE, previousBridge.get());
                 else { try { CodexImageBridge.stop(store); } catch (Exception ignored) {} store.delete(CodexImageBridge.FILE); }
@@ -52,7 +58,7 @@ final class CodexConfig {
     void restore() throws Exception {
         Optional<String> original = store.read("codex-original.toml");
         if (original.isEmpty()) throw new IllegalStateException("没有可恢复的 Codex 配置备份");
-        Path target = Platform.codexConfig();
+        Path target = configPath;
         Files.createDirectories(target.getParent());
         writeAtomic(target, original.get());
         store.delete("codex-original.toml");
@@ -63,7 +69,7 @@ final class CodexConfig {
 
     void updateActor(String accountEmail) throws Exception {
         String actor = required(accountEmail, "账户邮箱");
-        Path target = Platform.codexConfig();
+        Path target = configPath;
         if (!Files.exists(target)) return;
         String current = Files.readString(target);
         String updated = withActor(current, actor);
@@ -85,7 +91,7 @@ final class CodexConfig {
         return current.substring(0, start) + managed + current.substring(end);
     }
 
-    private String managedBlock(String url, PricedModel model, PricedModel imageModel, Path catalog, String key, String actor) {
+    private String managedBlock(String url, PricedModel model, PricedModel imageModel, Path catalog, String key, String actor, String current) throws IOException {
         StringBuilder out = new StringBuilder();
         out.append(START).append('\n');
         out.append("model = ").append(toml(model.name())).append('\n');
@@ -94,7 +100,10 @@ final class CodexConfig {
         // Keep the TokenPro route on the Responses API without invoking Codex's
         // first-party OpenAI login path. That path replaces the supplied key and
         // loses the account's model-group routing, which especially breaks Gemini.
-        if (!inferredReasoningEfforts(model).isEmpty()) out.append("model_reasoning_effort = \"high\"\n");
+        Map<String, Object> catalogRoot = Json.object(Json.parse(Files.readString(catalog)));
+        Map<String, Object> profile = ((List<?>) catalogRoot.get("models")).stream().map(Json::object)
+            .filter(entry -> model.name().equals(entry.get("slug"))).findFirst().orElseThrow();
+        out.append(CodexPreferences.retainedLines(current, profile));
         out.append("model_context_window = 372000\n");
         out.append("model_auto_compact_token_limit = 372000\n\n");
         out.append("model_catalog_json = ").append(toml(catalog.toAbsolutePath().toString())).append("\n\n");
@@ -167,7 +176,7 @@ final class CodexConfig {
             // image_generation before the gateway can normalize image-only
             // selections into a text driver plus image tool.
             disableResponsesLite(entry);
-            applyReasoningProfile(entry, model);
+            applyNativeCapabilities(entry, model, exact);
             entries.add(entry);
         }
         Path target = store.root().resolve("codex-model-catalog.json");
@@ -207,6 +216,28 @@ final class CodexConfig {
         for (Map<String, Object> level : levels) supported.add(String.valueOf(level.get("effort")));
         String current = String.valueOf(entry.getOrDefault("default_reasoning_level", "medium"));
         entry.put("default_reasoning_level", supported.contains(current) ? current : supported.contains("medium") ? "medium" : supported.iterator().next());
+    }
+
+    /** A schema template is not evidence that another model supports Ultra/Fast. */
+    static void applyNativeCapabilities(Map<String, Object> entry, PricedModel model, Map<String, Object> exact) {
+        if (exact == null) {
+            applyReasoningProfile(entry, model);
+            entry.put("service_tiers", List.of());
+            entry.remove("default_service_tier");
+            return;
+        }
+        if (model.isImageGeneration()) {
+            entry.put("supported_reasoning_levels", List.of());
+            entry.put("default_reasoning_level", null);
+        } else {
+            Object nativeLevels = exact.get("supported_reasoning_levels");
+            entry.put("supported_reasoning_levels", nativeLevels instanceof List<?> ? normalized(nativeLevels) : List.of());
+            entry.put("default_reasoning_level", exact.get("default_reasoning_level"));
+        }
+        Object tiers = exact.get("service_tiers");
+        entry.put("service_tiers", tiers instanceof List<?> ? normalized(tiers) : List.of());
+        if (exact.containsKey("default_service_tier")) entry.put("default_service_tier", exact.get("default_service_tier"));
+        else entry.remove("default_service_tier");
     }
 
     static List<String> inferredReasoningEfforts(PricedModel model) {

@@ -4,16 +4,30 @@ import javax.swing.*;
 import java.awt.*;
 
 public final class Main {
-    public static final String VERSION = "1.2.61";
+    public static final String VERSION = "1.2.62";
     private Main() {}
 
     public static void main(String[] args) throws Exception {
         SecureStore store = new SecureStore();
+        if (args.length == 1 && ("--claude-cli-token".equals(args[0]) || "--claude-cli-bridge".equals(args[0]))) {
+            SecureStore cliStore = store.cli("claude");
+            if ("--claude-cli-token".equals(args[0])) {
+                ClaudeBridgeManager.ensureRunning(cliStore);
+                System.out.print(ClaudeBridgeConfig.load(cliStore).localToken());
+            } else {
+                try (ClaudeBridgeServer bridge = new ClaudeBridgeServer(cliStore)) { bridge.awaitClaudeExit(); }
+            }
+            return;
+        }
+        if (args.length == 1 && "--codex-cli-image-bridge".equals(args[0])) {
+            try (CodexImageBridge bridge = new CodexImageBridge(store.cli("codex"))) { bridge.await(); }
+            return;
+        }
         if (args.length == 1 && "--codex-image-bridge".equals(args[0])) {
             try (CodexImageBridge bridge = new CodexImageBridge(store)) { bridge.await(); }
             return;
         }
-        if ((args.length == 1 && "--claude-token".equals(args[0])) || System.getenv("CLAUDE_HELPER_CONTEXT") != null) {
+        if (claudeTokenRequest(args, System.getenv().containsKey("CLAUDE_HELPER_CONTEXT"))) {
             ClaudeBridgeManager.ensureRunning(store);
             System.out.print(ClaudeBridgeConfig.load(store).localToken());
             return;
@@ -24,6 +38,15 @@ public final class Main {
         }
         if (args.length == 2 && "--route-token".equals(args[0])) {
             System.out.print(store.credential(args[1]));
+            return;
+        }
+        if (args.length > 0 && ("--codex-cli".equals(args[0]) || "--claude-cli".equals(args[0]))) {
+            String client = args[0].equals("--codex-cli") ? "codex" : "claude";
+            System.exit(CliLauncher.run(store, client, java.util.Arrays.asList(args).subList(1, args.length)));
+            return;
+        }
+        if(args.length == 1 && ("--prepare-codex-cli".equals(args[0]) || "--prepare-claude-cli".equals(args[0]))) {
+            CliLauncher.prepare(store, args[0].equals("--prepare-codex-cli") ? "codex" : "claude");
             return;
         }
         if (args.length > 0 && "--self-test".equals(args[0])) {
@@ -50,5 +73,9 @@ public final class Main {
                 JOptionPane.showMessageDialog(null, e.getMessage(), "TokenPro", JOptionPane.ERROR_MESSAGE);
             }
         });
+    }
+
+    static boolean claudeTokenRequest(String[] args, boolean helperContext) {
+        return args.length == 1 && "--claude-token".equals(args[0]) || args.length == 0 && helperContext;
     }
 }

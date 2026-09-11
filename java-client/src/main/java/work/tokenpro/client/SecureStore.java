@@ -7,9 +7,21 @@ import java.util.*;
 
 final class SecureStore {
     private final Path root;
+    private final String profile;
 
     SecureStore() throws IOException { this(Platform.dataDirectory()); }
-    SecureStore(Path root) throws IOException { this.root = root; Files.createDirectories(root); }
+    SecureStore(Path root) throws IOException { this(root, "desktop"); }
+    private SecureStore(Path root, String profile) throws IOException {
+        this.root = root; this.profile = profile; Files.createDirectories(root);
+    }
+
+    SecureStore cli(String client) throws IOException {
+        if (!client.equals("codex") && !client.equals("claude")) throw new IllegalArgumentException("未知命令行工具");
+        return new SecureStore(root.resolve("cli").resolve(client), client);
+    }
+
+    boolean isClaudeCli() { return profile.equals("claude"); }
+    boolean isCodexCli() { return profile.equals("codex"); }
 
     Optional<String> read(String name) throws IOException {
         Path path = safe(name);

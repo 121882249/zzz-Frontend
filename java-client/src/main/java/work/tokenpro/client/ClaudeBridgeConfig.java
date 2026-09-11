@@ -10,7 +10,14 @@ record ClaudeBridgeConfig(String accountId, int port, String localToken, String 
 
     record Route(String name, String platform, String groupName, long groupId, String alias) {
         boolean usesResponses() { return "openai".equalsIgnoreCase(platform); }
-        static Route from(PricedModel model) { return new Route(model.name(), model.platform(), model.groupName(), model.groupId(), alias(model)); }
+        static Route from(PricedModel model) {
+            String id = "anthropic".equalsIgnoreCase(model.platform())
+                && model.name().matches("claude-(?:opus|sonnet|haiku|fable|mythos)-[0-9][a-zA-Z0-9.-]*")
+                ? model.name() : alias(model);
+            return new Route(model.name(), model.platform(), model.groupName(), model.groupId(), id);
+        }
+        String legacyAlias() { return alias(new PricedModel(name, platform, groupName, groupId)); }
+        String signatureId() { return legacyAlias(); }
         private static String alias(PricedModel model) {
             try {
                 byte[] hash = MessageDigest.getInstance("SHA-256").digest((model.groupId() + "::" + model.name()).getBytes(StandardCharsets.UTF_8));
@@ -23,8 +30,21 @@ record ClaudeBridgeConfig(String accountId, int port, String localToken, String 
 
     static ClaudeBridgeConfig create(String accountId, String accessToken, ApiClient.ManagedKey key, List<PricedModel> models) {
         if (models.isEmpty()) throw new IllegalArgumentException("请至少选择一个 Claude 模型");
-        List<Route> routes = models.stream().map(Route::from).toList();
+        List<Route> routes = routesFor(models);
         return new ClaudeBridgeConfig(accountId, 23179, randomToken(), accessToken, key.id(), key.key(), routes);
+    }
+
+    static ClaudeBridgeConfig createCli(String accountId, String accessToken, ApiClient.ManagedKey key, List<PricedModel> models) {
+        ClaudeBridgeConfig config = create(accountId, accessToken, key, ModelPickerDialog.orderedModels(models, "Claude"));
+        return new ClaudeBridgeConfig(config.accountId(), 23181, config.localToken(), config.accessToken(),
+            config.keyId(), config.key(), config.routes());
+    }
+
+    static List<Route> routesFor(List<PricedModel> models) {
+        Map<String, Long> counts = models.stream().collect(java.util.stream.Collectors.groupingBy(
+            model -> model.name().toLowerCase(Locale.ROOT), java.util.stream.Collectors.counting()));
+        return models.stream().map(Route::from).map(route -> counts.get(route.name().toLowerCase(Locale.ROOT)) > 1
+            ? new Route(route.name(), route.platform(), route.groupName(), route.groupId(), route.legacyAlias()) : route).toList();
     }
 
     static ClaudeBridgeConfig load(SecureStore store) throws Exception {
@@ -54,7 +74,9 @@ record ClaudeBridgeConfig(String accountId, int port, String localToken, String 
     }
 
     String baseUrl() { return "http://127.0.0.1:" + port; }
-    Route route(String alias) { return routes.stream().filter(route -> route.alias.equals(alias)).findFirst().orElse(null); }
+    Route route(String alias) {
+        return routes.stream().filter(route -> route.alias.equals(alias) || route.legacyAlias().equals(alias)).findFirst().orElse(null);
+    }
     private static String randomToken() { byte[] bytes = new byte[32]; new SecureRandom().nextBytes(bytes); return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes); }
     private static String text(Object value) { return value == null ? "" : String.valueOf(value); }
     private static long number(Object value) { if (value instanceof Number number) return number.longValue(); throw new IllegalArgumentException("Claude 配置缺少数字字段"); }

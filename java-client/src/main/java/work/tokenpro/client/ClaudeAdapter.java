@@ -25,8 +25,8 @@ final class ClaudeAdapter {
                     Map<String, Object> block = deepMap(Json.object(rawBlock)); String type = text(block.get("type"));
                     if (type.equals("thinking") || type.equals("redacted_thinking")) {
                         String field = type.equals("thinking") ? "signature" : "data"; String signature = text(block.get(field));
-                        if (!signature.startsWith(prefix(route.alias()))) continue;
-                        block.put(field, signature.substring(prefix(route.alias()).length()));
+                        if (!signature.startsWith(prefix(route.signatureId()))) continue;
+                        block.put(field, signature.substring(prefix(route.signatureId()).length()));
                     }
                     filtered.add(block);
                 }
@@ -65,7 +65,9 @@ final class ClaudeAdapter {
         result.put("instructions", system.stream().map(raw -> text(Json.object(raw).get("text"))).reduce((a,b) -> a + "\n" + b).orElse(""));
         if (source.containsKey("max_tokens")) result.put("max_output_tokens", source.get("max_tokens"));
         Map<String, Object> outputConfig = objectOrEmpty(source.get("output_config"));
-        if (outputConfig.get("effort") instanceof String effort) result.put("reasoning", Map.of("effort", effort.equals("max") ? "xhigh" : effort));
+        if (outputConfig.get("effort") instanceof String effort) result.put("reasoning", Map.of("effort", effort));
+        if (source.get("service_tier") instanceof String tier) result.put("service_tier", tier);
+        else if ("fast".equals(source.get("speed"))) result.put("service_tier", "priority");
         if (outputConfig.get("format") instanceof Map<?, ?>) {
             Map<String, Object> format = Json.object(outputConfig.get("format"));
             if (!"json_schema".equals(format.get("type")) || !(format.get("schema") instanceof Map<?, ?>)) throw new IllegalArgumentException("该模型不支持此输出格式");

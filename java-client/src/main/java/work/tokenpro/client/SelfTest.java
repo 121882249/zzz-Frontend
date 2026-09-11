@@ -59,6 +59,7 @@ final class SelfTest {
         codexDesktopEnvironment.put("PATH", "");
         check(Platform.codexExecutable(Platform.OS.WINDOWS, "C:\\Users\\Test", codexDesktopEnvironment)
             .map(codexDesktopExecutable::equals).orElse(false), "Windows versioned Codex desktop executable"); passed++;
+        check(Platform.commandCandidateInstalled(Platform.OS.WINDOWS, "C:\\Users\\Test", codexDesktopEnvironment, "codex"), "CLI detection reuses versioned Codex resolver without PATH"); passed++;
         Files.deleteIfExists(codexDesktopExecutable);
         Files.deleteIfExists(codexDesktopExecutable.getParent());
         Files.deleteIfExists(codexDesktopExecutable.getParent().getParent());
@@ -75,7 +76,7 @@ final class SelfTest {
         check(Platform.windowsPackageNames("Codex").equals(List.of("OpenAI.Codex", "OpenAI.ChatGPT-Desktop")), "Windows Codex MSIX identities stay exact"); passed++;
         check(Platform.windowsPackageNames("Claude").equals(List.of("Claude")), "Windows Claude MSIX identity stays exact"); passed++;
         check(Platform.windowsApplicationIds("Codex").getFirst().equals("OpenAI.Codex_2p2nqsd0c76g0!App"), "Windows Codex MSIX launch identity"); passed++;
-        check(Platform.windowsApplicationIds("Claude").getFirst().contains("Claude"), "Windows Claude MSIX launch identity"); passed++;
+        check(Platform.windowsApplicationIds("Claude").isEmpty(), "Claude does not guess a publisher-specific launch identity"); passed++;
         Platform.InstallationSnapshot knownInstalled = new Platform.InstallationSnapshot(true, true, true, true);
         check(knownInstalled.equals(Platform.installationSnapshot(knownInstalled)), "installed application state is cached within a run"); passed++;
         Path installFixture = Files.createTempDirectory("tokenpro-install-detection-");
@@ -92,6 +93,14 @@ final class SelfTest {
             fixtureEnvironment.put("ProgramFiles", installFixture.resolve("program-files").toString());
             fixtureEnvironment.put("ProgramFiles(x86)", installFixture.resolve("program-files-x86").toString());
             fixtureEnvironment.put("ProgramData", installFixture.resolve("program-data").toString());
+            Path wingetClaude = Path.of(fixtureEnvironment.get("LOCALAPPDATA"), "Microsoft", "WinGet", "Packages", "Anthropic.ClaudeCode_test", "claude.exe");
+            Files.createDirectories(wingetClaude.getParent()); Files.writeString(wingetClaude, "fixture");
+            check(Platform.commandExecutable(Platform.OS.WINDOWS, fixtureHome, fixtureEnvironment, "claude").orElseThrow().equals(wingetClaude), "WinGet Claude is resolved without PATH or link"); passed++;
+            Files.delete(wingetClaude);
+            check(!Platform.commandCandidateInstalled(Platform.OS.WINDOWS, fixtureHome, fixtureEnvironment, "claude"), "empty WinGet package is not installed CLI"); passed++;
+            Path quotedCli = installFixture.resolve("tools with spaces").resolve("claude.exe");
+            Files.createDirectories(quotedCli.getParent()); Files.writeString(quotedCli, "fixture");
+            check(Platform.commandExecutable(Platform.OS.WINDOWS, fixtureHome, Map.of("Path", "\"" + quotedCli.getParent() + "\""), "claude").orElseThrow().equals(quotedCli), "Windows Path case and quoted spaces"); passed++;
             for (String client : List.of("Codex", "Claude")) {
                 Path candidate = fixtureApplicationCandidate(Platform.applicationCandidates(Platform.OS_KIND, fixtureHome, fixtureEnvironment, client), installFixture);
                 if (candidate.toString().endsWith(".app")) Files.createDirectories(candidate);
@@ -131,6 +140,23 @@ final class SelfTest {
         CodexConfig.applyReasoningProfile(shortNativeProfile, priced);
         check(((List<?>) shortNativeProfile.get("supported_reasoning_levels")).size() == 5 && "high".equals(shortNativeProfile.get("default_reasoning_level")), "short native profile expands to five levels"); passed++;
         check(CodexConfig.inferredReasoningEfforts(new PricedModel("gpt-image-2.5", "openai", "GPT", 17)).isEmpty(), "image model omits reasoning"); passed++;
+        Map<String, Object> sixLevelNative = new LinkedHashMap<>(Map.of(
+            "supported_reasoning_levels", List.of("low", "medium", "high", "xhigh", "max", "ultra").stream()
+                .map(level -> Map.of("effort", level, "description", level)).toList(),
+            "default_reasoning_level", "high",
+            "service_tiers", List.of(Map.of("id", "priority", "name", "Fast"), Map.of("id", "ultrafast", "name", "Ultrafast"))));
+        Map<String, Object> nativeExport = new LinkedHashMap<>();
+        CodexConfig.applyNativeCapabilities(nativeExport, priced, sixLevelNative);
+        check(nativeExport.get("supported_reasoning_levels").equals(sixLevelNative.get("supported_reasoning_levels")),
+            "native Ultra is retained for desktop and CLI catalogs"); passed++;
+        check(nativeExport.get("service_tiers").equals(sixLevelNative.get("service_tiers")),
+            "native lightning tiers retained without enabling them"); passed++;
+        check(!nativeExport.containsKey("default_service_tier"), "fast mode is not auto-enabled"); passed++;
+        CodexConfig.applyNativeCapabilities(nativeExport, priced, null);
+        check(((List<?>) nativeExport.get("supported_reasoning_levels")).size() == 5
+            && ((List<?>) nativeExport.get("service_tiers")).isEmpty(), "unknown models never inherit template Ultra or Fast"); passed++;
+        CodexConfig.applyNativeCapabilities(nativeExport, new PricedModel("gpt-image-2.5", "openai", "Images", 1), sixLevelNative);
+        check(((List<?>) nativeExport.get("supported_reasoning_levels")).isEmpty(), "image models never inherit reasoning levels"); passed++;
         check("GPT⁠-Image-2.5-Sunburst".equals(CodexConfig.catalogDisplayName(new PricedModel("gpt-image-2.5-sunburst", "openai", "GPT", 17))), "catalog omits model category"); passed++;
         check("Claude-Sonnet-5".equals(CodexConfig.catalogDisplayName(new PricedModel("claude-sonnet-5", "anthropic", "Claude", 17))), "LLM catalog uses model name only"); passed++;
         Map<String, Object> customModel = new LinkedHashMap<>(Map.of("use_responses_lite", true));
@@ -188,6 +214,25 @@ final class SelfTest {
         List<String> claudeOrdered = ModelPickerDialog.orderedModels(scattered, "Claude").stream().map(PricedModel::name).toList();
         check(claudeOrdered.equals(List.of("claude-sonnet-5", "gpt-5.6-sol", "gpt-5.6-terra", "grok-4.5", "gemini-3")), "Claude export keeps vendors together in picker order"); passed++;
         check(!ModelPickerDialog.supportsClient(imagePriced, "Claude") && ModelPickerDialog.supportsClient(imagePriced, "Codex"), "Claude filters image models"); passed++;
+        List<PricedModel> cliModels = new ArrayList<>(scattered);
+        cliModels.add(imagePriced); cliModels.add(richSubscription); cliModels.add(lowSubscription);
+        Map<String, Object> cliSettings = ClaudeCliConfig.settings(cliModels, "http://127.0.0.1:23179", "helper --claude-token");
+        Map<String, Object> cliPicker = Json.object(cliSettings.get("modelPicker"));
+        List<?> cliOptions = (List<?>) cliPicker.get("options");
+        List<String> cliAliases = cliOptions.stream().map(row -> String.valueOf(Json.object(row).get("model"))).toList();
+        List<String> desktopAliases = ModelPickerDialog.orderedModels(cliModels, "Claude").stream()
+            .map(model -> ClaudeBridgeConfig.Route.from(model).alias()).toList();
+        check(cliAliases.equals(desktopAliases), "Claude CLI internal picker exactly matches desktop filtering and ordering"); passed++;
+        check(Boolean.TRUE.equals(cliPicker.get("replaceBuiltInOptions")), "Claude CLI removes unrelated built-in models"); passed++;
+        check(cliAliases.getFirst().equals(cliSettings.get("model")), "Claude CLI default matches first ordered model"); passed++;
+        check(!cliAliases.contains(ClaudeBridgeConfig.Route.from(imagePriced).alias()), "Claude CLI never exports image models"); passed++;
+        check(Json.object(cliSettings.get("env")).get("ANTHROPIC_BASE_URL").equals("http://127.0.0.1:23179"), "Claude CLI uses local bridge"); passed++;
+        boolean imagesRejected = false;
+        try { ClaudeCliConfig.settings(List.of(imagePriced), "http://127.0.0.1:23179", "helper"); }
+        catch (IllegalArgumentException expected) { imagesRejected = true; }
+        check(imagesRejected, "Claude CLI rejects image-only selections"); passed++;
+        List<String> codexOrdered = ModelPickerDialog.orderedModels(scattered, "Codex").stream().map(PricedModel::name).toList();
+        check(codexOrdered.equals(List.of("gpt-5.6-sol", "gpt-5.6-terra", "claude-sonnet-5", "grok-4.5", "gemini-3")), "Codex shared ordering keeps GPT before other regular vendors"); passed++;
         PricedModel datedSubscription = new PricedModel("gpt-sub", "openai", "Monthly", 10, "token", 1d, 2d, List.of(), true, 30d, "2026-10-31T08:00:00Z");
         check(datedSubscription.subscriptionExpiryLabel().matches("到期 \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}"), "subscription expiry label includes minutes"); passed++;
         check(ModelPickerDialog.groupRank(new PricedModel("gpt-5.6", "openai", "GPT", 1))
@@ -243,6 +288,10 @@ final class SelfTest {
         } finally {
             try (var files = Files.walk(temporary)) { files.sorted(Comparator.reverseOrder()).forEach(path -> { try { Files.deleteIfExists(path); } catch (Exception ignored) {} }); }
         }
+        passed += CliIsolationTest.run();
+        passed += ApplicationLaunchTest.run();
+        passed += ModelCapabilitiesTest.run();
+        passed += ReleaseRegressionTest.run();
         System.out.println("TokenPro Java self-test: " + passed + " checks passed");
     }
     private static boolean pathsContain(List<Path> paths, String suffix) {

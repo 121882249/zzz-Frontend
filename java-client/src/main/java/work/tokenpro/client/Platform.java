@@ -74,7 +74,7 @@ final class Platform {
                 Path.of(environment.getOrDefault("APPDATA", home), "npm", "codex.cmd"));
             case LINUX -> Stream.of(Path.of("/usr/local/bin/codex"), Path.of("/usr/bin/codex"), Path.of(home, ".local", "bin", "codex"));
         }).toList());
-        return candidates.stream().filter(path -> os == OS.WINDOWS ? Files.isRegularFile(path) : Files.isExecutable(path)).findFirst();
+        return candidates.stream().filter(path -> cliCandidateUsable(os, "Codex", path)).findFirst();
     }
 
     private static long lastModified(Path path) {
@@ -102,10 +102,9 @@ final class Platform {
             }
         }
         else if (OS_KIND == OS.WINDOWS) {
-            Optional<Path> executable = applicationCandidates(OS.WINDOWS, System.getProperty("user.home"), System.getenv(), name)
-                .stream().filter(Files::exists).findFirst();
+            Optional<Path> executable = desktopApplicationPath(OS.WINDOWS, System.getProperty("user.home"), System.getenv(), name);
             if (executable.isPresent() && executable.get().toString().toLowerCase(Locale.ROOT).endsWith(".lnk")) {
-                process = new ProcessBuilder("cmd", "/c", "start", "", executable.get().toString()).start();
+                process = new ProcessBuilder(Path.of(System.getenv().getOrDefault("SystemRoot", "C:\\Windows"), "explorer.exe").toString(), executable.get().toString()).start();
             } else {
                 process = executable.isPresent()
                     ? new ProcessBuilder(executable.get().toString()).start()
@@ -113,9 +112,10 @@ final class Platform {
             }
         }
         else {
-            Optional<Path> executable = applicationCandidates(OS.LINUX, System.getProperty("user.home"), System.getenv(), name)
-                .stream().filter(Files::isExecutable).findFirst();
-            if (executable.isPresent()) process = new ProcessBuilder(executable.get().toString()).start();
+            Optional<Path> executable = desktopApplicationPath(OS.LINUX, System.getProperty("user.home"), System.getenv(), name);
+            if (executable.isPresent() && executable.get().toString().endsWith(".desktop"))
+                process = new ProcessBuilder("gtk-launch", executable.get().toString()).start();
+            else if (executable.isPresent()) process = new ProcessBuilder(executable.get().toString()).start();
             else {
                 String desktopId = name.equals("Codex") ? "chatgpt" : name.toLowerCase(Locale.ROOT);
                 process = new ProcessBuilder("gtk-launch", desktopId).start();
@@ -126,6 +126,7 @@ final class Platform {
 
     static boolean openClaudeThirdParty() throws IOException {
         if (OS_KIND != OS.MAC) return openApplication("Claude");
+        if (claudeThirdPartyRunning()) return openApplication("Claude");
         Path application = applicationPath("Claude").orElseThrow(() -> new IOException("没有找到 Claude 应用"));
         Path data = Path.of(System.getProperty("user.home"), "Library", "Application Support", "Claude-3p");
         Process process = new ProcessBuilder("open", "-na", application.toString(), "--args", "--user-data-dir=" + data).start();
@@ -141,59 +142,15 @@ final class Platform {
         String dataArgument = "--user-data-dir=" + Path.of(System.getProperty("user.home"), "Library", "Application Support", "Claude-3p");
         return ProcessHandle.allProcesses().anyMatch(process -> {
             ProcessHandle.Info info = process.info();
-            String command = info.command().orElse("").toLowerCase(Locale.ROOT);
-            if (!command.contains("claude")) return false;
+            String command = info.command().orElse("");
+            if (!desktopProcessMatches(OS_KIND, "Claude", command)) return false;
             if (OS_KIND != OS.MAC) return true;
             return Stream.of(info.arguments().orElse(new String[0])).anyMatch(dataArgument::equals);
         });
     }
 
-    static boolean restartApplication(String name) throws Exception {
-        if (OS_KIND == OS.MAC) {
-            String target = macApplicationTarget(name);
-            Process quit = new ProcessBuilder("osascript", "-e", "tell application \"" + target + "\" to quit").start();
-            if (!quit.waitFor(5, TimeUnit.SECONDS) || quit.exitValue() != 0) return false;
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
-            while (applicationRunning(target) && System.nanoTime() < deadline) Thread.sleep(200);
-            if (applicationRunning(target)) return false;
-            Process open = new ProcessBuilder("open", "-a", target).start();
-            return open.waitFor(5, TimeUnit.SECONDS) && open.exitValue() == 0;
-        }
-        if (OS_KIND == OS.WINDOWS) {
-            if (name.equals("Codex")) {
-                new ProcessBuilder("taskkill", "/IM", "Codex.exe", "/F").start().waitFor(5, TimeUnit.SECONDS);
-                new ProcessBuilder("taskkill", "/IM", "ChatGPT.exe", "/F").start().waitFor(5, TimeUnit.SECONDS);
-            } else new ProcessBuilder("taskkill", "/IM", name + ".exe", "/F").start().waitFor(5, TimeUnit.SECONDS);
-            Thread.sleep(350);
-            return openApplication(name);
-        }
-        new ProcessBuilder("pkill", "-x", name.toLowerCase(Locale.ROOT)).start().waitFor(3, TimeUnit.SECONDS);
-        if (name.equals("Codex")) new ProcessBuilder("pkill", "-x", "chatgpt").start().waitFor(3, TimeUnit.SECONDS);
-        Thread.sleep(350);
-        return openApplication(name);
-    }
-
-    static boolean reconnectApplication(String name) throws Exception {
-        if (OS_KIND == OS.MAC && !applicationRunning(macApplicationTarget(name))) return openApplication(name);
-        return restartApplication(name);
-    }
-
-    static boolean quitClaudeThirdParty() throws Exception {
-        if (!claudeThirdPartyRunning()) return true;
-        Process quit;
-        if (OS_KIND == OS.MAC) quit = new ProcessBuilder("osascript", "-e", "tell application \"Claude\" to quit").start();
-        else if (OS_KIND == OS.WINDOWS) quit = new ProcessBuilder("taskkill", "/IM", "Claude.exe", "/F").start();
-        else quit = new ProcessBuilder("pkill", "-x", "claude").start();
-        if (!quit.waitFor(5, TimeUnit.SECONDS) || (quit.exitValue() != 0 && claudeThirdPartyRunning())) return false;
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
-        while (claudeThirdPartyRunning() && System.nanoTime() < deadline) Thread.sleep(200);
-        return !claudeThirdPartyRunning();
-    }
-
-    private static boolean applicationRunning(String name) throws Exception {
-        Process process = new ProcessBuilder("pgrep", "-x", name).start();
-        return process.waitFor(2, TimeUnit.SECONDS) && process.exitValue() == 0;
-    }
+    // Launching an app must never terminate a same-named CLI process.
+    // There is deliberately no restart/quit-by-process-name helper here.
 
     private static String macApplicationTarget(String name) {
         return name.equals("Codex") && !applicationPath("Codex").map(Files::exists).orElse(false)
@@ -201,19 +158,126 @@ final class Platform {
     }
 
     static void openTerminalCommand(String command) throws IOException {
+        openTerminalCommand(command, List.of());
+    }
+
+    static void openTerminalCommand(String command, List<String> arguments) throws IOException {
+        openTerminalCommand(command, arguments, Map.of());
+    }
+
+    static void openTerminalCommand(String command, List<String> arguments, Map<String, String> environment) throws IOException {
+        openTerminalProgram(resolveCli(command), arguments, environment);
+    }
+
+    static Path resolveCli(String command) throws IOException {
         if (!command.matches("[a-zA-Z0-9._-]+")) throw new IllegalArgumentException("命令名称无效");
-        if (OS_KIND == OS.MAC) {
-            new ProcessBuilder("osascript", "-e", "tell application \"Terminal\" to do script \"" + command + "\"").start();
-        } else if (OS_KIND == OS.WINDOWS) {
-            if (nativeCommandInstalled(command)) new ProcessBuilder("cmd", "/c", "start", "", "cmd", "/k", command).start();
-            else new ProcessBuilder("cmd", "/c", "start", "", "wsl.exe", "-e", "sh", "-lc", command).start();
-        } else {
-            String terminal = Stream.of("x-terminal-emulator", "gnome-terminal", "konsole", "xterm")
-                .filter(Platform::commandInstalled).findFirst().orElseThrow(() -> new IOException("没有找到可用终端"));
-            if (terminal.equals("gnome-terminal")) new ProcessBuilder(terminal, "--", "bash", "-lc", command + "; exec bash").start();
-            else if (terminal.equals("konsole")) new ProcessBuilder(terminal, "-e", "bash", "-lc", command + "; exec bash").start();
-            else new ProcessBuilder(terminal, "-e", command).start();
+        Optional<Path> path = commandExecutable(OS_KIND, System.getProperty("user.home"), System.getenv(), command);
+        if (path.isPresent()) return path.get().toAbsolutePath();
+        if (OS_KIND != OS.WINDOWS) {
+            String shell = System.getenv().getOrDefault("SHELL", "/bin/sh");
+            if (!Path.of(shell).isAbsolute() || !Files.isExecutable(Path.of(shell))) shell = "/bin/sh";
+            for (String line : commandOutput(List.of(shell, "-lc", "command -v -- " + command), 3).lines().toList()) {
+                try {
+                    Path candidate = Path.of(line.trim());
+                    if (candidate.isAbsolute() && cliCandidateUsable(OS_KIND, command.equals("claude") ? "Claude" : "Codex", candidate))
+                        return candidate;
+                } catch (InvalidPathException ignored) {}
+            }
         }
+        throw new IOException("没有找到可启动的 " + command + " 命令行程序；WSL 需要在其环境中单独配置");
+    }
+
+    static int runCli(String command, List<String> arguments, Map<String, String> environment) throws Exception {
+        List<String> invocation = new ArrayList<>();
+        invocation.add(resolveCli(command).toString()); invocation.addAll(arguments);
+        ProcessBuilder process;
+        if(OS_KIND == OS.WINDOWS && invocation.getFirst().toLowerCase(Locale.ROOT).matches(".*\\.(cmd|bat)$")) {
+            StringBuilder script = new StringBuilder("$cliArgs=@(");
+            for(int i=0;i<arguments.size();i++) { if(i>0) script.append(','); script.append("$env:TOKENPRO_CLI_ARG_").append(i); }
+            script.append("); & $env:TOKENPRO_CLI_EXECUTABLE @cliArgs; exit $LASTEXITCODE");
+            String encoded = java.util.Base64.getEncoder().encodeToString(script.toString().getBytes(StandardCharsets.UTF_16LE));
+            process = new ProcessBuilder(windowsSystemExecutable("WindowsPowerShell\\v1.0\\powershell.exe"),
+                "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded).inheritIO();
+            process.environment().put("TOKENPRO_CLI_EXECUTABLE", invocation.getFirst());
+            for(int i=0;i<arguments.size();i++) process.environment().put("TOKENPRO_CLI_ARG_"+i, arguments.get(i));
+        } else process = new ProcessBuilder(invocation).inheritIO();
+        applyCliEnvironment(process, environment);
+        return process.start().waitFor();
+    }
+
+    static void openTerminalProgram(Path executable, List<String> arguments, Map<String, String> environment) throws IOException {
+        if (!executable.isAbsolute()) throw new IllegalArgumentException("启动路径必须是完整路径");
+        if (OS_KIND == OS.WINDOWS) {
+            // Encoded PowerShell reads individual arguments from child-only variables.
+            // No user path or API credential is interpolated into shell source.
+            StringBuilder script = new StringBuilder("$cliArgs=@(");
+            for (int i=0; i<arguments.size(); i++) {
+                if(i>0) script.append(',');
+                script.append("$env:TOKENPRO_CLI_ARG_").append(i);
+            }
+            script.append("); & $env:TOKENPRO_CLI_EXECUTABLE @cliArgs");
+            String encoded = java.util.Base64.getEncoder().encodeToString(script.toString().getBytes(StandardCharsets.UTF_16LE));
+            ProcessBuilder launcher = new ProcessBuilder("cmd", "/d", "/c", "start", "\"\"",
+                windowsSystemExecutable("WindowsPowerShell\\v1.0\\powershell.exe"),
+                "-NoProfile", "-NoExit", "-EncodedCommand", encoded);
+            applyCliEnvironment(launcher, environment);
+            launcher.environment().put("TOKENPRO_CLI_EXECUTABLE", executable.toString());
+            for(int i=0; i<arguments.size(); i++) launcher.environment().put("TOKENPRO_CLI_ARG_"+i, arguments.get(i));
+            launcher.start();
+        } else {
+            String command = posixCliCommand(executable.toString(), arguments, environment);
+            if(OS_KIND == OS.MAC) new ProcessBuilder("osascript", "-e", "tell application \"Terminal\" to do script \""
+                + command.replace("\\", "\\\\").replace("\"", "\\\"") + "\"").start();
+            else {
+                String terminal = Stream.of("x-terminal-emulator", "gnome-terminal", "konsole", "xterm")
+                    .filter(Platform::commandInstalled).findFirst().orElseThrow(() -> new IOException("没有找到可用终端"));
+                new ProcessBuilder(terminal, terminal.equals("gnome-terminal") ? "--" : "-e",
+                    "bash", "-lc", command + "; exec bash").start();
+            }
+        }
+    }
+
+    static String posixCliCommand(String executable, List<String> arguments, Map<String, String> environment) {
+        StringBuilder command = new StringBuilder("env ");
+        if(environment.containsKey("CLAUDE_CONFIG_DIR"))
+            for(String name : claudeInheritedOverrides()) command.append("-u ").append(name).append(' ');
+        for(var entry : environment.entrySet()) {
+            if(!entry.getKey().matches("[A-Z_]+")) throw new IllegalArgumentException("环境变量名称无效");
+            command.append(shellQuote(entry.getKey()+"="+entry.getValue())).append(' ');
+        }
+        command.append(shellQuote(executable));
+        for(String argument : arguments) command.append(' ').append(shellQuote(argument));
+        return command.toString();
+    }
+
+    private static String shellQuote(String value) { return "'" + value.replace("'", "'\\''") + "'"; }
+
+    private static void applyCliEnvironment(ProcessBuilder process, Map<String,String> environment) {
+        if(environment.containsKey("CLAUDE_CONFIG_DIR")) claudeInheritedOverrides().forEach(process.environment()::remove);
+        process.environment().remove("CLAUDE_HELPER_CONTEXT");
+        process.environment().putAll(environment);
+    }
+
+    private static List<String> claudeInheritedOverrides() {
+        return List.of("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL",
+            "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
+            "ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL");
+    }
+
+    static boolean claudeCliRunning() {
+        Optional<Path> executable = commandExecutable(OS_KIND, System.getProperty("user.home"), System.getenv(), "claude");
+        return ProcessHandle.allProcesses().anyMatch(process -> {
+            String command = process.info().command().orElse("");
+            if (executable.isPresent() && sameExecutable(executable.get(), command)) return true;
+            return Stream.of(process.info().arguments().orElse(new String[0]))
+                .anyMatch(argument -> argument.contains("@anthropic-ai") && argument.contains("claude-code"));
+        });
+    }
+
+    static boolean sameExecutable(Path expected, String actual) {
+        if(actual == null || actual.isBlank()) return false;
+        try { return Files.isSameFile(expected, Path.of(actual)); }
+        catch(IOException | InvalidPathException ignored) { return expected.toAbsolutePath().toString().equals(actual); }
     }
 
     static boolean applicationInstalled(String name) {
@@ -222,7 +286,7 @@ final class Platform {
         if (filesystemApplicationInstalled(OS_KIND, home, System.getenv(), name)) return true;
         return switch (OS_KIND) {
             case MAC -> macApplicationRegistered(name);
-            case WINDOWS -> applicationEvidenceMatches(name, windowsApplicationEvidence());
+            case WINDOWS -> windowsPackagedApplicationInstalled(name);
             case LINUX -> applicationEvidenceMatches(name, linuxApplicationEvidence());
         };
     }
@@ -243,9 +307,12 @@ final class Platform {
             if (!codexClient) codexClient = macApplicationRegistered("Codex");
             if (!claudeClient) claudeClient = macApplicationRegistered("Claude");
         }
+        if (OS_KIND == OS.WINDOWS) {
+            if (!codexClient) codexClient = windowsPackagedApplicationInstalled("Codex");
+            if (!claudeClient) claudeClient = windowsPackagedApplicationInstalled("Claude");
+        }
         if (!codexClient || !claudeClient) {
-            String evidence = OS_KIND == OS.WINDOWS ? windowsApplicationEvidence()
-                : OS_KIND == OS.LINUX ? linuxApplicationEvidence() : "";
+            String evidence = OS_KIND == OS.LINUX ? linuxApplicationEvidence() : "";
             if (!codexClient) codexClient = applicationEvidenceMatches("Codex", evidence);
             if (!claudeClient) claudeClient = applicationEvidenceMatches("Claude", evidence);
         }
@@ -261,25 +328,61 @@ final class Platform {
     }
 
     static boolean filesystemApplicationInstalled(OS os, String home, Map<String, String> environment, String name) {
-        if (applicationCandidates(os, home, environment, name).stream().anyMatch(Files::exists)) return true;
-        if (os != OS.WINDOWS) return false;
-        // Store/MSIX applications live below the protected WindowsApps directory.
-        // Do not try to crawl that directory: query the current user's package
-        // registration directly, using the official package identities instead.
-        if (OS_KIND == OS.WINDOWS && windowsPackagedApplicationInstalled(name)) return true;
-        List<String> executableNames = name.equals("Codex") ? List.of("codex.exe", "chatgpt.exe") : List.of("claude.exe");
+        return desktopApplicationPath(os, home, environment, name).isPresent();
+    }
+
+    static Optional<Path> desktopApplicationPath(OS os, String home, Map<String, String> environment, String name) {
+        Optional<Path> direct = applicationCandidates(os, home, environment, name).stream()
+            .filter(path -> desktopCandidateUsable(os, path)).findFirst();
+        if (direct.isPresent() || os != OS.WINDOWS) return direct;
+        List<Path> matches = new ArrayList<>();
         for (Path root : windowsVersionedInstallRoots(home, environment, name)) {
             if (!Files.isDirectory(root)) continue;
             try (Stream<Path> paths = Files.walk(root, 5)) {
-                if (paths.filter(Files::isRegularFile).anyMatch(path -> {
-                    String file = path.getFileName().toString().toLowerCase(Locale.ROOT);
-                    if (executableNames.contains(file)) return true;
-                    if (!file.endsWith(".lnk")) return false;
-                    return name.equals("Codex") ? file.contains("codex") || file.contains("chatgpt") : file.contains("claude");
-                })) return true;
-            } catch (Exception ignored) {}
+                paths.filter(path -> desktopCandidateUsable(os, path))
+                    .filter(path -> {
+                        String file = path.getFileName().toString().toLowerCase(Locale.ROOT);
+                        if (file.endsWith(".lnk")) return name.equals("Codex")
+                            ? file.equals("codex.lnk") || file.equals("chatgpt.lnk") : file.equals("claude.lnk");
+                        return desktopProcessMatches(OS.WINDOWS, name, path.toString());
+                    }).forEach(matches::add);
+            } catch (IOException ignored) {}
         }
-        return false;
+        return matches.stream().sorted(Comparator.comparingLong(Platform::lastModified).reversed()).findFirst();
+    }
+
+    private static boolean desktopCandidateUsable(OS os, Path path) {
+        if (cliInstallPath(path.toString())) return false;
+        if (os == OS.MAC) return Files.isDirectory(path) && path.toString().endsWith(".app");
+        if (!Files.isRegularFile(path)) return false;
+        String file = path.getFileName().toString().toLowerCase(Locale.ROOT);
+        if (os == OS.WINDOWS) return file.endsWith(".exe") || file.endsWith(".lnk");
+        return file.endsWith(".desktop") || Files.isExecutable(path);
+    }
+
+    private static boolean cliInstallPath(String value) {
+        String path = value.replace('\\', '/').toLowerCase(Locale.ROOT);
+        return path.contains("/npm/") || path.contains("/.claude/") || path.contains("/.local/bin/")
+            || path.contains("/resources/") || path.contains("/openai/codex/bin/")
+            || path.contains("claudecode") || path.contains("claude-code")
+            || path.contains("/winget/packages/openai.codex_");
+    }
+
+    static boolean desktopProcessMatches(OS os, String name, String value) {
+        if (value == null || value.isBlank() || cliInstallPath(value)) return false;
+        String path = value.replace('\\', '/').toLowerCase(Locale.ROOT);
+        String lower = name.toLowerCase(Locale.ROOT);
+        if (os == OS.MAC) return path.endsWith("/" + lower + ".app/contents/macos/" + lower);
+        if (os == OS.WINDOWS) {
+            if (name.equals("Claude")) return path.endsWith("/claude.exe")
+                && (path.contains("/windowsapps/claude_") || path.contains("/claude/")
+                    || path.contains("/anthropicclaude/") || path.contains("/anthropic.claude_"));
+            return (path.endsWith("/codex.exe") || path.endsWith("/chatgpt.exe"))
+                && (path.contains("/windowsapps/openai.codex_") || path.contains("/windowsapps/openai.chatgpt-desktop_")
+                    || path.contains("/codex/") || path.contains("/chatgpt/"));
+        }
+        return path.endsWith("/" + lower + ".appimage")
+            || path.endsWith("/opt/" + lower + "/" + lower);
     }
 
     static List<Path> windowsVersionedInstallRoots(String home, Map<String, String> environment, String name) {
@@ -333,7 +436,7 @@ final class Platform {
             for (String root : List.of(local + "\\Programs", local, programFiles, programFilesX86)) {
                 for (String folder : folders) for (String executable : executables) paths.add(Path.of(root, folder, executable));
             }
-            for (String executable : executables) paths.add(Path.of(local, "Microsoft", "WindowsApps", executable));
+            // Store apps use their registered AUMID; a command alias can belong to a CLI.
             List<String> shortcutNames = name.equals("Codex") ? List.of("Codex.lnk", "ChatGPT.lnk") : List.of("Claude.lnk");
             for (String shortcut : shortcutNames) {
                 paths.add(Path.of(roaming, "Microsoft", "Windows", "Start Menu", "Programs", shortcut));
@@ -353,8 +456,6 @@ final class Platform {
         String lower = name.toLowerCase(Locale.ROOT);
         List<Path> paths = new ArrayList<>(List.of(
             Path.of("/opt", lower, lower), Path.of("/opt", name, lower),
-            Path.of("/usr/local/bin", lower), Path.of("/usr/bin", lower),
-            Path.of(home, ".local", "bin", lower),
             Path.of(home, "Applications", name + ".AppImage"),
             Path.of("/usr/share/applications", lower + ".desktop"),
             Path.of(home, ".local", "share", "applications", lower + ".desktop")));
@@ -385,45 +486,43 @@ final class Platform {
     static List<String> windowsApplicationIds(String name) {
         return name.equals("Codex")
             ? List.of("OpenAI.Codex_2p2nqsd0c76g0!App", "OpenAI.ChatGPT-Desktop_2p2nqsd0c76g0!App")
-            : List.of("Claude_Anthropic!Claude");
+            : List.of();
+    }
+
+    static boolean windowsApplicationIdMatches(String name, String id) {
+        if (id == null) return false;
+        return name.equals("Codex")
+            ? id.matches("(?i)^OpenAI\\.(Codex|ChatGPT-Desktop)_[a-z0-9]+!App$")
+            : name.equals("Claude") && id.matches("(?i)^Claude_[a-z0-9]+!Claude$");
+    }
+
+    static Optional<String> registeredWindowsApplicationId(String name) {
+        String packages = windowsPackageNames(name).stream().map(value -> "'" + value + "'")
+            .collect(java.util.stream.Collectors.joining(","));
+        String script = "$ErrorActionPreference='SilentlyContinue';"
+            + "Get-StartApps | Where-Object {$_.AppID -match '^(Claude_|OpenAI\\.)'} | ForEach-Object {$_.AppID};"
+            + "foreach($name in @(" + packages + ")){Get-AppxPackage -Name $name | ForEach-Object {"
+            + "$pkg=$_; $manifest=Get-AppxPackageManifest -Package $pkg.PackageFullName;"
+            + "$manifest.Package.Applications.Application | ForEach-Object {$pkg.PackageFamilyName+'!'+$_.Id}}}";
+        String output = commandOutput(List.of(windowsSystemExecutable("WindowsPowerShell\\v1.0\\powershell.exe"),
+            "-NoProfile", "-NonInteractive", "-Command", script), 10);
+        return output.lines().map(String::trim).filter(id -> windowsApplicationIdMatches(name, id)).findFirst();
+    }
+
+    static List<String> windowsPackagedLaunchCommand(String name, String id, String systemRoot) {
+        if (!windowsApplicationIdMatches(name, id)) throw new IllegalArgumentException("应用启动 ID 不匹配");
+        return List.of(Path.of(systemRoot, "explorer.exe").toString(), "shell:AppsFolder\\" + id);
     }
 
     private static Process openWindowsPackagedApplication(String name) throws IOException {
-        List<String> ids = windowsApplicationIds(name);
-        String quotedIds = ids.stream().map(value -> "'" + value.replace("'", "''") + "'")
-            .collect(java.util.stream.Collectors.joining(","));
-        String script = "$ids=@(" + quotedIds + ");"
-            + "$match=Get-StartApps | Where-Object {$ids -contains $_.AppID} | Select-Object -First 1 -ExpandProperty AppID;"
-            + "if($match){Write-Output $match}";
-        String registered = commandOutput(List.of(windowsSystemExecutable("WindowsPowerShell\\v1.0\\powershell.exe"),
-            "-NoProfile", "-NonInteractive", "-Command", script), 5);
-        String applicationId = registered.isBlank() ? ids.getFirst() : registered.lines().findFirst().orElse(ids.getFirst()).trim();
-        Path explorer = Path.of(System.getenv().getOrDefault("SystemRoot", "C:\\Windows"), "explorer.exe");
-        String launcher = Files.isRegularFile(explorer) ? explorer.toString() : "explorer.exe";
-        return new ProcessBuilder(launcher, "shell:AppsFolder\\" + applicationId).start();
+        String id = registeredWindowsApplicationId(name)
+            .orElseThrow(() -> new IOException("没有找到 " + name + " 客户端的有效启动入口，请确认已安装桌面应用并重新检测"));
+        return new ProcessBuilder(windowsPackagedLaunchCommand(name, id,
+            System.getenv().getOrDefault("SystemRoot", "C:\\Windows"))).start();
     }
 
     private static boolean windowsPackagedApplicationInstalled(String name) {
-        if (windowsPackagedProcessRunning(name)) return true;
-        if (windowsProtocolRegistered(name)) return true;
-        if (windowsPackageRepositoryRegistered(name)) return true;
-
-        String packages = windowsPackageNames(name).stream()
-            .map(value -> "'" + value.replace("'", "''") + "'")
-            .collect(java.util.stream.Collectors.joining(","));
-        String startApps = name.equals("Codex")
-            ? "$ids=@('OpenAI.Codex_2p2nqsd0c76g0!App','OpenAI.ChatGPT-Desktop_2p2nqsd0c76g0!App');"
-                + "if(@(Get-StartApps | Where-Object {$ids -contains $_.AppID}).Count -gt 0){exit 0};"
-            : "if(@(Get-StartApps | Where-Object {$_.AppID -match '(?i)^Claude_.*!Claude$'}).Count -gt 0){exit 0};";
-        String script = "$ErrorActionPreference='SilentlyContinue';"
-            + "$packages=@(" + packages + ");"
-            + "foreach($package in $packages){"
-            + "if(@(Get-AppxPackage -Name $package -ErrorAction SilentlyContinue).Count -gt 0){exit 0}"
-            + "};" + startApps + "exit 1";
-        // Use the system executable explicitly because GUI applications do not
-        // always inherit the same PATH as an interactive Windows terminal.
-        return silentCommandSucceeded(List.of(windowsSystemExecutable("WindowsPowerShell\\v1.0\\powershell.exe"),
-            "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script), 15);
+        return registeredWindowsApplicationId(name).isPresent();
     }
 
     private static boolean windowsProtocolRegistered(String name) {
@@ -507,22 +606,52 @@ final class Platform {
     }
 
     static boolean commandCandidateInstalled(OS os, String home, Map<String, String> environment, String command) {
+        return commandExecutable(os, home, environment, command).isPresent();
+    }
+
+    static Optional<Path> commandExecutable(OS os, String home, Map<String, String> environment, String command) {
+        if (command.equals("codex")) return codexExecutable(os, home, environment);
         return commandCandidates(os, home, environment, command).stream()
-            .anyMatch(path -> os == OS.WINDOWS ? Files.isRegularFile(path) : Files.isExecutable(path));
+            .filter(path -> cliCandidateUsable(os, command.equals("claude") ? "Claude" : command, path)).findFirst();
+    }
+
+    private static boolean cliCandidateUsable(OS os, String client, Path path) {
+        String normalized = path.toString().replace('\\', '/').toLowerCase(Locale.ROOT);
+        if ((client.equals("Codex") || client.equals("Claude")) && (desktopProcessMatches(os, client, normalized)
+            || normalized.contains("/microsoft/windowsapps/"))) return false;
+        return os == OS.WINDOWS ? Files.isRegularFile(path) : Files.isExecutable(path);
     }
 
     static List<Path> commandCandidates(OS os, String home, Map<String, String> environment, String command) {
-        String pathValue = environment.getOrDefault("PATH", "");
+        String pathValue = environment.entrySet().stream()
+            .filter(entry -> os == OS.WINDOWS ? entry.getKey().equalsIgnoreCase("PATH") : entry.getKey().equals("PATH"))
+            .map(Map.Entry::getValue).findFirst().orElse("");
         String separator = os == OS.WINDOWS ? ";" : ":";
         List<String> suffixes = os == OS.WINDOWS ? List.of(".exe", ".cmd", ".bat", "") : List.of("");
         List<Path> candidates = new ArrayList<>();
         for (String entry : pathValue.split(java.util.regex.Pattern.quote(separator))) {
             if (entry.isBlank()) continue;
-            for (String suffix : suffixes) candidates.add(Path.of(entry).resolve(command + suffix));
+            entry = entry.trim();
+            if (entry.startsWith("\"") && entry.endsWith("\"") && entry.length() >= 2) entry = entry.substring(1, entry.length() - 1);
+            if (entry.isBlank()) continue;
+            try {
+                for (String suffix : suffixes) candidates.add(Path.of(entry).resolve(command + suffix));
+            } catch (InvalidPathException ignored) {}
         }
         if (os == OS.WINDOWS) {
             String roaming = environment.getOrDefault("APPDATA", home);
             String local = environment.getOrDefault("LOCALAPPDATA", home);
+            String packagePrefix = command.equals("claude") ? "Anthropic.ClaudeCode_"
+                : command.equals("codex") ? "OpenAI.Codex_" : "";
+            Path packages = Path.of(local, "Microsoft", "WinGet", "Packages");
+            if (!packagePrefix.isEmpty() && Files.isDirectory(packages)) {
+                try (Stream<Path> entries = Files.list(packages)) {
+                    entries.filter(Files::isDirectory)
+                        .filter(path -> path.getFileName().toString().toLowerCase(Locale.ROOT).startsWith(packagePrefix.toLowerCase(Locale.ROOT)))
+                        .sorted(Comparator.comparingLong(Platform::lastModified).reversed())
+                        .map(path -> path.resolve(command + ".exe")).forEach(candidates::add);
+                } catch (IOException ignored) {}
+            }
             for (String suffix : suffixes) {
                 candidates.add(Path.of(roaming, "npm", command + suffix));
                 candidates.add(Path.of(home, ".local", "bin", command + suffix));
