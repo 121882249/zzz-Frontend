@@ -7,6 +7,7 @@ Remove-Item -Force build/TokenPro-update.jar -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force build/classes | Out-Null
 $sources = Get-ChildItem -Recurse src/main/java -Filter *.java | ForEach-Object FullName
 & "$env:JAVA_HOME/bin/javac.exe" --release 21 --add-modules jdk.httpserver -encoding UTF-8 -d build/classes $sources
+if ($LASTEXITCODE -ne 0) { throw "javac failed with exit code $LASTEXITCODE" }
 New-Item -ItemType Directory -Force build/classes/assets | Out-Null
 Copy-Item ../Resources/TokenProCosmosIcon.png build/classes/assets/TokenProCosmosIcon.png
 Copy-Item ../Resources/LoginCosmos-v2.png build/classes/assets/LoginCosmos-v2.png
@@ -28,10 +29,13 @@ Copy-Item ../Resources/PlusLucide.png build/classes/assets/PlusLucide.png
 @"
 Main-Class: work.tokenpro.client.Main
 Implementation-Title: TokenPro
-Implementation-Version: 1.2.56
+Implementation-Version: 1.2.57
 
 "@ | Set-Content -Encoding ascii build/manifest.mf
 & "$env:JAVA_HOME/bin/jar.exe" --create --file build/TokenPro.jar --manifest build/manifest.mf -C build/classes .
+if ($LASTEXITCODE -ne 0) { throw "TokenPro.jar packaging failed with exit code $LASTEXITCODE" }
 & "$env:JAVA_HOME/bin/jar.exe" --create --file build/TokenPro-update.jar --no-manifest -C build/classes work
+if ($LASTEXITCODE -ne 0) { throw "TokenPro-update.jar packaging failed with exit code $LASTEXITCODE" }
 & "$env:JAVA_HOME/bin/java.exe" -jar build/TokenPro.jar --self-test
+if ($LASTEXITCODE -ne 0) { throw "self-test failed with exit code $LASTEXITCODE" }
 Write-Host "Built java-client/build/TokenPro.jar and TokenPro-update.jar"

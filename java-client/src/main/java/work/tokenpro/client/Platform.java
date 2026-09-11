@@ -7,6 +7,7 @@ import java.nio.file.*;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -43,8 +44,24 @@ final class Platform {
     }
 
     static Optional<Path> codexExecutable() {
-        String home = System.getProperty("user.home");
-        Stream<Path> candidates = switch (OS_KIND) {
+        return codexExecutable(OS_KIND, System.getProperty("user.home"), System.getenv());
+    }
+
+    static Optional<Path> codexExecutable(OS os, String home, Map<String, String> environment) {
+        List<Path> candidates = new ArrayList<>(commandCandidates(os, home, environment, "codex"));
+        if (os == OS.WINDOWS) {
+            Path versionedBin = Path.of(environment.getOrDefault("LOCALAPPDATA", home), "OpenAI", "Codex", "bin");
+            candidates.add(versionedBin.resolve("codex.exe"));
+            if (Files.isDirectory(versionedBin)) {
+                try (Stream<Path> versions = Files.list(versionedBin)) {
+                    versions.filter(Files::isDirectory)
+                        .sorted(Comparator.comparingLong(Platform::lastModified).reversed())
+                        .map(path -> path.resolve("codex.exe"))
+                        .forEach(candidates::add);
+                } catch (IOException ignored) {}
+            }
+        }
+        candidates.addAll((switch (os) {
             case MAC -> Stream.of(
                 Path.of("/Applications", "Codex.app", "Contents", "Resources", "codex"),
                 Path.of(home, "Applications", "Codex.app", "Contents", "Resources", "codex"),
@@ -52,12 +69,17 @@ final class Platform {
                 Path.of(home, "Applications", "ChatGPT.app", "Contents", "Resources", "codex"),
                 Path.of("/opt/homebrew/bin/codex"), Path.of("/usr/local/bin/codex"));
             case WINDOWS -> Stream.of(
-                Path.of(System.getenv().getOrDefault("LOCALAPPDATA", home), "Programs", "Codex", "resources", "codex.exe"),
-                Path.of(System.getenv().getOrDefault("LOCALAPPDATA", home), "Programs", "ChatGPT", "resources", "codex.exe"),
-                Path.of(System.getenv().getOrDefault("APPDATA", home), "npm", "codex.cmd"));
+                Path.of(environment.getOrDefault("LOCALAPPDATA", home), "Programs", "Codex", "resources", "codex.exe"),
+                Path.of(environment.getOrDefault("LOCALAPPDATA", home), "Programs", "ChatGPT", "resources", "codex.exe"),
+                Path.of(environment.getOrDefault("APPDATA", home), "npm", "codex.cmd"));
             case LINUX -> Stream.of(Path.of("/usr/local/bin/codex"), Path.of("/usr/bin/codex"), Path.of(home, ".local", "bin", "codex"));
-        };
-        return candidates.filter(Files::isRegularFile).findFirst();
+        }).toList());
+        return candidates.stream().filter(path -> os == OS.WINDOWS ? Files.isRegularFile(path) : Files.isExecutable(path)).findFirst();
+    }
+
+    private static long lastModified(Path path) {
+        try { return Files.getLastModifiedTime(path).toMillis(); }
+        catch (IOException ignored) { return Long.MIN_VALUE; }
     }
 
     static void browse(String url) throws Exception {

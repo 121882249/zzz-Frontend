@@ -47,6 +47,21 @@ final class SelfTest {
         check(pathsContain(Platform.applicationCandidates(Platform.OS.LINUX, "/home/test", Map.of(), "Codex"), "/opt/chatgpt/chatgpt"), "Linux ChatGPT Codex desktop candidate"); passed++;
         check(pathsContain(Platform.commandCandidates(Platform.OS.MAC, "/Users/test", Map.of("PATH", ""), "claude"), ".claude/local/claude"), "macOS Claude CLI candidates"); passed++;
         check(pathsContain(Platform.commandCandidates(Platform.OS.WINDOWS, "C:\\Users\\Test", windowsEnvironment, "codex"), "npm/codex.cmd"), "Windows Codex CLI candidates"); passed++;
+        Path codexLocal = Files.createTempDirectory("tokenpro-codex-local-");
+        Path codexDesktopExecutable = codexLocal.resolve(Path.of("OpenAI", "Codex", "bin", "release-hash", "codex.exe"));
+        Files.createDirectories(codexDesktopExecutable.getParent());
+        Files.writeString(codexDesktopExecutable, "fixture");
+        Map<String, String> codexDesktopEnvironment = new HashMap<>(windowsEnvironment);
+        codexDesktopEnvironment.put("LOCALAPPDATA", codexLocal.toString());
+        codexDesktopEnvironment.put("PATH", "");
+        check(Platform.codexExecutable(Platform.OS.WINDOWS, "C:\\Users\\Test", codexDesktopEnvironment)
+            .map(codexDesktopExecutable::equals).orElse(false), "Windows versioned Codex desktop executable"); passed++;
+        Files.deleteIfExists(codexDesktopExecutable);
+        Files.deleteIfExists(codexDesktopExecutable.getParent());
+        Files.deleteIfExists(codexDesktopExecutable.getParent().getParent());
+        Files.deleteIfExists(codexDesktopExecutable.getParent().getParent().getParent());
+        Files.deleteIfExists(codexDesktopExecutable.getParent().getParent().getParent().getParent());
+        Files.deleteIfExists(codexLocal);
         check(pathsContain(Platform.commandCandidates(Platform.OS.WINDOWS, "C:\\Users\\Test", windowsEnvironment, "claude"), "WinGet/Links/claude.exe"), "Windows CLI discovery includes WinGet links"); passed++;
         check(pathsContain(Platform.commandCandidates(Platform.OS.LINUX, "/home/test", Map.of("PATH", ""), "codex"), ".local/bin/codex"), "Linux Codex CLI candidates"); passed++;
         check(Platform.applicationEvidenceMatches("Codex", "OpenAI.ChatGPT_2026.9_x64"), "Windows Store ChatGPT evidence"); passed++;
