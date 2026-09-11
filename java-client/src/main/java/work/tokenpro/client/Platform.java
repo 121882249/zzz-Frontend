@@ -230,7 +230,7 @@ final class Platform {
         return new InstallationSnapshot(codexClient, claudeClient, codexCli, claudeCli);
     }
 
-    private static boolean filesystemApplicationInstalled(OS os, String home, Map<String, String> environment, String name) {
+    static boolean filesystemApplicationInstalled(OS os, String home, Map<String, String> environment, String name) {
         if (applicationCandidates(os, home, environment, name).stream().anyMatch(Files::exists)) return true;
         if (os != OS.WINDOWS) return false;
         List<String> executableNames = name.equals("Codex") ? List.of("codex.exe", "chatgpt.exe") : List.of("claude.exe");
@@ -344,13 +344,18 @@ final class Platform {
     private static boolean nativeCommandInstalled(String command) {
         String home = System.getProperty("user.home");
         Map<String, String> environment = System.getenv();
-        if (commandCandidates(OS_KIND, home, environment, command).stream().anyMatch(path -> Files.isRegularFile(path) || Files.isExecutable(path))) return true;
+        if (commandCandidateInstalled(OS_KIND, home, environment, command)) return true;
         String loginShell = environment.getOrDefault("SHELL", "/bin/sh");
         if (!Path.of(loginShell).isAbsolute() || !Files.isExecutable(Path.of(loginShell))) loginShell = "/bin/sh";
         List<String> lookup = OS_KIND == OS.WINDOWS
             ? List.of("where.exe", command)
             : List.of(loginShell, "-lc", "command -v -- " + command);
         return !commandOutput(lookup, 3).isBlank();
+    }
+
+    static boolean commandCandidateInstalled(OS os, String home, Map<String, String> environment, String command) {
+        return commandCandidates(os, home, environment, command).stream()
+            .anyMatch(path -> os == OS.WINDOWS ? Files.isRegularFile(path) : Files.isExecutable(path));
     }
 
     static List<Path> commandCandidates(OS os, String home, Map<String, String> environment, String command) {

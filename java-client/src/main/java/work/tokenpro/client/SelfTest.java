@@ -50,6 +50,30 @@ final class SelfTest {
         check(!Platform.applicationEvidenceMatches("Claude", "OpenAI.ChatGPT"), "desktop evidence does not cross vendors"); passed++;
         Platform.InstallationSnapshot knownInstalled = new Platform.InstallationSnapshot(true, true, true, true);
         check(knownInstalled.equals(Platform.installationSnapshot(knownInstalled)), "installed application state is cached within a run"); passed++;
+        Path installFixture = Files.createTempDirectory("tokenpro-install-detection-");
+        try {
+            String fixtureHome = installFixture.resolve("home").toString();
+            Map<String, String> fixtureEnvironment = new HashMap<>();
+            fixtureEnvironment.put("PATH", "");
+            fixtureEnvironment.put("LOCALAPPDATA", installFixture.resolve("local").toString());
+            fixtureEnvironment.put("APPDATA", installFixture.resolve("roaming").toString());
+            fixtureEnvironment.put("ProgramFiles", installFixture.resolve("program-files").toString());
+            fixtureEnvironment.put("ProgramFiles(x86)", installFixture.resolve("program-files-x86").toString());
+            fixtureEnvironment.put("ProgramData", installFixture.resolve("program-data").toString());
+            for (String client : List.of("Codex", "Claude")) {
+                Path candidate = fixtureApplicationCandidate(Platform.applicationCandidates(Platform.OS_KIND, fixtureHome, fixtureEnvironment, client), installFixture);
+                if (candidate.toString().endsWith(".app")) Files.createDirectories(candidate);
+                else { Files.createDirectories(candidate.getParent()); Files.writeString(candidate, "fixture"); }
+                check(Platform.filesystemApplicationInstalled(Platform.OS_KIND, fixtureHome, fixtureEnvironment, client), Platform.OS_KIND + " " + client + " desktop fixture detection"); passed++;
+            }
+            for (String command : List.of("codex", "claude")) {
+                Path candidate = fixtureCommandCandidate(Platform.commandCandidates(Platform.OS_KIND, fixtureHome, fixtureEnvironment, command), installFixture);
+                Files.createDirectories(candidate.getParent()); Files.writeString(candidate, "fixture"); candidate.toFile().setExecutable(true);
+                check(Platform.commandCandidateInstalled(Platform.OS_KIND, fixtureHome, fixtureEnvironment, command), Platform.OS_KIND + " " + command + " CLI fixture detection"); passed++;
+            }
+        } finally {
+            try (var paths = Files.walk(installFixture)) { paths.sorted(Comparator.reverseOrder()).forEach(path -> { try { Files.deleteIfExists(path); } catch (Exception ignored) {} }); }
+        }
         check("user@example.com".equals(ClaudeDesktopConfig.deploymentDisplayName(" user@example.com "))
             && "用户账户".equals(ClaudeDesktopConfig.deploymentDisplayName("")), "Claude account display name"); passed++;
         PricedModel priced = new PricedModel("gpt-test", "openai", "GPT", 16);
@@ -189,6 +213,14 @@ final class SelfTest {
     private static boolean pathsContain(List<Path> paths, String suffix) {
         String normalizedSuffix = suffix.replace('\\', '/').toLowerCase(Locale.ROOT);
         return paths.stream().map(Path::toString).map(value -> value.replace('\\', '/').toLowerCase(Locale.ROOT)).anyMatch(value -> value.contains(normalizedSuffix));
+    }
+    private static Path fixtureApplicationCandidate(List<Path> paths, Path fixtureRoot) {
+        return paths.stream().filter(path -> path.normalize().startsWith(fixtureRoot.normalize()))
+            .filter(path -> Platform.OS_KIND != Platform.OS.LINUX || path.toString().endsWith(".desktop") || path.toString().endsWith(".AppImage"))
+            .findFirst().orElseThrow();
+    }
+    private static Path fixtureCommandCandidate(List<Path> paths, Path fixtureRoot) {
+        return paths.stream().filter(path -> path.normalize().startsWith(fixtureRoot.normalize())).findFirst().orElseThrow();
     }
     private static void check(boolean value, String label) { if (!value) throw new AssertionError(label); }
 }

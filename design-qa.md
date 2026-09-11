@@ -50,6 +50,6 @@ The combined comparison confirms the same name-before-logo ordering, rounded con
 - [x] Starfield-visible translucent surfaces
 - [x] “更多模型” retained
 - [x] Premium models scroll from right to left
-- [x] Java build and 82 self-tests pass
+- [x] Java build and 86 self-tests pass
 
 final result: passed
