@@ -150,7 +150,12 @@ final class Updater {
     }
 
     private static void installMacIncremental(Path source, long pid, Path target, Path application, String version) throws Exception {
-        String body = """
+        Path script = script("tokenpro-update-", ".sh", macIncrementalScript());
+        startUpdater(new ProcessBuilder("/bin/sh", script.toString(), Long.toString(pid), source.toString(), target.toString(), application.toString(), version));
+    }
+
+    static String macIncrementalScript() {
+        return """
             #!/bin/sh
             set -eu
             pid="$1"
@@ -166,39 +171,65 @@ final class Updater {
               mkdir "$lock"
             fi
             echo $$ > "$lock/pid"
-            backup_dir=$(mktemp -d "${TMPDIR:-/tmp}/tokenpro-update-backup.XXXXXX")
-            trap 'rm -rf "$lock" "$backup_dir"' EXIT
+            work_dir=$(mktemp -d "${TMPDIR:-/tmp}/tokenpro-update-work.XXXXXX")
+            trap 'rm -rf "$lock" "$work_dir"' EXIT
             while kill -0 "$pid" 2>/dev/null; do sleep 0.2; done
             /usr/bin/pkill -f "$application/Contents/MacOS/TokenPro" 2>/dev/null || true
-            while /usr/bin/pgrep -f "$application/Contents/MacOS/TokenPro" >/dev/null 2>&1; do sleep 0.2; done
-            backup="$backup_dir/TokenPro.jar"
+            attempts=0
+            while /usr/bin/pgrep -f "$application/Contents/MacOS/TokenPro" >/dev/null 2>&1 && [ "$attempts" -lt 25 ]; do
+              sleep 0.2
+              attempts=$((attempts + 1))
+            done
+            helper="$work_dir/apply-update.sh"
+            cat > "$helper" <<'TOKENPRO_HELPER'
+            #!/bin/sh
+            set -eu
+            source="$1"
+            target="$2"
+            application="$3"
+            version="$4"
+            backup_dir="$5"
             plist="$application/Contents/Info.plist"
+            backup="$backup_dir/TokenPro.jar"
             plist_backup="$backup_dir/Info.plist"
             cp "$target" "$backup"
             cp "$plist" "$plist_backup"
-            if mv "$source" "$target"; then
-              chmod 0644 "$target"
-              /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$plist" || true
-              /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $version" "$plist" || true
-              if /usr/bin/codesign --force --deep --sign - "$application"; then
-                rm -f "$backup" "$plist_backup"
-              else
-                mv "$backup" "$target"
-                mv "$plist_backup" "$plist"
-                /usr/bin/codesign --force --deep --sign - "$application" || true
-                exit 1
-              fi
-            else
-              mv "$backup" "$target"
-              mv "$plist_backup" "$plist"
-              exit 1
+            rollback() {
+              cp "$backup" "$target" 2>/dev/null || true
+              cp "$plist_backup" "$plist" 2>/dev/null || true
+              /usr/bin/codesign --force --deep --sign - "$application" >/dev/null 2>&1 || true
+            }
+            trap rollback EXIT HUP INT TERM
+            cp "$source" "$target.next"
+            chmod 0644 "$target.next"
+            mv -f "$target.next" "$target"
+            /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$plist" || true
+            /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $version" "$plist" || true
+            /usr/bin/xattr -cr "$application" 2>/dev/null || true
+            /usr/bin/codesign --force --deep --sign - "$application"
+            trap - EXIT HUP INT TERM
+            TOKENPRO_HELPER
+            chmod 0700 "$helper"
+            backup_dir="$work_dir/backup"
+            mkdir "$backup_dir"
+            if ! "$helper" "$source" "$target" "$application" "$version" "$backup_dir"; then
+              rm -rf "$backup_dir"
+              mkdir "$backup_dir"
+              /usr/bin/osascript - "$helper" "$source" "$target" "$application" "$version" "$backup_dir" <<'TOKENPRO_APPLESCRIPT'
+            on run argv
+              set commandText to quoted form of item 1 of argv
+              repeat with argumentIndex from 2 to count of argv
+                set commandText to commandText & space & quoted form of item argumentIndex of argv
+              end repeat
+              do shell script commandText with administrator privileges
+            end run
+            TOKENPRO_APPLESCRIPT
             fi
             sleep 1
             /usr/bin/open -n "$application"
+            rm -f "$source"
             rm -f "$0"
             """;
-        Path script = script("tokenpro-update-", ".sh", body);
-        startUpdater(new ProcessBuilder("/bin/sh", script.toString(), Long.toString(pid), source.toString(), target.toString(), application.toString(), version));
     }
 
     private static void installWindows(Path installer, long pid, String command) throws Exception {

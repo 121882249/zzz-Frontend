@@ -8,6 +8,11 @@ import java.time.Duration;
 import java.util.*;
 
 final class ApiClient {
+    static final class ApiException extends IllegalStateException {
+        private final int status;
+        ApiException(int status, String message) { super(message); this.status = status; }
+        int status() { return status; }
+    }
     private static final String BASE = "https://tokenpro.work/api/v1";
     private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).followRedirects(HttpClient.Redirect.NEVER).build();
 
@@ -307,7 +312,13 @@ final class ApiClient {
         if (body == null) request.method(method, HttpRequest.BodyPublishers.noBody());
         else request.header("Content-Type", "application/json").method(method, HttpRequest.BodyPublishers.ofString(Json.stringify(body)));
         HttpResponse<String> response = client.send(request.build(), HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() < 200 || response.statusCode() >= 300) throw new IllegalStateException("TokenPro 服务返回 HTTP " + response.statusCode());
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            String message = responseMessage(response.body());
+            if (message.isBlank()) message = response.statusCode() == 401
+                ? "登录已失效，或邮箱密码不正确"
+                : "TokenPro 服务返回 HTTP " + response.statusCode();
+            throw new ApiException(response.statusCode(), message);
+        }
         Map<String, Object> json = Json.object(Json.parse(response.body()));
         Object code = json.get("code");
         if (code instanceof Number number && number.intValue() != 0 && number.intValue() != 200) {
@@ -315,6 +326,17 @@ final class ApiClient {
         }
         Object data = json.containsKey("code") ? json.get("data") : json;
         return data == null ? Map.of() : data;
+    }
+
+    static boolean isUnauthorized(Throwable error) {
+        return error instanceof ApiException failure && failure.status() == 401;
+    }
+
+    static String responseMessage(String body) {
+        try {
+            Map<String, Object> json = Json.object(Json.parse(body));
+            return text(json.getOrDefault("message", json.getOrDefault("error", "")));
+        } catch (Exception ignored) { return ""; }
     }
 
     private static Long integer(Object value) { return value instanceof Number number ? number.longValue() : null; }

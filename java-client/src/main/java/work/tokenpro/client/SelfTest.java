@@ -16,6 +16,8 @@ final class SelfTest {
         check(Json.object(Json.parse("{\"max_tokens\":8192}")).get("max_tokens") instanceof Long, "Claude integer fields remain integral"); passed++;
         check(ClaudeBridgeServer.sameIdentifier("18.0", 18L) && !ClaudeBridgeServer.sameIdentifier("18.0", 19L), "legacy decimal account IDs remain compatible"); passed++;
         check(Json.stringify(value).contains("\"TokenPro\""), "JSON writer"); passed++;
+        check("邮箱或密码错误".equals(ApiClient.responseMessage("{\"message\":\"邮箱或密码错误\"}")), "API error message is preserved"); passed++;
+        check(ApiClient.isUnauthorized(new ApiClient.ApiException(401, "expired")), "HTTP 401 is recognized as an expired login"); passed++;
         String sample = "before\n# >>> TokenPro managed >>>\nmanaged\n# <<< TokenPro managed <<<\nafter\n";
         check(CodexConfig.stripManaged(sample).equals("before\nafter\n"), "managed config removal"); passed++;
         String config = "model = \"old\"\nmodel_provider = \"openai\"\n[features]\napps = true\n";
@@ -71,6 +73,8 @@ final class SelfTest {
         check(Platform.windowsPackageNames("Claude").contains("Claude"), "Windows Claude MSIX package identity"); passed++;
         check(Platform.windowsPackageNames("Codex").equals(List.of("OpenAI.Codex", "OpenAI.ChatGPT-Desktop")), "Windows Codex MSIX identities stay exact"); passed++;
         check(Platform.windowsPackageNames("Claude").equals(List.of("Claude")), "Windows Claude MSIX identity stays exact"); passed++;
+        check(Platform.windowsApplicationIds("Codex").getFirst().equals("OpenAI.Codex_2p2nqsd0c76g0!App"), "Windows Codex MSIX launch identity"); passed++;
+        check(Platform.windowsApplicationIds("Claude").getFirst().contains("Claude"), "Windows Claude MSIX launch identity"); passed++;
         Platform.InstallationSnapshot knownInstalled = new Platform.InstallationSnapshot(true, true, true, true);
         check(knownInstalled.equals(Platform.installationSnapshot(knownInstalled)), "installed application state is cached within a run"); passed++;
         Path installFixture = Files.createTempDirectory("tokenpro-install-detection-");
@@ -193,6 +197,9 @@ final class SelfTest {
         String releasePayload = "{\"tag_name\":\"v1.2.39\",\"incremental\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-update.jar\",\"sha256\":\"update-sha\"},\"downloads\":{\"windows-x64\":{\"url\":\"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe\",\"sha256\":\"abc\"}}}";
         TokenProFrame.ReleaseInfo release = TokenProFrame.releaseForPlatform(releasePayload, "windows-x64");
         check("1.2.39".equals(release.version()) && release.downloadUrl().endsWith(".exe") && "abc".equals(release.sha256()) && release.hasIncrementalUpdate() && release.preferredUrl().endsWith(".jar") && "update-sha".equals(release.preferredSha256()), "incremental update manifest"); passed++;
+        TokenProFrame.ReleaseInfo macRelease = TokenProFrame.releaseForPlatform("{\"tag_name\":\"v1.2.39\",\"incremental\":{\"url\":\"https://tokenpro.work/TokenPro-update.jar\",\"sha256\":\"update-sha\"},\"downloads\":{\"macos-arm64\":{\"url\":\"https://tokenpro.work/TokenPro.dmg\",\"sha256\":\"dmg-sha\"}}}", "macos-arm64");
+        check(macRelease.hasIncrementalUpdate() && macRelease.preferredUrl().endsWith(".jar") && "update-sha".equals(macRelease.preferredSha256()), "macOS uses incremental update"); passed++;
+        check(Updater.macIncrementalScript().contains("with administrator privileges") && Updater.macIncrementalScript().contains("codesign --force --deep --sign -"), "macOS incremental updater permission fallback and signing"); passed++;
         check(Updater.platformKey().startsWith(Platform.OS_KIND == Platform.OS.MAC ? "macos-" : Platform.OS_KIND == Platform.OS.WINDOWS ? "windows-" : "linux-"), "automatic update platform mapping"); passed++;
         ClaudeBridgeConfig.Route route = ClaudeBridgeConfig.Route.from(priced);
         check(route.alias().matches("claude-tokenpro-[0-9a-f]{24}"), "Claude alias"); passed++;

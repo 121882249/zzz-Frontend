@@ -109,7 +109,7 @@ final class Platform {
             } else {
                 process = executable.isPresent()
                     ? new ProcessBuilder(executable.get().toString()).start()
-                    : new ProcessBuilder("cmd", "/c", "start", "", name.equals("Codex") ? "ChatGPT" : name).start();
+                    : openWindowsPackagedApplication(name);
             }
         }
         else {
@@ -380,6 +380,27 @@ final class Platform {
         return name.equals("Codex")
             ? List.of("OpenAI.Codex", "OpenAI.ChatGPT-Desktop")
             : List.of("Claude");
+    }
+
+    static List<String> windowsApplicationIds(String name) {
+        return name.equals("Codex")
+            ? List.of("OpenAI.Codex_2p2nqsd0c76g0!App", "OpenAI.ChatGPT-Desktop_2p2nqsd0c76g0!App")
+            : List.of("Claude_Anthropic!Claude");
+    }
+
+    private static Process openWindowsPackagedApplication(String name) throws IOException {
+        List<String> ids = windowsApplicationIds(name);
+        String quotedIds = ids.stream().map(value -> "'" + value.replace("'", "''") + "'")
+            .collect(java.util.stream.Collectors.joining(","));
+        String script = "$ids=@(" + quotedIds + ");"
+            + "$match=Get-StartApps | Where-Object {$ids -contains $_.AppID} | Select-Object -First 1 -ExpandProperty AppID;"
+            + "if($match){Write-Output $match}";
+        String registered = commandOutput(List.of(windowsSystemExecutable("WindowsPowerShell\\v1.0\\powershell.exe"),
+            "-NoProfile", "-NonInteractive", "-Command", script), 5);
+        String applicationId = registered.isBlank() ? ids.getFirst() : registered.lines().findFirst().orElse(ids.getFirst()).trim();
+        Path explorer = Path.of(System.getenv().getOrDefault("SystemRoot", "C:\\Windows"), "explorer.exe");
+        String launcher = Files.isRegularFile(explorer) ? explorer.toString() : "explorer.exe";
+        return new ProcessBuilder(launcher, "shell:AppsFolder\\" + applicationId).start();
     }
 
     private static boolean windowsPackagedApplicationInstalled(String name) {

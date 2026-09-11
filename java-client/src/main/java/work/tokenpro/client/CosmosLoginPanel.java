@@ -16,17 +16,28 @@ final class CosmosLoginPanel extends JPanel {
     private static final Color TEXT = new Color(246, 248, 255);
     private static final Color MUTED = new Color(164, 175, 211);
     private final JButton loginButton = new GradientButton("登录 / 注册");
+    private final UpdateButton updateButton = new UpdateButton("检查更新");
     private final JLabel feedback = label("登录信息仅加密保存在当前设备", 11, Font.PLAIN, new Color(145, 156, 191));
 
-    CosmosLoginPanel(JTextField email, JPasswordField password, ActionListener loginAction) {
-        super(new GridBagLayout());
+    CosmosLoginPanel(JTextField email, JPasswordField password, ActionListener loginAction, ActionListener updateAction) {
+        super(new BorderLayout());
         setOpaque(false);
         setBorder(new EmptyBorder(32, 44, 34, 44));
+
+        updateButton.setPreferredSize(new Dimension(178, 34));
+        updateButton.addActionListener(updateAction);
+        JPanel pageActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        pageActions.setOpaque(false);
+        pageActions.add(updateButton);
+        add(pageActions, BorderLayout.NORTH);
+
+        JPanel stage = new JPanel(new GridBagLayout());
+        stage.setOpaque(false);
 
         GridBagConstraints hero = new GridBagConstraints();
         hero.gridx = 0; hero.gridy = 0; hero.weightx = .58; hero.weighty = 1;
         hero.fill = GridBagConstraints.BOTH; hero.insets = new Insets(0, 0, 0, 26);
-        add(new HeroPanel(), hero);
+        stage.add(new HeroPanel(), hero);
 
         GridBagConstraints login = new GridBagConstraints();
         login.gridx = 1; login.gridy = 0; login.weightx = .42; login.weighty = 1;
@@ -34,7 +45,8 @@ final class CosmosLoginPanel extends JPanel {
         JPanel loginWell = new JPanel(new GridBagLayout());
         loginWell.setOpaque(false);
         loginWell.add(loginCard(email, password, loginAction));
-        add(loginWell, login);
+        stage.add(loginWell, login);
+        add(stage, BorderLayout.CENTER);
     }
 
     private JComponent loginCard(JTextField email, JPasswordField password, ActionListener loginAction) {
@@ -44,7 +56,7 @@ final class CosmosLoginPanel extends JPanel {
         card.setBorder(new EmptyBorder(20, 24, 20, 24));
 
         JPanel top = new JPanel(new BorderLayout());
-        top.setOpaque(false); top.setMaximumSize(new Dimension(Integer.MAX_VALUE, 18));
+        top.setOpaque(false); top.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
         top.setAlignmentX(Component.LEFT_ALIGNMENT);
         top.add(label("●  服务运行正常", 11, Font.PLAIN, new Color(111, 229, 196)), BorderLayout.WEST);
         top.add(label("简体中文", 11, Font.PLAIN, new Color(151, 160, 190)), BorderLayout.EAST);
@@ -97,6 +109,15 @@ final class CosmosLoginPanel extends JPanel {
         feedback.setText(text == null || text.isBlank() ? "登录信息仅加密保存在当前设备" : text);
         feedback.setForeground(loading ? new Color(150, 168, 255) : new Color(145, 156, 191));
     }
+
+    void setUpdateState(String text, boolean enabled) {
+        updateButton.setText(text);
+        updateButton.setEnabled(enabled);
+        updateButton.setCursor(enabled ? Cursor.getPredefinedCursor(Cursor.HAND_CURSOR) : Cursor.getDefaultCursor());
+        if (!text.startsWith("正在更新")) updateButton.setProgress(-1);
+    }
+
+    void setUpdateProgress(int progress) { updateButton.setProgress(progress); }
 
     private static JLabel label(String text, int size, int style, Color color) {
         JLabel label = new JLabel(text); label.setFont(font(size, style)); label.setForeground(color); return label;
@@ -176,6 +197,43 @@ final class CosmosLoginPanel extends JPanel {
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g.setPaint(new GradientPaint(0, 0, isEnabled() ? new Color(108, 92, 255) : new Color(72, 73, 122), getWidth(), 0, isEnabled() ? new Color(62, 155, 255) : new Color(73, 82, 126)));
             g.fillRoundRect(0, 0, getWidth(), getHeight(), 14, 14); g.dispose(); super.paintComponent(graphics);
+        }
+    }
+
+    private static final class UpdateButton extends JButton {
+        private int progress = -1;
+
+        UpdateButton(String text) {
+            super(text);
+            setFont(font(11, Font.BOLD));
+            setForeground(new Color(226, 233, 255));
+            setFocusPainted(false); setBorderPainted(false); setContentAreaFilled(false); setOpaque(false);
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        }
+
+        void setProgress(int value) {
+            progress = value < 0 ? -1 : Math.min(100, value);
+            repaint();
+        }
+
+        protected void paintComponent(Graphics graphics) {
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            int width = getWidth() - 1, height = getHeight() - 1;
+            g.setColor(new Color(21, 34, 72, 225));
+            g.fillRoundRect(0, 0, width, height, 14, 14);
+            if (progress >= 0) {
+                Shape oldClip = g.getClip();
+                g.clip(new RoundRectangle2D.Double(0, 0, width, height, 14, 14));
+                int filled = (int) Math.round(width * progress / 100.0);
+                g.setPaint(new GradientPaint(0, 0, new Color(91, 101, 255, 220), width, 0, new Color(44, 178, 213, 220)));
+                g.fillRect(0, 0, filled, height);
+                g.setClip(oldClip);
+            }
+            g.setColor(new Color(147, 172, 255, 125));
+            g.drawRoundRect(0, 0, width, height, 14, 14);
+            g.dispose();
+            super.paintComponent(graphics);
         }
     }
 

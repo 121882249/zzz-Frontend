@@ -146,7 +146,7 @@ final class ModelPickerDialog extends JDialog {
         JPanel actions = transparent(new FlowLayout(FlowLayout.RIGHT, 9, 0));
         JButton cancel = button("取消", false);
         cancel.addActionListener(event -> dispose());
-        JButton apply = button("应用并打开 " + client, true);
+        JButton apply = button("应用模型", true);
         apply.addActionListener(event -> {
             List<PricedModel> selected = selected();
             long imageCount = selected.stream().filter(PricedModel::isImageGeneration).count();

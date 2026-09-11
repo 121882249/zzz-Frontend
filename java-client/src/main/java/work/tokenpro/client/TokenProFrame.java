@@ -142,7 +142,7 @@ final class TokenProFrame extends JFrame {
     private JComponent content() {
         CosmosLoginPanel.Backdrop shell = new CosmosLoginPanel.Backdrop();
         viewHost.setOpaque(false);
-        loginView = new CosmosLoginPanel(email, password, e -> authenticate());
+        loginView = new CosmosLoginPanel(email, password, e -> authenticate(), e -> updateFromButton());
         viewHost.add(loginView, "login");
         viewHost.add(dashboard(), "dashboard");
         shell.add(windowStage(), BorderLayout.CENTER);
@@ -446,8 +446,7 @@ final class TokenProFrame extends JFrame {
             return chosen;
         }, configured -> {
             setDesktopCardState("Codex", selectionStatus(chosen.size()), true);
-            status("Codex 配置已安全替换，已接入 " + configured.size() + " 个模型");
-            reconnectApp("Codex");
+            status("Codex 配置已安全替换，已接入 " + configured.size() + " 个模型；客户端保持运行");
         });
     }
 
@@ -530,8 +529,7 @@ final class TokenProFrame extends JFrame {
         }, config -> {
             bridgeStatus.setText("桥接状态：运行中 · " + config.routes().size() + " 个模型 · " + config.baseUrl());
             setDesktopCardState("Claude", "已选 " + config.routes().size() + " 个模型", true);
-            status("Claude 已配置 " + config.routes().size() + " 个模型");
-            reconnectClaude();
+            status("Claude 已配置 " + config.routes().size() + " 个模型；客户端保持运行");
         });
     }
 
@@ -603,22 +601,35 @@ final class TokenProFrame extends JFrame {
     }
 
     private void restoreSession() {
-        async("正在恢复登录…", () -> {
-            Optional<String> raw = store.read("java-session.json");
-            if (raw.isEmpty()) return null;
-            Map<String, Object> saved = Json.object(Json.parse(raw.get()));
-            accessToken = string(saved.get("access_token"));
-            refreshToken = string(saved.get("refresh_token"));
-            tokenExpiresAt = saved.get("token_expires_at") instanceof Number number ? number.longValue() : 0;
-            sessionUser = saved.get("user") instanceof Map<?, ?> ? Json.object(saved.get("user")) : Map.of();
-            if (accessToken.isBlank()) return null;
-            Map<String, Object> user = api.me(accessToken);
-            saveSession(user);
-            return user;
-        }, value -> {
-            if (value == null) { status("就绪"); showLoginScreen(); }
-            else { showAccount(value); updateCodexStatus(); updateBridgeStatus(); showPage("首页"); showDashboardScreen(); }
-        });
+        status("正在恢复登录…");
+        new SwingWorker<Map<String, Object>, Void>() {
+            protected Map<String, Object> doInBackground() throws Exception {
+                Optional<String> raw = store.read("java-session.json");
+                if (raw.isEmpty()) return null;
+                Map<String, Object> saved = Json.object(Json.parse(raw.get()));
+                accessToken = string(saved.get("access_token"));
+                refreshToken = string(saved.get("refresh_token"));
+                tokenExpiresAt = saved.get("token_expires_at") instanceof Number number ? number.longValue() : 0;
+                sessionUser = saved.get("user") instanceof Map<?, ?> ? Json.object(saved.get("user")) : Map.of();
+                if (accessToken.isBlank()) return null;
+                Map<String, Object> user = api.me(accessToken);
+                saveSession(user);
+                return user;
+            }
+            protected void done() {
+                try {
+                    Map<String, Object> value = get();
+                    if (value == null) { status("就绪"); showLoginScreen(); }
+                    else { showAccount(value); updateCodexStatus(); updateBridgeStatus(); showPage("首页"); showDashboardScreen(); }
+                } catch (Exception error) {
+                    Throwable cause = error.getCause() == null ? error : error.getCause();
+                    if (ApiClient.isUnauthorized(cause)) try { store.delete("java-session.json"); } catch (Exception ignored) {}
+                    accessToken = null; refreshToken = ""; tokenExpiresAt = 0; sessionUser = Map.of(); accountId = "";
+                    status("请重新登录"); showLoginScreen();
+                    loginView.setLoading(false, ApiClient.isUnauthorized(cause) ? "登录已失效，请重新登录" : "暂时无法恢复登录，可重试或检查更新");
+                }
+            }
+        }.execute();
     }
 
     private void updateCodexStatus() {
@@ -1213,11 +1224,12 @@ final class TokenProFrame extends JFrame {
     }
 
     private void setUpdateButtonState(String state, String text) {
+        boolean latest = "latest".equals(state);
+        boolean checking = "checking".equals(state);
+        if (loginView != null) loginView.setUpdateState(text, !latest && !checking);
         if (updateButton == null) return;
         updateButton.putClientProperty("tokenpro.updateState", state);
         updateButton.setText(text);
-        boolean latest = "latest".equals(state);
-        boolean checking = "checking".equals(state);
         updateButton.setEnabled(!latest && !checking);
         updateButton.setCursor(latest || checking ? Cursor.getDefaultCursor() : Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         updateButton.setIcon(latest ? null : resourceIconContained("RefreshCwLucide.png", 15, 15, true));
@@ -1275,11 +1287,10 @@ final class TokenProFrame extends JFrame {
             status("当前系统暂未提供自动更新包");
             return;
         }
-        UpdateProgressDialog progress = new UpdateProgressDialog(this, release.version());
         if (updateButton != null) updateButton.setEnabled(false);
         setUpdateButtonState("checking", "正在更新 0%");
+        setUpdateProgress(0);
         status("正在下载 TokenPro " + release.version() + "…");
-        progress.setVisible(true);
         new SwingWorker<Path, Integer>() {
             protected Path doInBackground() throws Exception {
                 URI uri = URI.create(release.preferredUrl());
@@ -1317,28 +1328,37 @@ final class TokenProFrame extends JFrame {
             }
             protected void process(List<Integer> chunks) {
                 int value = chunks.get(chunks.size() - 1);
-                progress.updateProgress(value);
                 setUpdateButtonState("checking", "正在更新 " + value + "%");
+                setUpdateProgress(value);
             }
             protected void done() {
                 try {
                     Path installer = get();
-                    progress.installing();
-                    status("正在安装 TokenPro " + release.version() + "，程序即将重启…");
+                    setUpdateButtonState("checking", "正在完成更新…");
+                    setUpdateProgress(100);
+                    status("正在完成 TokenPro " + release.version() + " 更新，程序即将重启…");
                     if (release.hasIncrementalUpdate()) Updater.installIncremental(installer, release.version());
                     else Updater.install(installer);
                     dispose();
                     System.exit(0);
                 } catch (Exception ex) {
                     updateInProgress.set(false);
-                    progress.dispose();
                     if (updateButton != null) updateButton.setEnabled(true);
                     setUpdateButtonState("check", "更新失败，点击重试");
+                    setUpdateProgress(-1);
                     Throwable cause = ex.getCause() == null ? ex : ex.getCause();
                     status("自动更新失败：" + (cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage()));
                 }
             }
         }.execute();
+    }
+
+    private void setUpdateProgress(int value) {
+        if (loginView != null) loginView.setUpdateProgress(value);
+        if (updateButton != null) {
+            updateButton.putClientProperty("tokenpro.updateProgress", value);
+            updateButton.repaint();
+        }
     }
 
     private static String sha256(Path file) throws Exception {
@@ -2065,44 +2085,6 @@ final class TokenProFrame extends JFrame {
         protected void paintComponent(Graphics g) { Graphics2D g2 = (Graphics2D) g.create(); g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON); g2.setColor(fill); g2.fill(new RoundRectangle2D.Double(.5, .5, getWidth()-1, getHeight()-1, radius, radius)); g2.setColor(stroke); g2.draw(new RoundRectangle2D.Double(.5, .5, getWidth()-1, getHeight()-1, radius, radius)); g2.dispose(); super.paintComponent(g); }
     }
 
-    private static final class UpdateProgressDialog extends JDialog {
-        private final JLabel detail = new JLabel("正在安全下载更新…", SwingConstants.CENTER);
-        private final CosmosProgressBar bar = new CosmosProgressBar();
-
-        UpdateProgressDialog(JFrame owner, String version) {
-            super(owner, "TokenPro 自动更新", false);
-            setUndecorated(true);
-            setBackground(new Color(0, 0, 0, 0));
-            RoundedPanel panel = new RoundedPanel(24, new Color(17, 31, 68, 248), new Color(115, 104, 255, 145));
-            panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-            panel.setBorder(new EmptyBorder(22, 25, 22, 25));
-            JLabel title = new JLabel("正在更新 TokenPro " + version, SwingConstants.CENTER);
-            title.setFont(appFont(16, Font.BOLD)); title.setForeground(TEXT); title.setAlignmentX(Component.CENTER_ALIGNMENT);
-            detail.setFont(appFont(11, Font.PLAIN)); detail.setForeground(MUTED); detail.setAlignmentX(Component.CENTER_ALIGNMENT);
-            bar.setAlignmentX(Component.CENTER_ALIGNMENT); bar.setPreferredSize(new Dimension(370, 14)); bar.setMaximumSize(new Dimension(370, 14));
-            panel.add(title); panel.add(Box.createVerticalStrut(10)); panel.add(detail); panel.add(Box.createVerticalStrut(14)); panel.add(bar);
-            setContentPane(panel); setSize(430, 142); setLocationRelativeTo(owner); setAlwaysOnTop(true);
-        }
-
-        void updateProgress(int value) { bar.setValue(value); detail.setText("正在下载 · " + value + "%"); }
-        void installing() { bar.setValue(100); detail.setText("校验完成，正在安装并重启…"); }
-    }
-
-    private static final class CosmosProgressBar extends JProgressBar {
-        CosmosProgressBar() { super(0, 100); setOpaque(false); setBorderPainted(false); setStringPainted(false); }
-        protected void paintComponent(Graphics graphics) {
-            Graphics2D g = (Graphics2D) graphics.create();
-            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g.setColor(new Color(43, 53, 96, 220)); g.fillRoundRect(0, 0, getWidth(), getHeight(), getHeight(), getHeight());
-            int width = (int) Math.round(getWidth() * getPercentComplete());
-            if (width > 0) {
-                g.setPaint(new GradientPaint(0, 0, new Color(104, 229, 205), getWidth(), 0, new Color(153, 105, 255)));
-                g.fillRoundRect(0, 0, width, getHeight(), getHeight(), getHeight());
-            }
-            g.dispose();
-        }
-    }
-
     private static final class GradientPanel extends JPanel {
         private final BufferedImage cosmos = resourceImage("LoginCosmos-v2.png");
         GradientPanel() { setOpaque(false); }
@@ -2125,6 +2107,16 @@ final class TokenProFrame extends JFrame {
             } else if (prominent && isEnabled()) g.setPaint(new GradientPaint(0, 0, new Color(111, 91, 255), getWidth(), 0, new Color(64, 142, 255)));
             else g.setColor(prominent ? new Color(76, 72, 132, 205) : (isEnabled() ? new Color(39, 53, 96, 235) : new Color(27, 36, 65, 210)));
             g.fillRoundRect(0, 0, getWidth(), getHeight(), 18, 18); g.setColor(stroke); g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 18, 18);
+            Object rawProgress = getClientProperty("tokenpro.updateProgress");
+            if (rawProgress instanceof Number number && number.intValue() >= 0) {
+                int progress = Math.min(100, number.intValue());
+                Shape oldClip = g.getClip();
+                g.clip(new RoundRectangle2D.Double(0, 0, getWidth(), getHeight(), 18, 18));
+                g.setPaint(new GradientPaint(0, 0, new Color(91, 101, 255, 215), getWidth(), 0, new Color(44, 178, 213, 215)));
+                g.fillRect(0, 0, (int) Math.round(getWidth() * progress / 100.0), getHeight());
+                g.setClip(oldClip);
+                g.setColor(stroke); g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 18, 18);
+            }
             g.setFont(getFont()); g.setColor("latest".equals(updateState) ? new Color(218, 248, 239) : (isEnabled() ? getForeground() : new Color(137, 145, 177))); FontMetrics fm = g.getFontMetrics(); Icon icon = getIcon(); int textWidth = fm.stringWidth(getText()); int iconWidth = icon == null ? 0 : icon.getIconWidth(); int gap = icon == null || getText().isBlank() ? 0 : getIconTextGap(); int total = iconWidth + gap + textWidth; int x = (getWidth() - total) / 2; if (icon != null) { icon.paintIcon(this, g, x, (getHeight() - icon.getIconHeight()) / 2); x += iconWidth + gap; } g.drawString(getText(), x, (getHeight() - fm.getHeight()) / 2 + fm.getAscent()); g.dispose();
         }
     }
