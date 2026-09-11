@@ -93,6 +93,7 @@ final class TokenProFrame extends JFrame {
     private JButton claudeCliLaunch;
     private JButton updateButton;
     private JButton refreshAccountButton;
+    private volatile ReleaseInfo availableUpdate;
     private final AtomicBoolean updateInProgress = new AtomicBoolean();
     private final AtomicBoolean installationScanInProgress = new AtomicBoolean();
     private volatile boolean installationScanCompleted;
@@ -189,7 +190,7 @@ final class TokenProFrame extends JFrame {
         GradientPanel panel = new GradientPanel(); panel.setLayout(new BorderLayout(0, 16)); panel.setBorder(new EmptyBorder(23, 28, 20, 28));
         JPanel title = transparent(new BorderLayout()); headerTitle.setFont(appFont(23, Font.BOLD)); headerTitle.setIcon(new TechGlobeIcon(30)); headerTitle.setIconTextGap(10); headerTitle.setGradient(true); headerTitle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)); headerTitle.setToolTipText("打开 TokenPro 主页"); headerTitle.addMouseListener(new MouseAdapter() { @Override public void mouseClicked(MouseEvent event) { if ("https://tokenpro.work".equals(headerTitle.getText())) browse("https://tokenpro.work"); } }); title.add(headerTitle, BorderLayout.WEST);
         JPanel right = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        updateButton = soft("正在核对版本…"); setUpdateButtonState("checking", "正在核对版本…"); updateButton.addActionListener(e -> checkForUpdates(updateButton)); right.add(updateButton);
+        updateButton = soft("正在核对版本…"); setUpdateButtonState("checking", "正在核对版本…"); updateButton.addActionListener(e -> updateFromButton()); right.add(updateButton);
         JButton user = soft("登录账户"); user.setIcon(resourceIconContained("CircleUserLucide.png", 17, 17, true)); user.addActionListener(e -> openAccount()); headerUser.addPropertyChangeListener("text", e -> user.setText(headerUser.getText())); right.add(user);
         title.add(right, BorderLayout.EAST); panel.add(title, BorderLayout.NORTH);
         Dimension headerCardSize = new Dimension(430, 64);
@@ -1043,6 +1044,15 @@ final class TokenProFrame extends JFrame {
         checkForUpdates(button, false);
     }
 
+    private void updateFromButton() {
+        ReleaseInfo cached = availableUpdate;
+        if (cached != null && compareVersions(cached.version(), Main.VERSION) > 0) {
+            installUpdate(cached);
+            return;
+        }
+        checkForUpdates(updateButton);
+    }
+
     private void checkForUpdates(JButton button, boolean automatic) {
         if (button != null) { button.setEnabled(false); setUpdateButtonState("checking", "检查中…"); }
         if (!automatic) status("正在检查更新…");
@@ -1076,10 +1086,12 @@ final class TokenProFrame extends JFrame {
                             status("暂时无法读取版本信息，请稍后重试");
                         }
                     } else if (compareVersions(release.version(), Main.VERSION) > 0) {
+                        availableUpdate = release;
                         setUpdateButtonState("check", "发现更新 v" + release.version());
                         status("发现新版本 " + release.version());
                         if (!automatic) installUpdate(release);
                     } else {
+                        availableUpdate = null;
                         setUpdateButtonState("latest", "已是最新 v" + Main.VERSION);
                         if (!automatic) status("当前已是最新版本 " + Main.VERSION);
                     }
