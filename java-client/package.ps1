@@ -18,7 +18,7 @@ New-Item -ItemType Directory -Path $inputRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $imageRoot -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $PSScriptRoot 'dist') -Force | Out-Null
 Copy-Item -LiteralPath 'build/TokenPro.jar' -Destination (Join-Path $inputRoot 'TokenPro.jar')
-& "$env:JAVA_HOME/bin/jpackage.exe" --type app-image --name TokenPro --app-version 1.2.65 `
+& "$env:JAVA_HOME/bin/jpackage.exe" --type app-image --name TokenPro --app-version 1.2.66 `
   --input $inputRoot --main-jar TokenPro.jar --main-class work.tokenpro.client.Main `
   --module-path "$env:JAVA_HOME/jmods" `
   --add-modules java.base,java.desktop,java.net.http,jdk.httpserver,jdk.crypto.ec `
@@ -31,7 +31,7 @@ if ($LASTEXITCODE -ne 0) { throw "jpackage failed with exit code $LASTEXITCODE" 
 if ($LASTEXITCODE -ne 0) { throw "中文安装包编译失败，退出码 $LASTEXITCODE" }
 if ($env:GITHUB_ACTIONS -eq 'true' -and $env:RUNNER_ENVIRONMENT -eq 'github-hosted') {
   & './installer/windows/smoke-test.ps1' `
-    -Installer (Join-Path $PSScriptRoot 'dist/TokenPro-1.2.65-Windows-x64.exe') `
+    -Installer (Join-Path $PSScriptRoot 'dist/TokenPro-1.2.66-Windows-x64.exe') `
     -AppImage (Join-Path $imageRoot 'TokenPro') -OutputRoot (Join-Path $packageRoot 'acceptance')
 }
 Write-Host '已生成中文星空主题 Windows 安装包，默认仅为当前用户安装。'
