@@ -46,6 +46,7 @@ final class WindowsUpdaterTest {
                 passed += brokerFixture(root.resolve("broker-success"), false, false);
                 passed += brokerFixture(root.resolve("broker-cancel"), true, false);
                 passed += brokerFixture(root.resolve("broker-corrupt"), false, true);
+                passed += brokerFixture(root.resolve("broker-wrapped-cancel"), true, false, true);
             }
         } finally {
             try (var files = Files.walk(root)) {
@@ -56,6 +57,10 @@ final class WindowsUpdaterTest {
     }
 
     private static int brokerFixture(Path root, boolean cancel, boolean corrupt) throws Exception {
+        return brokerFixture(root, cancel, corrupt, false);
+    }
+
+    private static int brokerFixture(Path root, boolean cancel, boolean corrupt, boolean wrapped) throws Exception {
         Path install = root.resolve("User Chosen Location/TokenPro"); image(install, "old-core");
         Path source = root.resolve("merged.jar"); Files.writeString(source, "new-core");
         Path jobs = Files.createDirectory(root.resolve("job"));
@@ -64,7 +69,10 @@ final class WindowsUpdaterTest {
         job.put("launch", false);
         String broker = WindowsUpdater.elevationBrokerScript(jobFile, job);
         // Mock ONLY the UAC transport on isolated fixtures. Never display real UAC in self-test.
-        if(cancel) broker = broker.replace("$elevated=Start-Process", "throw [ComponentModel.Win32Exception]::new(1223)\n$elevated=Start-Process");
+        if(cancel) {
+            String error = wrapped ? "[InvalidOperationException]::new('由于出现以下错误，无法运行此命令: The operation was canceled by the user。')" : "[ComponentModel.Win32Exception]::new(1223)";
+            broker = broker.replace("$elevated=Start-Process", "throw " + error + "\n$elevated=Start-Process");
+        }
         broker = broker.replace("-Verb RunAs ", "");
         // No job file is required: the helper must use the immutable snapshot in its command.
         Files.writeString(jobFile, "invalid, potentially modified job file");
@@ -80,7 +88,7 @@ final class WindowsUpdaterTest {
         check(Boolean.valueOf(!failure).equals(ready.get("ready")), "failed authorization never tells the app to exit");
         check(Files.readString(install.resolve("app/TokenPro.jar")).equals(failure ? "old-core" : "new-core"), "broker updates exact user-selected path or preserves original");
         check(Objects.equals(result.get("status"), failure ? "failed" : "complete"), "broker result receipt");
-        if(cancel) check(result.get("message").toString().contains("取消管理员授权"), "friendly UAC cancellation");
+        if(cancel) check(result.get("message").toString().contains("管理员授权未完成或已取消") && !result.containsKey("administrator"), "friendly UAC cancellation does not claim successful elevation");
         return 4;
     }
 

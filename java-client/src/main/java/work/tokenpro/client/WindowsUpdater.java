@@ -133,9 +133,15 @@ final class WindowsUpdater {
                 if(__LAUNCH__){Start-Process -FilePath __LAUNCHER__ -WorkingDirectory __APPROOT__}
             } catch {
                 $failure=$_.Exception.Message
-                if($_.Exception.NativeErrorCode -eq 1223 -or ($_.Exception.InnerException -and $_.Exception.InnerException.NativeErrorCode -eq 1223)){$failure='已取消管理员授权，未更新；TokenPro 保持打开'}
+                $authorizationCancelled=$false
+                for($cause=$_.Exception; $null -ne $cause; $cause=$cause.InnerException) {
+                    if($cause.NativeErrorCode -eq 1223 -or (($cause.HResult -band 65535) -eq 1223)){$authorizationCancelled=$true}
+                }
+                # Start-Process can replace Win32Exception with a message-only wrapper.
+                if($failure -match 'operation was cancel[l]?ed by the user|操作已由用户取消|用户取消了操作|操作被用户取消'){$authorizationCancelled=$true}
+                if($authorizationCancelled){$failure='管理员授权未完成或已取消，未更新；TokenPro 保持打开'}
                 Save-State $ready @{ready=$false;message=$failure}
-                Save-State __RESULT__ @{status='failed';message=$failure;administrator=$true}
+                Save-State __RESULT__ @{status='failed';message=$failure;administratorRequested=$true}
                 Write-Error $failure -ErrorAction Continue
                 exit 1
             }
