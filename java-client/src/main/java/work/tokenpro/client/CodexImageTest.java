@@ -61,6 +61,7 @@ final class CodexImageTest {
             var headersSent = new java.util.concurrent.CountDownLatch(1);
             var releaseUpstream = new java.util.concurrent.CountDownLatch(1);
             var upstream = com.sun.net.httpserver.HttpServer.create(new InetSocketAddress("127.0.0.1",0),4);
+            var imageRequests = new java.util.concurrent.ConcurrentHashMap<String,String>();
             upstream.createContext("/v1/responses",exchange -> {
                 try {
                     exchange.getRequestBody().readAllBytes();
@@ -71,9 +72,34 @@ final class CodexImageTest {
                     releaseUpstream.await(10,java.util.concurrent.TimeUnit.SECONDS);
                 } catch(Exception ignored) {} finally { exchange.close(); }
             });
+            for (String endpoint : List.of("/v1/images/generations", "/v1/images/edits")) {
+                upstream.createContext(endpoint, exchange -> {
+                    try {
+                        imageRequests.put(endpoint + ":authorization", Objects.toString(exchange.getRequestHeaders().getFirst("Authorization"), ""));
+                        imageRequests.put(endpoint + ":preferred", Objects.toString(exchange.getRequestHeaders().getFirst("x-tokenpro-image-model"), ""));
+                        imageRequests.put(endpoint + ":body", new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+                        byte[] responseBody = ("{\"endpoint\":\"" + endpoint + "\"}").getBytes(StandardCharsets.UTF_8);
+                        exchange.getResponseHeaders().set("Content-Type", "application/json");
+                        exchange.sendResponseHeaders(200, responseBody.length);
+                        exchange.getResponseBody().write(responseBody);
+                    } finally { exchange.close(); }
+                });
+            }
             upstream.start();
             try (CodexImageBridge bridge = new CodexImageBridge(store,0,"http://127.0.0.1:"+upstream.getAddress().getPort());
                  HttpClient http=HttpClient.newHttpClient()) {
+                for (String endpoint : List.of("/v1/images/generations", "/v1/images/edits")) {
+                    String requestBody = endpoint.endsWith("edits") ? "multipart fixture" : "{\"model\":\"gpt-image-2\",\"prompt\":\"draw\"}";
+                    var imageRequest = HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+bridge.port()+endpoint))
+                        .header("Authorization","Bearer test-local-token")
+                        .header("x-tokenpro-image-model","gpt-image-2.5-sunburst")
+                        .POST(HttpRequest.BodyPublishers.ofString(requestBody)).build();
+                    var imageResponse = http.send(imageRequest,HttpResponse.BodyHandlers.ofString());
+                    if(imageResponse.statusCode()!=200 || !imageResponse.body().contains(endpoint))throw new AssertionError("image endpoint passthrough "+endpoint);
+                    if(!"Bearer unused-upstream-token".equals(imageRequests.get(endpoint+":authorization")))throw new AssertionError("image endpoint upstream auth "+endpoint);
+                    if(!"gpt-image-2.5-sunburst".equals(imageRequests.get(endpoint+":preferred")))throw new AssertionError("image endpoint preferred model "+endpoint);
+                    if(!requestBody.equals(imageRequests.get(endpoint+":body")))throw new AssertionError("image endpoint body "+endpoint);
+                }
                 var request=HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+bridge.port()+"/v1/responses"))
                     .header("Authorization","Bearer test-local-token").POST(HttpRequest.BodyPublishers.ofString("{}"))
                     .timeout(java.time.Duration.ofSeconds(5)).build();
@@ -84,7 +110,7 @@ final class CodexImageTest {
                     if(System.nanoTime()-before>java.util.concurrent.TimeUnit.SECONDS.toNanos(2))throw new AssertionError("bridge shutdown waited on unfinished stream");
                 }
             } finally {releaseUpstream.countDown();upstream.stop(0);}
-            return 9;
+            return 17;
         } finally { try (var paths = Files.walk(root)) { for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path); } }
     }
 }

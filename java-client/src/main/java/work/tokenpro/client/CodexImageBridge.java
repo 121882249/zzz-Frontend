@@ -94,7 +94,13 @@ final class CodexImageBridge implements AutoCloseable {
             String method = exchange.getRequestMethod();
             if (method.equals("GET") && path.equals("/v1/health")) { reply(exchange, 200, SERVICE); return; }
             if (method.equals("POST") && path.equals("/v1/shutdown")) { reply(exchange, 200, "stopping"); Thread.ofVirtual().start(this::close); return; }
-            if (!(method.equals("POST") && Set.of("/v1/responses", "/v1/responses/compact").contains(path)) && !(method.equals("GET") && path.equals("/v1/models"))) { reply(exchange, 404, "Unsupported endpoint"); return; }
+            Set<String> postEndpoints = Set.of(
+                "/v1/responses",
+                "/v1/responses/compact",
+                "/v1/images/generations",
+                "/v1/images/edits"
+            );
+            if (!(method.equals("POST") && postEndpoints.contains(path)) && !(method.equals("GET") && path.equals("/v1/models"))) { reply(exchange, 404, "Unsupported endpoint"); return; }
             if (exchange.getRequestURI().getRawQuery() != null) { reply(exchange, 400, "Unexpected query"); return; }
             byte[] body = exchange.getRequestBody().readNBytes(32*1024*1024+1);
             if (body.length > 32*1024*1024) { reply(exchange, 413, "Request too large"); return; }
