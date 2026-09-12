@@ -284,7 +284,7 @@ final class TokenProFrame extends JFrame {
                 status("请先安装 " + iconName + " 客户端");
                 return;
             }
-            showModelMenu(menu, iconName, chooseModel, restore);
+            showModelMenu(menu, iconName, chooseModel, () -> refreshDesktopConfiguration(iconName, restore, open), restore);
         });
         if (iconName.equals("Codex")) codexModelMenuButton = menu; else claudeModelMenuButton = menu;
         JPanel modelControl = transparent(); modelControl.setLayout(new BoxLayout(modelControl, BoxLayout.Y_AXIS));
@@ -298,11 +298,11 @@ final class TokenProFrame extends JFrame {
         actions.add(launch); card.add(actions, BorderLayout.EAST); return card;
     }
 
-    private void showModelMenu(JButton anchor, String client, Runnable chooseModel, Runnable restore) {
-        showModelMenu(anchor, client, chooseModel, restore, false);
+    private void showModelMenu(JButton anchor, String client, Runnable chooseModel, Runnable refresh, Runnable restore) {
+        showModelMenu(anchor, client, chooseModel, refresh, restore, false);
     }
 
-    private void showModelMenu(JButton anchor, String client, Runnable chooseModel, Runnable restore, boolean cli) {
+    private void showModelMenu(JButton anchor, String client, Runnable chooseModel, Runnable refresh, Runnable restore, boolean cli) {
         hideModelMenu();
         JLayeredPane layered = getLayeredPane();
         JPanel overlay = new JPanel(null);
@@ -313,13 +313,16 @@ final class TokenProFrame extends JFrame {
         });
 
         CosmosMenuPanel menu = new CosmosMenuPanel();
-        boolean officialMode = !cli && "Codex".equals(client) && codexOfficialMode();
         int itemCount = 0;
         CosmosMenuButton choose = new CosmosMenuButton("选择模型", false);
         choose.addActionListener(event -> { hideModelMenu(); chooseModel.run(); });
         menu.add(choose);
         itemCount++;
-        CosmosMenuButton official = new CosmosMenuButton(cli ? "恢复配置" : officialMode ? "刷新官方配置" : "恢复官方配置", true);
+        CosmosMenuButton refreshConfig = new CosmosMenuButton("刷新配置", false);
+        refreshConfig.addActionListener(event -> { hideModelMenu(); refresh.run(); });
+        menu.add(refreshConfig);
+        itemCount++;
+        CosmosMenuButton official = new CosmosMenuButton(cli ? "恢复配置" : "恢复官方", true);
         official.addActionListener(event -> { hideModelMenu(); restore.run(); });
         menu.add(official);
         itemCount++;
@@ -339,6 +342,19 @@ final class TokenProFrame extends JFrame {
         });
         overlay.revalidate();
         overlay.repaint();
+    }
+
+    private void refreshDesktopConfiguration(String client, Runnable restore, Runnable reconnect) {
+        if (("Codex".equals(client) && codexOfficialMode()) || ("Claude".equals(client) && !claudeTokenProConfigured())) {
+            restore.run();
+        } else {
+            reconnect.run();
+        }
+    }
+
+    private boolean claudeTokenProConfigured() {
+        try { return store.read(ClaudeBridgeConfig.FILE).isPresent(); }
+        catch (Exception ignored) { return false; }
     }
 
     private void hideModelMenu() {
@@ -380,7 +396,7 @@ final class TokenProFrame extends JFrame {
             if(!(codexCli ? codexCliInstalled : claudeCliInstalled)) {
                 status("请先安装 " + iconName + " 命令行工具"); return;
             }
-            showModelMenu(menu, iconName, () -> chooseModels(iconName, true, false), () -> restoreCli(command), true);
+            showModelMenu(menu, iconName, () -> chooseModels(iconName, true, false), () -> connectClient(iconName, true), () -> restoreCli(command), true);
         });
         if(codexCli) codexCliModelMenuButton = menu; else claudeCliModelMenuButton = menu;
         JPanel modelControl = transparent(); modelControl.setLayout(new BoxLayout(modelControl, BoxLayout.Y_AXIS));
