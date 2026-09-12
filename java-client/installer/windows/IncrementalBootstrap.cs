@@ -266,6 +266,7 @@ internal static class IncrementalBootstrap {
             }
             return 0;
         } catch(Exception error) {
+            Console.Error.WriteLine("Incremental update failed: " + error.GetType().Name + ": " + error.Message);
             if(replaced && backup != null && File.Exists(backup)) {
                 try { File.Replace(backup, Core(launcher), Core(launcher) + ".failed-" + Guid.NewGuid().ToString("N"), false); }
                 catch { return 40; }

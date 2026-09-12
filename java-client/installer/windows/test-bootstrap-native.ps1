@@ -34,8 +34,9 @@ $hash=(Get-FileHash -LiteralPath $core -Algorithm SHA256).Hash.ToLowerInvariant(
 $deltaHash=(Get-FileHash -LiteralPath $Delta -Algorithm SHA256).Hash.ToLowerInvariant()
 $encodedPath=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($launcher))
 $encodedHash=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($deltaHash))
-$worker=Start-Process -FilePath $Bootstrap -ArgumentList @('--apply',$encodedPath,$hash,$encodedHash) -WindowStyle Hidden -PassThru -Wait
-if($worker.ExitCode -ne 0){throw "Native bootstrap apply failed: $($worker.ExitCode)"}
+$worker=Start-Process -FilePath $Bootstrap -ArgumentList @('--apply',$encodedPath,$hash,$encodedHash) -WindowStyle Hidden -PassThru -Wait `
+    -RedirectStandardError (Join-Path $Output 'apply-error.log')
+if($worker.ExitCode -ne 0){Get-Content -LiteralPath (Join-Path $Output 'apply-error.log'); throw "Native bootstrap apply failed: $($worker.ExitCode)"}
 $native=Start-Process -FilePath $launcher -ArgumentList '--self-test' -WindowStyle Hidden -PassThru `
     -RedirectStandardOutput (Join-Path $Output 'native.log') -RedirectStandardError (Join-Path $Output 'native-error.log')
 if(-not $native.WaitForExit(120000)){ $native.Kill($true); throw 'Native bootstrap fixture timed out' }
