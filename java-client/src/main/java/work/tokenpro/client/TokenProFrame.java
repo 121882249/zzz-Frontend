@@ -593,7 +593,7 @@ final class TokenProFrame extends JFrame {
             // Codex config is official, so no TokenPro key or route remains in use.
             boolean changed = codex.restore();
             store.write("codex-official-mode.txt", "official");
-            setDesktopCardState("Codex", "官方模型 · 历史对话可用", true);
+            setDesktopCardState("Codex", "官网 OpenAI 配置", true);
             status(changed ? "Codex 已切回官方默认 GPT；历史对话保留" : "当前已是官方配置");
             restartOfficialCodex();
         }
@@ -695,13 +695,13 @@ final class TokenProFrame extends JFrame {
             config.save(store); ClaudeDesktopConfig.install(store, config, accountLabel); ClaudeBridgeManager.ensureRunning(store); return config;
         }, config -> {
             bridgeStatus.setText("桥接状态：运行中 · " + config.routes().size() + " 个模型 · " + config.baseUrl());
-            setDesktopCardState("Claude", "已选 " + config.routes().size() + " 个模型", true);
+            setDesktopCardState("Claude", selectionStatus(config.routes().size()), true);
             status("Claude 已保存 " + config.routes().size() + " 个模型；点击连接加载新列表，当前程序未关闭");
         });
     }
 
     private void updateBridgeStatus() {
-        try { ClaudeBridgeConfig config = ClaudeBridgeConfig.load(store); boolean healthy = ClaudeBridgeManager.healthy(store); bridgeStatus.setText("桥接状态：" + (healthy ? "运行中" : "已配置") + " · " + config.routes().size() + " 个模型"); setDesktopCardState("Claude", "已选 " + config.routes().size() + " 个模型", true); }
+        try { ClaudeBridgeConfig config = ClaudeBridgeConfig.load(store); boolean healthy = ClaudeBridgeManager.healthy(store); bridgeStatus.setText("桥接状态：" + (healthy ? "运行中" : "已配置") + " · " + config.routes().size() + " 个模型"); setDesktopCardState("Claude", selectionStatus(config.routes().size()), true); }
         catch (Exception e) { bridgeStatus.setText("桥接状态：未配置"); setDesktopCardState("Claude", "请先选择模型", false); }
     }
 
@@ -784,7 +784,7 @@ final class TokenProFrame extends JFrame {
 
     private void updateCodexStatus() {
         if (codexOfficialMode()) {
-            setDesktopCardState("Codex", "官方模型 · 历史对话可用", true);
+            setDesktopCardState("Codex", "官网 OpenAI 配置", true);
             return;
         }
         try {
@@ -1057,7 +1057,7 @@ final class TokenProFrame extends JFrame {
         });
     }
 
-    private static String selectionStatus(int count) { return count > 0 ? "已选 " + count + " 个模型" : "请先选择模型"; }
+    private static String selectionStatus(int count) { return count > 0 ? "TokenPro 配置 " + count + " 个模型" : "请先选择模型"; }
 
     private Set<String> selectedModelIds(String client) {
         return selectedModelIds(client, false);
