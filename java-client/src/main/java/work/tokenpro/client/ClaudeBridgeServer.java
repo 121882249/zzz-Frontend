@@ -74,6 +74,7 @@ final class ClaudeBridgeServer implements AutoCloseable {
             HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(upstreamBase + (route.usesResponses() ? "/v1/responses" : "/v1/messages")))
                 .timeout(Duration.ofMinutes(5))
                 .header("Authorization", "Bearer " + latest.key()).header("Content-Type", "application/json")
+                .header("X-TokenPro-Group-Id", Long.toString(route.groupId()))
                 .header("anthropic-version", Optional.ofNullable(exchange.getRequestHeaders().getFirst("anthropic-version")).orElse("2023-06-01"))
                 .POST(HttpRequest.BodyPublishers.ofString(Json.stringify(payload)));
             if (!route.usesResponses() && exchange.getRequestHeaders().getFirst("anthropic-beta") != null) request.header("anthropic-beta", exchange.getRequestHeaders().getFirst("anthropic-beta"));

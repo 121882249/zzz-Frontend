@@ -51,7 +51,7 @@ final class CodexConfig {
         // Every TokenPro connection uses the authenticated adapter, including
         // an older chat whose model is changed to an image model inside Codex.
         boolean bridged = url.equals("https://tokenpro.work/v1");
-        String localToken = bridged ? CodexImageBridge.configure(store, url, key.trim()) : key.trim();
+        String localToken = bridged ? CodexImageBridge.configure(store, url, key.trim(), models) : key.trim();
         String block = managedBlock(bridged ? CodexImageBridge.baseUrl(store) : url, primaryModel, imageModel, catalog, localToken, actor, current, historicalProviderIds());
         validate(block);
         // TokenPro owns the active Codex config while connected. Replacing the

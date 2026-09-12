@@ -174,8 +174,10 @@ final class ConnectionRegressionTest {
             new ClaudeBridgeConfig("18", port, "local-fixture", "expired-ui-session", 1, "upstream-fixture", List.of(gemini)).save(fixture);
             var upstream = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 4);
             var requests = new java.util.concurrent.atomic.AtomicInteger();
+            var selectedGroup = new java.util.concurrent.atomic.AtomicReference<String>();
             upstream.createContext("/v1/messages", exchange -> {
                 requests.incrementAndGet();
+                selectedGroup.set(exchange.getRequestHeaders().getFirst("x-tokenpro-group-id"));
                 if (!"Bearer upstream-fixture".equals(exchange.getRequestHeaders().getFirst("Authorization"))) {
                     exchange.sendResponseHeaders(401, -1); exchange.close(); return;
                 }
@@ -195,6 +197,7 @@ final class ConnectionRegressionTest {
                 var response = http.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
                 check(response.statusCode() == 200 && response.body().contains("OK"), "expired UI login does not break an upstream-authorized API-key request"); passed++;
                 check(gemini.alias().equals(Json.object(Json.parse(response.body())).get("model")), "buffered Gemini reply uses the selected Claude model ID"); passed++;
+                check(String.valueOf(gemini.groupId()).equals(selectedGroup.get()), "Claude request keeps the selected group ID"); passed++;
                 check(requests.get() == 1, "one client request sends exactly one upstream request"); passed++;
                 var stale = java.net.http.HttpRequest.newBuilder(request.uri()).header("Authorization", "Bearer local-fixture")
                     .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body.replace(gemini.alias(), "old-removed-model"))).build();

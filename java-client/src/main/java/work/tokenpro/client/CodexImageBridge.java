@@ -43,12 +43,15 @@ final class CodexImageBridge implements AutoCloseable {
     }
     int port() { return server.getAddress().getPort(); }
 
-    static String configure(SecureStore store, String upstream, String key) throws Exception {
+    static String configure(SecureStore store, String upstream, String key, List<PricedModel> models) throws Exception {
         if (!"https://tokenpro.work/v1".equals(upstream)) throw new IllegalArgumentException("生图显示连接仅支持 TokenPro 官方接口");
         String token = "";
         try { token = Objects.toString(load(store).get("token"), ""); } catch (Exception ignored) { }
         if (token.isBlank()) { byte[] bytes = new byte[32]; new SecureRandom().nextBytes(bytes); token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes); }
-        store.write(FILE, Json.stringify(Map.of("token", token, "key", key, "revision", UUID.randomUUID().toString())));
+        List<Map<String,Object>> routes = models.stream().map(model -> Map.<String,Object>of(
+            "name", model.name(), "group_id", model.groupId())).toList();
+        store.write(FILE, Json.stringify(Map.of("token", token, "key", key,
+            "routes", routes, "revision", UUID.randomUUID().toString())));
         ensureRunning(store);
         return token;
     }
@@ -105,10 +108,13 @@ final class CodexImageBridge implements AutoCloseable {
             byte[] body = exchange.getRequestBody().readNBytes(32*1024*1024+1);
             if (body.length > 32*1024*1024) { reply(exchange, 413, "Request too large"); return; }
             HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(upstreamBase+path)).timeout(Duration.ofMinutes(10));
-            Set<String> skip = Set.of("authorization", "host", "content-length", "connection", "transfer-encoding", "upgrade", "expect", "cookie", "accept-encoding");
+            Set<String> skip = Set.of("authorization", "host", "content-length", "connection", "transfer-encoding", "upgrade", "expect", "cookie", "accept-encoding", "x-tokenpro-group-id");
             exchange.getRequestHeaders().forEach((name, values) -> { if (!skip.contains(name.toLowerCase(Locale.ROOT))) for (String value : values) request.header(name, value); });
             request.header("Authorization", "Bearer "+Objects.toString(config.get("key"), ""));
             request.header("Accept-Encoding", "identity");
+            String routeModel = requestModel(path, body, exchange.getRequestHeaders());
+            long routeGroup = configuredGroup(config, routeModel);
+            if (routeGroup > 0) request.header("X-TokenPro-Group-Id", Long.toString(routeGroup));
             request.method(method, method.equals("GET") ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofByteArray(body));
             HttpResponse<InputStream> response = client.send(request.build(), HttpResponse.BodyHandlers.ofInputStream());
             if (method.equals("POST") && path.equals("/v1/responses")) {
@@ -140,6 +146,25 @@ final class CodexImageBridge implements AutoCloseable {
             if (!started) reply(exchange, 502, "Codex 本机生图连接失败，请重试或重新应用模型");
             else { try { exchange.getResponseBody().write("data: {\"type\":\"error\",\"message\":\"本机图片处理未完成，请重试\"}\n\n".getBytes(StandardCharsets.UTF_8)); } catch (IOException ignored) {} }
         } finally { exchange.close(); }
+    }
+    private static String requestModel(String path, byte[] body, Headers headers) {
+        if (path.equals("/v1/images/generations") || path.equals("/v1/images/edits")) {
+            String preferred = Objects.toString(headers.getFirst("x-tokenpro-image-model"), "").trim();
+            if (!preferred.isBlank()) return preferred;
+        }
+        try { return Objects.toString(Json.object(Json.parse(new String(body, StandardCharsets.UTF_8))).get("model"), "").trim(); }
+        catch (Exception ignored) { return ""; }
+    }
+    private static long configuredGroup(Map<String,Object> config, String model) {
+        if (model.isBlank() || !(config.get("routes") instanceof List<?> routes)) return 0;
+        for (Object raw : routes) {
+            try {
+                Map<String,Object> route = Json.object(raw);
+                if (model.equalsIgnoreCase(Objects.toString(route.get("name"), "")) && route.get("group_id") instanceof Number group)
+                    return group.longValue();
+            } catch (Exception ignored) { }
+        }
+        return 0;
     }
     private static void reply(HttpExchange exchange, int status, String message) throws IOException {
         byte[] bytes = message.getBytes(StandardCharsets.UTF_8); exchange.sendResponseHeaders(status, bytes.length); exchange.getResponseBody().write(bytes);

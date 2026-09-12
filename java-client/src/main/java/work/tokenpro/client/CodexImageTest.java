@@ -51,7 +51,11 @@ final class CodexImageTest {
             adapter.transform(terminal);
             if (Json.stringify(terminal).contains("base64,...") || expected == null) throw new AssertionError("terminal response repair");
             SecureStore store = new SecureStore(root.resolve("store"));
-            store.write(CodexImageBridge.FILE, "{\"token\":\"test-local-token\",\"key\":\"unused-upstream-token\"}");
+            store.write(CodexImageBridge.FILE, Json.stringify(Map.of(
+                "token", "test-local-token", "key", "unused-upstream-token",
+                "routes", List.of(
+                    Map.of("name", "gpt-5.6-sol", "group_id", 16),
+                    Map.of("name", "gpt-image-2.5-sunburst", "group_id", 65)))));
             try (CodexImageBridge bridge = new CodexImageBridge(store, 0); HttpClient client = HttpClient.newHttpClient()) {
                 String url = "http://127.0.0.1:"+bridge.port()+"/v1/health";
                 if (client.send(HttpRequest.newBuilder(URI.create(url)).build(), HttpResponse.BodyHandlers.ofString()).statusCode()!=401) throw new AssertionError("local auth");
@@ -64,6 +68,7 @@ final class CodexImageTest {
             var imageRequests = new java.util.concurrent.ConcurrentHashMap<String,String>();
             upstream.createContext("/v1/responses",exchange -> {
                 try {
+                    imageRequests.put("/v1/responses:group", Objects.toString(exchange.getRequestHeaders().getFirst("x-tokenpro-group-id"), ""));
                     exchange.getRequestBody().readAllBytes();
                     exchange.getResponseHeaders().set("Content-Type","text/event-stream");
                     exchange.sendResponseHeaders(200,0);
@@ -77,6 +82,7 @@ final class CodexImageTest {
                     try {
                         imageRequests.put(endpoint + ":authorization", Objects.toString(exchange.getRequestHeaders().getFirst("Authorization"), ""));
                         imageRequests.put(endpoint + ":preferred", Objects.toString(exchange.getRequestHeaders().getFirst("x-tokenpro-image-model"), ""));
+                        imageRequests.put(endpoint + ":group", Objects.toString(exchange.getRequestHeaders().getFirst("x-tokenpro-group-id"), ""));
                         imageRequests.put(endpoint + ":body", new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
                         byte[] responseBody = ("{\"endpoint\":\"" + endpoint + "\"}").getBytes(StandardCharsets.UTF_8);
                         exchange.getResponseHeaders().set("Content-Type", "application/json");
@@ -88,23 +94,27 @@ final class CodexImageTest {
             upstream.start();
             try (CodexImageBridge bridge = new CodexImageBridge(store,0,"http://127.0.0.1:"+upstream.getAddress().getPort());
                  HttpClient http=HttpClient.newHttpClient()) {
+				var request=HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+bridge.port()+"/v1/responses"))
+					.header("Authorization","Bearer test-local-token").header("x-tokenpro-group-id","999")
+					.POST(HttpRequest.BodyPublishers.ofString("{\"model\":\"gpt-5.6-sol\"}"))
+					.timeout(java.time.Duration.ofSeconds(5)).build();
+				var response=http.sendAsync(request,HttpResponse.BodyHandlers.ofInputStream());
+				if(!headersSent.await(5,java.util.concurrent.TimeUnit.SECONDS))throw new AssertionError("stalled upstream did not start");
                 for (String endpoint : List.of("/v1/images/generations", "/v1/images/edits")) {
                     String requestBody = endpoint.endsWith("edits") ? "multipart fixture" : "{\"model\":\"gpt-image-2\",\"prompt\":\"draw\"}";
                     var imageRequest = HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+bridge.port()+endpoint))
                         .header("Authorization","Bearer test-local-token")
                         .header("x-tokenpro-image-model","gpt-image-2.5-sunburst")
+                        .header("x-tokenpro-group-id","999")
                         .POST(HttpRequest.BodyPublishers.ofString(requestBody)).build();
                     var imageResponse = http.send(imageRequest,HttpResponse.BodyHandlers.ofString());
                     if(imageResponse.statusCode()!=200 || !imageResponse.body().contains(endpoint))throw new AssertionError("image endpoint passthrough "+endpoint);
                     if(!"Bearer unused-upstream-token".equals(imageRequests.get(endpoint+":authorization")))throw new AssertionError("image endpoint upstream auth "+endpoint);
                     if(!"gpt-image-2.5-sunburst".equals(imageRequests.get(endpoint+":preferred")))throw new AssertionError("image endpoint preferred model "+endpoint);
+                    if(!"65".equals(imageRequests.get(endpoint+":group")))throw new AssertionError("image endpoint selected group "+endpoint);
                     if(!requestBody.equals(imageRequests.get(endpoint+":body")))throw new AssertionError("image endpoint body "+endpoint);
                 }
-                var request=HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+bridge.port()+"/v1/responses"))
-                    .header("Authorization","Bearer test-local-token").POST(HttpRequest.BodyPublishers.ofString("{}"))
-                    .timeout(java.time.Duration.ofSeconds(5)).build();
-                var response=http.sendAsync(request,HttpResponse.BodyHandlers.ofInputStream());
-                if(!headersSent.await(5,java.util.concurrent.TimeUnit.SECONDS))throw new AssertionError("stalled upstream did not start");
+                if(!"16".equals(imageRequests.get("/v1/responses:group")))throw new AssertionError("responses selected group");
                 try(var body=response.get(5,java.util.concurrent.TimeUnit.SECONDS).body()) {
                     long before=System.nanoTime(); bridge.close(); bridge.close(); bridge.await();
                     if(System.nanoTime()-before>java.util.concurrent.TimeUnit.SECONDS.toNanos(2))throw new AssertionError("bridge shutdown waited on unfinished stream");
