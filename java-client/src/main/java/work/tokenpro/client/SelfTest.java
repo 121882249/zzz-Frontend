@@ -275,6 +275,8 @@ final class SelfTest {
         TokenProFrame.ReleaseInfo macRelease = TokenProFrame.releaseForPlatform("{\"tag_name\":\"v1.2.39\",\"incremental\":{\"url\":\"https://tokenpro.work/TokenPro-update.jar\",\"sha256\":\"update-sha\"},\"downloads\":{\"macos-arm64\":{\"url\":\"https://tokenpro.work/TokenPro.dmg\",\"sha256\":\"dmg-sha\"}}}", "macos-arm64");
         check(macRelease.hasIncrementalUpdate() && macRelease.preferredUrl().endsWith(".jar") && "update-sha".equals(macRelease.preferredSha256()), "macOS uses incremental update"); passed++;
         check(Updater.macIncrementalScript().contains("with administrator privileges") && Updater.macIncrementalScript().contains("codesign --force --deep --sign -"), "macOS incremental updater permission fallback and signing"); passed++;
+        check(Updater.patchEntryAllowed("assets/CodexCommandLine.png"), "incremental update may ship the approved Codex CLI icon"); passed++;
+        check(!Updater.patchEntryAllowed("assets/changed.png") && !Updater.patchEntryAllowed("../bad.class"), "incremental update still rejects unapproved assets and traversal"); passed++;
         check(Updater.platformKey().startsWith(Platform.OS_KIND == Platform.OS.MAC ? "macos-" : Platform.OS_KIND == Platform.OS.WINDOWS ? "windows-" : "linux-"), "automatic update platform mapping"); passed++;
         ClaudeBridgeConfig.Route route = ClaudeBridgeConfig.Route.from(priced);
         check(route.alias().matches("claude-tokenpro-[0-9a-f]{24}"), "Claude alias"); passed++;

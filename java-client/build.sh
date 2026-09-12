@@ -24,6 +24,7 @@ cp ../Resources/GeminiSparkTransparent.png build/classes/assets/GeminiSparkTrans
 cp ../Resources/GrokMarkTransparent.png build/classes/assets/GrokMarkTransparent.png
 cp ../Resources/UnknownModelRuntime.png build/classes/assets/UnknownModelRuntime.png
 cp ../Resources/CodexOriginal.png build/classes/assets/CodexOriginal.png
+cp ../Resources/CodexCommandLine.png build/classes/assets/CodexCommandLine.png
 cp ../Resources/ClaudeOriginal.png build/classes/assets/ClaudeOriginal.png
 cp ../Resources/SparklesLucide.png build/classes/assets/SparklesLucide.png
 cp ../Resources/CircleUserLucide.png build/classes/assets/CircleUserLucide.png
@@ -35,10 +36,11 @@ cp ../Resources/PlusLucide.png build/classes/assets/PlusLucide.png
 cat > build/manifest.mf <<'EOF'
 Main-Class: work.tokenpro.client.Main
 Implementation-Title: TokenPro
-Implementation-Version: 1.2.72
+Implementation-Version: 1.2.73
 
 EOF
 "$JAVA_HOME/bin/jar" --create --file build/TokenPro.jar --manifest build/manifest.mf -C build/classes .
-"$JAVA_HOME/bin/jar" --create --file build/TokenPro-update.jar --no-manifest -C build/classes work
+"$JAVA_HOME/bin/jar" --create --file build/TokenPro-update.jar --no-manifest \
+  -C build/classes work -C build/classes assets/CodexCommandLine.png
 "$JAVA_HOME/bin/java" -jar build/TokenPro.jar --self-test
 echo "Built java-client/build/TokenPro.jar and TokenPro-update.jar"

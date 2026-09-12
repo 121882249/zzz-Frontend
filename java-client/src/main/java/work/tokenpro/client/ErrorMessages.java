@@ -83,17 +83,7 @@ final class ErrorMessages {
     }
 
     static void show(Component owner, Throwable error) {
-        JButton ok = new JButton("确定");
-        ok.setUI(new javax.swing.plaf.basic.BasicButtonUI());
-        ok.setForeground(Color.WHITE); ok.setBackground(new Color(65,105,235)); ok.setOpaque(true);
-        ok.setBorder(BorderFactory.createEmptyBorder(8, 24, 8, 24));
-        JOptionPane pane = new JOptionPane(messageComponent(error), JOptionPane.ERROR_MESSAGE,
-            JOptionPane.DEFAULT_OPTION, null, new Object[]{ok}, ok);
-        pane.setBackground(new Color(11,20,47));
-        JDialog dialog = pane.createDialog(owner, "TokenPro");
-        ok.addActionListener(e -> dialog.dispose());
-        dialog.getRootPane().setDefaultButton(ok);
-        dialog.setVisible(true); dialog.dispose();
+        TokenProDialogs.error(owner, "操作未完成", describe(error));
     }
 
     static JScrollPane messageComponent(Throwable error) {

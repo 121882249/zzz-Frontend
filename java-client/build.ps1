@@ -18,6 +18,7 @@ Copy-Item ../Resources/GeminiSparkTransparent.png build/classes/assets/GeminiSpa
 Copy-Item ../Resources/GrokMarkTransparent.png build/classes/assets/GrokMarkTransparent.png
 Copy-Item ../Resources/UnknownModelRuntime.png build/classes/assets/UnknownModelRuntime.png
 Copy-Item ../Resources/CodexOriginal.png build/classes/assets/CodexOriginal.png
+Copy-Item ../Resources/CodexCommandLine.png build/classes/assets/CodexCommandLine.png
 Copy-Item ../Resources/ClaudeOriginal.png build/classes/assets/ClaudeOriginal.png
 Copy-Item ../Resources/SparklesLucide.png build/classes/assets/SparklesLucide.png
 Copy-Item ../Resources/CircleUserLucide.png build/classes/assets/CircleUserLucide.png
@@ -29,12 +30,12 @@ Copy-Item ../Resources/PlusLucide.png build/classes/assets/PlusLucide.png
 @"
 Main-Class: work.tokenpro.client.Main
 Implementation-Title: TokenPro
-Implementation-Version: 1.2.72
+Implementation-Version: 1.2.73
 
 "@ | Set-Content -Encoding ascii build/manifest.mf
 & "$env:JAVA_HOME/bin/jar.exe" --create --file build/TokenPro.jar --manifest build/manifest.mf -C build/classes .
 if ($LASTEXITCODE -ne 0) { throw "TokenPro.jar packaging failed with exit code $LASTEXITCODE" }
-& "$env:JAVA_HOME/bin/jar.exe" --create --file build/TokenPro-update.jar --no-manifest -C build/classes work
+& "$env:JAVA_HOME/bin/jar.exe" --create --file build/TokenPro-update.jar --no-manifest -C build/classes work -C build/classes assets/CodexCommandLine.png
 if ($LASTEXITCODE -ne 0) { throw "TokenPro-update.jar packaging failed with exit code $LASTEXITCODE" }
 & "$env:JAVA_HOME/bin/java.exe" -jar build/TokenPro.jar --self-test
 if ($LASTEXITCODE -ne 0) { throw "self-test failed with exit code $LASTEXITCODE" }

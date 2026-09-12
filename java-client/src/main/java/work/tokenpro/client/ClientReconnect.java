@@ -134,20 +134,39 @@ final class ClientReconnect {
     private static void stop(ProcessHandle process, boolean desktop) throws Exception {
         if (!process.isAlive()) return;
         var identity = process.info().startInstant();
+        List<ProcessHandle> descendants = process.descendants().toList();
         if (desktop && Platform.OS_KIND == Platform.OS.WINDOWS) {
-            // Ask the exact GUI PID to close normally so its quit handlers flush
-            // sessions. No process-name wildcard, /T, or CLI descendants.
+            // First ask the exact GUI PID to close normally so quit handlers can
+            // flush sessions. Some desktop clients hide in the notification area
+            // instead of exiting, so the confirmed reconnect action has an exact
+            // process-tree fallback below.
             String powershell = Path.of(System.getenv().getOrDefault("SystemRoot", "C:\\Windows"),
                 "System32", "WindowsPowerShell", "v1.0", "powershell.exe").toString();
             new ProcessBuilder(powershell, "-NoProfile", "-NonInteractive", "-Command",
                 "$p=Get-Process -Id " + process.pid() + " -ErrorAction SilentlyContinue; if($p){[void]$p.CloseMainWindow()}")
                 .redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(ProcessBuilder.Redirect.DISCARD).start().waitFor(3, TimeUnit.SECONDS);
         } else process.destroy();
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(12);
+        if (waitForExit(process, desktop && Platform.OS_KIND == Platform.OS.WINDOWS ? 2 : 4)) return;
+        if (!identity.equals(process.info().startInstant())) return;
+
+        // The user has already confirmed that active requests may be stopped.
+        // Terminate only the captured target tree; never match by process name and
+        // never close the parent terminal application or unrelated client.
+        for (int index = descendants.size() - 1; index >= 0; index--)
+            if (descendants.get(index).isAlive()) descendants.get(index).destroy();
+        process.destroy();
+        if (waitForExit(process, 2)) return;
+        if (!identity.equals(process.info().startInstant())) return;
+        for (int index = descendants.size() - 1; index >= 0; index--)
+            if (descendants.get(index).isAlive()) descendants.get(index).destroyForcibly();
+        process.destroyForcibly();
+        if (!waitForExit(process, 3))
+            throw new IOException("目标程序仍在后台占用，无法安全重启；请从任务栏或托盘退出后重试");
+    }
+
+    private static boolean waitForExit(ProcessHandle process, int seconds) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(seconds);
         while (process.isAlive() && System.nanoTime() < deadline) Thread.sleep(100);
-        if (!process.isAlive()) return;
-        // Never silently force-kill a client that might still be saving a chat.
-        if (identity.equals(process.info().startInstant()))
-            throw new IOException("目标程序尚未完成退出，请保存当前任务并退出该程序后再点连接；未关闭其他应用");
+        return !process.isAlive();
     }
 }

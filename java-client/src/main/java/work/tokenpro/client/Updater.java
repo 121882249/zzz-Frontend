@@ -61,9 +61,7 @@ final class Updater {
             Enumeration<? extends ZipEntry> patchEntries = patch.entries();
             while (patchEntries.hasMoreElements()) {
                 String name = patchEntries.nextElement().getName();
-                boolean allowedDirectory = name.endsWith("/") && "work/tokenpro/client/".startsWith(name);
-                boolean allowedClass = name.startsWith("work/tokenpro/client/") && name.endsWith(".class");
-                if (!allowedDirectory && !allowedClass) {
+                if (!patchEntryAllowed(name)) {
                     throw new IllegalStateException("增量更新包包含无效文件");
                 }
             }
@@ -88,6 +86,15 @@ final class Updater {
             throw new IllegalStateException("合并后的核心文件不完整");
         }
         return merged;
+    }
+
+    static boolean patchEntryAllowed(String name) {
+        boolean allowedDirectory = name.endsWith("/") && "work/tokenpro/client/".startsWith(name);
+        String prefix = "work/tokenpro/client/";
+        String leaf = name.startsWith(prefix) ? name.substring(prefix.length()) : "";
+        boolean allowedClass = name.endsWith(".class") && !leaf.isBlank()
+            && !leaf.contains("/") && !leaf.contains("\\") && !leaf.contains("..");
+        return allowedDirectory || allowedClass || name.equals("assets/CodexCommandLine.png");
     }
 
     private static void copyEntry(ZipFile source, ZipEntry entry, ZipOutputStream output) throws IOException {

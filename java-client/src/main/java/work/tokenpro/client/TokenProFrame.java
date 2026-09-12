@@ -279,9 +279,10 @@ final class TokenProFrame extends JFrame {
     private JComponent desktopClientCard(String title, String iconName, String downloadUrl, Runnable chooseModel, Runnable restore, Runnable open, JLabel state) {
         RoundedPanel card = card(); card.setLayout(new BorderLayout(18, 0));
         JLabel badge = new JLabel(clientIcon(iconName, 48)); badge.setHorizontalAlignment(SwingConstants.CENTER); badge.setPreferredSize(new Dimension(52, 52)); card.add(badge, BorderLayout.WEST);
-        JPanel words = transparent(); words.setLayout(new BoxLayout(words, BoxLayout.Y_AXIS)); JPanel nameLine = transparent(new FlowLayout(FlowLayout.LEFT, 10, 0)); nameLine.setAlignmentX(Component.LEFT_ALIGNMENT); nameLine.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26)); JLabel heading = new JLabel(title); heading.setFont(appFont(17, Font.BOLD)); JLabel installedLabel = installLabel(); if (iconName.equals("Codex")) codexClientInstallLabel = installedLabel; else claudeClientInstallLabel = installedLabel; nameLine.add(heading); nameLine.add(installedLabel); words.add(Box.createVerticalStrut(11)); words.add(nameLine); card.add(words, BorderLayout.CENTER);
+        JPanel words = transparent(); words.setLayout(new BoxLayout(words, BoxLayout.Y_AXIS)); JPanel nameLine = transparent(new FlowLayout(FlowLayout.LEFT, 10, 0)); nameLine.setAlignmentX(Component.LEFT_ALIGNMENT); nameLine.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26)); JLabel heading = new JLabel(title); heading.setFont(appFont(17, Font.BOLD)); JLabel installedLabel = installLabel(); if (iconName.equals("Codex")) codexClientInstallLabel = installedLabel; else claudeClientInstallLabel = installedLabel; nameLine.add(heading); nameLine.add(installedLabel); words.add(Box.createVerticalStrut(4)); words.add(nameLine);
+        SupportCountLabel support = iconName.equals("Codex") ? homeCodexSupport : homeClaudeSupport;
+        support.setAlignmentX(Component.LEFT_ALIGNMENT); words.add(Box.createVerticalStrut(5)); words.add(support); card.add(words, BorderLayout.CENTER);
         JPanel actions = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        actions.add(iconName.equals("Codex") ? homeCodexSupport : homeClaudeSupport);
         JButton menu = modelSelectorAnchor();
         menu.addActionListener(e -> {
             if (!desktopClientInstalled(iconName)) {
@@ -389,7 +390,7 @@ final class TokenProFrame extends JFrame {
     private JComponent commandClientCard(String title, String iconName, String command, String downloadUrl) {
         RoundedPanel card = card(); card.setLayout(new BorderLayout(18, 0));
         boolean codexCli = command.equals("codex");
-        JLabel badge = new JLabel(clientIcon(iconName, 48));
+        JLabel badge = new JLabel(commandIcon(iconName, 48));
         badge.setHorizontalAlignment(SwingConstants.CENTER); badge.setPreferredSize(new Dimension(52, 52));
         card.add(badge, BorderLayout.WEST);
         JPanel words = transparent(); words.setLayout(new BoxLayout(words, BoxLayout.Y_AXIS));
@@ -400,10 +401,11 @@ final class TokenProFrame extends JFrame {
         if(codexCli) codexCliInstallLabel = installedLabel;
         else claudeCliInstallLabel = installedLabel;
         nameLine.add(heading); nameLine.add(installedLabel);
-        words.add(Box.createVerticalStrut(11)); words.add(nameLine);
+        words.add(Box.createVerticalStrut(4)); words.add(nameLine);
+        SupportCountLabel support = codexCli ? homeCodexCliSupport : homeClaudeCliSupport;
+        support.setAlignmentX(Component.LEFT_ALIGNMENT); words.add(Box.createVerticalStrut(5)); words.add(support);
         card.add(words, BorderLayout.CENTER);
         JPanel buttons = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        buttons.add(codexCli ? homeCodexCliSupport : homeClaudeCliSupport);
         JLabel state = codexCli ? homeCodexCliStatus : homeClaudeCliStatus;
         JButton menu = modelSelectorAnchor();
         menu.setName(command + "-cli-model-menu");
@@ -599,9 +601,9 @@ final class TokenProFrame extends JFrame {
     private void restoreCodex() {
         try {
             boolean running = !ClientReconnect.desktopProcesses("Codex").isEmpty();
-            if (running && JOptionPane.showConfirmDialog(this,
-                "将终止 Codex 当前请求并重新启动，以加载 OpenAI 官方配置。\n请先保存正在进行的工作；其他应用不会关闭。",
-                "恢复官方配置", JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE) != JOptionPane.OK_OPTION) return;
+            if (running && !TokenProDialogs.confirm(this, "恢复官网配置",
+                "将退出 Codex（包括托盘进程）并重新启动，以加载 OpenAI 官网配置。\n正在进行的请求会终止，请先保存当前工作；其他应用不会关闭。",
+                "恢复并重启")) return;
             // Keep the last TokenPro selection as a preference only. The live
             // Codex config is official, so no TokenPro key or route remains in use.
             boolean changed = codex.restore();
@@ -974,7 +976,7 @@ final class TokenProFrame extends JFrame {
         });
     }
 
-    private static String selectionStatus(int count) { return count > 0 ? "当前：TokenPro " + count + " 个模型" : "请先选择模型"; }
+    private static String selectionStatus(int count) { return count > 0 ? "当前：TokenPro已选" + count + "款模型" : "请先选择模型"; }
     private static String officialStatus(String client) {
         return client.equals("Claude") ? "当前：Claude 官网配置" : "当前：GPT 官网配置";
     }
@@ -1425,7 +1427,7 @@ final class TokenProFrame extends JFrame {
     private void setUpdateButtonState(String state, String text) {
         boolean latest = "latest".equals(state);
         boolean checking = "checking".equals(state);
-        if (loginView != null) loginView.setUpdateState(text, !latest && !checking);
+        if (loginView != null) loginView.setUpdateState(state, text, !latest && !checking);
         if (updateButton == null) return;
         updateButton.putClientProperty("tokenpro.updateState", state);
         updateButton.setText(text);
@@ -1622,7 +1624,7 @@ final class TokenProFrame extends JFrame {
     }
 
     private static JButton modelSelectorAnchor() {
-        JButton button = new JButton("模型配置                                      ▾");
+        JButton button = new JButton("渠道配置                                      ▾");
         button.setFont(appFont(13, Font.BOLD));
         button.setForeground(new Color(244, 247, 255));
         button.setOpaque(false);
@@ -1710,6 +1712,10 @@ final class TokenProFrame extends JFrame {
 
     private static ImageIcon clientIcon(String name, int size) {
         return resourceIconContained(name.equals("Codex") ? "CodexOriginal.png" : "ClaudeOriginal.png", size, size, false);
+    }
+
+    private static ImageIcon commandIcon(String name, int size) {
+        return resourceIconContained(name.equals("Codex") ? "CodexCommandLine.png" : "ClaudeOriginal.png", size, size, false);
     }
 
     private <T> void async(String running, Callable<T> task, java.util.function.Consumer<T> done) {
@@ -1834,9 +1840,9 @@ final class TokenProFrame extends JFrame {
         try {
             boolean running = cli ? !ClientReconnect.cliProcesses(store, command).isEmpty()
                 : !ClientReconnect.desktopProcesses(app).isEmpty();
-            if (running && JOptionPane.showConfirmDialog(this,
-                "将重启 " + label + " 以加载模型和 TokenPro 通道。\n进行中的请求可能中断，请先保存；其他应用不会关闭。",
-                "重新连接", JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE) != JOptionPane.OK_OPTION) {
+            if (running && !TokenProDialogs.confirm(this, "重新连接 " + label,
+                "将完整退出 " + label + "（包括后台或托盘进程）并重新启动，以加载模型和 TokenPro 通道。\n正在进行的请求会终止，请先保存当前工作；其他应用不会关闭。",
+                "退出并重启")) {
                 finishConnection(identity); return;
             }
         } catch (Exception e) { finishConnection(identity); error(e); return; }
@@ -1890,9 +1896,8 @@ final class TokenProFrame extends JFrame {
                     if (!cli) setDesktopCardState(app, selectionStatus(count), true);
                     else updateCommandControls(command, true);
                     status(label + " 已启动，已配置 " + count + " 个模型；费用以 TokenPro 用量记录为准");
-                    if (app.equals("Codex") && !cli) JOptionPane.showMessageDialog(TokenProFrame.this,
-                        "已配置 TokenPro 通道并重新启动客户端。\n原先创建于官方通道的旧任务不保证自动切换，请新建对话使用 TokenPro。\n模型名称不代表计费通道；连接按钮提示会显示是否已观察到 TokenPro 请求，费用以用量记录为准。",
-                        "连接说明", JOptionPane.INFORMATION_MESSAGE);
+                    if (app.equals("Codex") && !cli) TokenProDialogs.info(TokenProFrame.this, "连接完成",
+                        "已配置 TokenPro 通道并重新启动客户端。\n原先创建于官网通道的旧任务不保证自动切换，请新建对话使用 TokenPro。\n模型名称不代表计费通道；连接按钮提示会显示是否已观察到 TokenPro 请求，费用以用量记录为准。");
                     lastAccountRefresh = 0; refreshAccountSilently();
                 } catch (Exception e) { error(e.getCause() == null ? e : e.getCause()); }
             }
@@ -2222,11 +2227,13 @@ final class TokenProFrame extends JFrame {
 
     private static final class SupportCountLabel extends JLabel {
         SupportCountLabel() {
-            super("✦ 多款模型可连接", SwingConstants.CENTER);
+            super("✦ 多款模型可连接", SwingConstants.LEFT);
             setFont(appFont(10, Font.BOLD));
             setForeground(new Color(152, 240, 218));
-            setPreferredSize(new Dimension(126, 36));
+            setBorder(new EmptyBorder(0, 9, 0, 9));
+            setPreferredSize(new Dimension(132, 23));
             setMinimumSize(getPreferredSize());
+            setMaximumSize(getPreferredSize());
             setToolTipText("登录后显示当前账户可连接的模型数量");
             setOpaque(false);
         }
@@ -2240,10 +2247,10 @@ final class TokenProFrame extends JFrame {
         protected void paintComponent(Graphics graphics) {
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g.setPaint(new GradientPaint(0, 0, new Color(28, 120, 114, 120), getWidth(), getHeight(), new Color(76, 58, 155, 145)));
-            g.fillRoundRect(1, 1, getWidth() - 2, getHeight() - 2, 16, 16);
-            g.setColor(new Color(103, 222, 195, 150));
-            g.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, 16, 16);
+            g.setPaint(new GradientPaint(0, 0, new Color(28, 120, 114, 92), getWidth(), getHeight(), new Color(76, 58, 155, 112)));
+            g.fillRoundRect(1, 1, getWidth() - 2, getHeight() - 2, 12, 12);
+            g.setColor(new Color(103, 222, 195, 125));
+            g.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, 12, 12);
             g.dispose();
             super.paintComponent(graphics);
         }
@@ -2527,7 +2534,7 @@ final class TokenProFrame extends JFrame {
         }
 
         private static Color statusColor(String text) {
-            if (text != null && text.startsWith("当前：") && text.contains("官方")) return STATUS_OFFICIAL;
+            if (text != null && text.startsWith("当前：") && (text.contains("官方") || text.contains("官网"))) return STATUS_OFFICIAL;
             return text != null && text.startsWith("当前：TokenPro") ? STATUS_READY : STATUS_PENDING;
         }
     }

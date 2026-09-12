@@ -110,7 +110,8 @@ final class CosmosLoginPanel extends JPanel {
         feedback.setForeground(loading ? new Color(150, 168, 255) : new Color(145, 156, 191));
     }
 
-    void setUpdateState(String text, boolean enabled) {
+    void setUpdateState(String state, String text, boolean enabled) {
+        updateButton.setState(state);
         updateButton.setText(text);
         updateButton.setEnabled(enabled);
         updateButton.setCursor(enabled ? Cursor.getPredefinedCursor(Cursor.HAND_CURSOR) : Cursor.getDefaultCursor());
@@ -202,6 +203,7 @@ final class CosmosLoginPanel extends JPanel {
 
     private static final class UpdateButton extends JButton {
         private int progress = -1;
+        private String state = "checking";
 
         UpdateButton(String text) {
             super(text);
@@ -216,11 +218,28 @@ final class CosmosLoginPanel extends JPanel {
             repaint();
         }
 
+        void setState(String value) {
+            state = value == null ? "checking" : value;
+            setForeground("latest".equals(state) ? new Color(218, 248, 239)
+                : "check".equals(state) ? new Color(255, 235, 190) : new Color(226, 233, 255));
+            repaint();
+        }
+
         protected void paintComponent(Graphics graphics) {
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             int width = getWidth() - 1, height = getHeight() - 1;
-            g.setColor(new Color(21, 34, 72, 225));
+            Color stroke;
+            if ("latest".equals(state)) {
+                g.setPaint(new GradientPaint(0, 0, new Color(41, 102, 91, 205), width, 0, new Color(52, 125, 103, 205)));
+                stroke = new Color(132, 230, 196, 145);
+            } else if ("check".equals(state)) {
+                g.setPaint(new GradientPaint(0, 0, new Color(99, 72, 24, 235), width, 0, new Color(137, 99, 30, 235)));
+                stroke = new Color(242, 200, 121, 175);
+            } else {
+                g.setPaint(new GradientPaint(0, 0, new Color(34, 49, 99, 225), width, 0, new Color(47, 44, 111, 225)));
+                stroke = new Color(147, 172, 255, 125);
+            }
             g.fillRoundRect(0, 0, width, height, 14, 14);
             if (progress >= 0) {
                 Shape oldClip = g.getClip();
@@ -230,10 +249,14 @@ final class CosmosLoginPanel extends JPanel {
                 g.fillRect(0, 0, filled, height);
                 g.setClip(oldClip);
             }
-            g.setColor(new Color(147, 172, 255, 125));
+            g.setColor(stroke);
             g.drawRoundRect(0, 0, width, height, 14, 14);
+            g.setFont(getFont());
+            g.setColor(getForeground());
+            FontMetrics metrics = g.getFontMetrics();
+            g.drawString(getText(), (getWidth() - metrics.stringWidth(getText())) / 2,
+                (getHeight() - metrics.getHeight()) / 2 + metrics.getAscent());
             g.dispose();
-            super.paintComponent(graphics);
         }
     }
 

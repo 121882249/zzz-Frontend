@@ -204,6 +204,7 @@ internal static class IncrementalBootstrap {
         return success;
     }
     private static bool PatchEntry(string name) {
+        if(name == "assets/CodexCommandLine.png") return true;
         if(name.EndsWith("/", StringComparison.Ordinal)) return "work/tokenpro/client/".StartsWith(name, StringComparison.Ordinal);
         if(!name.StartsWith("work/tokenpro/client/", StringComparison.Ordinal) || !name.EndsWith(".class", StringComparison.Ordinal)) return false;
         string leaf = name.Substring("work/tokenpro/client/".Length);
@@ -370,7 +371,7 @@ internal static class IncrementalBootstrap {
         if(File.ReadAllText(Path.Combine(app, "notes.txt")) != "user-data" || File.ReadAllText(Path.Combine(app, "runtime", "release")) != "fixture-runtime") throw new Exception("Unrelated file changed");
         string[] backups = Directory.GetFiles(Path.Combine(app, "app"), "*.rollback-*");
         if(backups.Length != 1 || HashFile(backups[0]) != before) throw new Exception("Recovery backup missing");
-        if(PatchEntry("../bad.class") || PatchEntry("work/tokenpro/client/../../bad.class") || PatchEntry("assets/changed.png")) throw new Exception("Invalid patch entry accepted");
+        if(!PatchEntry("assets/CodexCommandLine.png") || PatchEntry("../bad.class") || PatchEntry("work/tokenpro/client/../../bad.class") || PatchEntry("assets/changed.png")) throw new Exception("Patch entry allowlist is incorrect");
         Console.WriteLine("TokenPro incremental bootstrap: 8 checks passed; no real installation modified.");
     }
 }

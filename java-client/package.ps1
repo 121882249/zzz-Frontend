@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
-$Version = '1.2.72'
+$Version = '1.2.73'
 $compilerCandidates = @(
   $env:INNO_ISCC,
   "${env:ProgramFiles(x86)}/Inno Setup 6/ISCC.exe",
