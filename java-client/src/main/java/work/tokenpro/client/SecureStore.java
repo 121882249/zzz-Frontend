@@ -6,6 +6,8 @@ import java.nio.file.*;
 import java.util.*;
 
 final class SecureStore {
+    private static final Object[] WRITE_LOCKS = new Object[64];
+    static { Arrays.setAll(WRITE_LOCKS, index -> new Object()); }
     private final Path root;
     private final String profile;
 
@@ -29,6 +31,22 @@ final class SecureStore {
     }
 
     void write(String name, String value) throws IOException {
+        synchronized(writeLock(name)) { writeLocked(name, value); }
+    }
+
+    boolean compareAndWrite(String name, String expected, String value) throws IOException {
+        synchronized(writeLock(name)) {
+            if(!read(name).equals(Optional.of(expected))) return false;
+            writeLocked(name, value);
+            return true;
+        }
+    }
+
+    private Object writeLock(String name) {
+        return WRITE_LOCKS[Math.floorMod(safe(name).toAbsolutePath().normalize().toString().toLowerCase(Locale.ROOT).hashCode(), WRITE_LOCKS.length)];
+    }
+
+    private void writeLocked(String name, String value) throws IOException {
         Path path = safe(name);
         Path temporary = Files.createTempFile(root, ".tokenpro-", ".tmp");
         Files.writeString(temporary, value, StandardCharsets.UTF_8, StandardOpenOption.TRUNCATE_EXISTING);
@@ -38,7 +56,7 @@ final class SecureStore {
         Platform.privateFile(path);
     }
 
-    void delete(String name) throws IOException { Files.deleteIfExists(safe(name)); }
+    void delete(String name) throws IOException { synchronized(writeLock(name)) { Files.deleteIfExists(safe(name)); } }
 
     String createCredential(String key) throws IOException {
         if (key.length() < 8 || key.chars().anyMatch(Character::isWhitespace) || key.contains("*") || key.contains("…")) {

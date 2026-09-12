@@ -496,9 +496,12 @@ final class TokenProFrame extends JFrame {
 
     private void chooseModels(String client, boolean cli, boolean launch) {
         if (accessToken == null || accountId.isBlank()) { error(new IllegalStateException("请先登录 TokenPro")); return; }
-        async("正在加载可用分组与模型…", () -> api.pricedModels(accessToken), models -> {
+        String token = accessToken, owner = accountId;
+        async("正在加载可用分组与模型…", () -> api.pricedModels(token), models -> {
+            if(!Objects.equals(token, accessToken) || !Objects.equals(owner, accountId)) return;
             if (models.isEmpty()) { error(new IllegalStateException("当前账户没有可用模型")); return; }
             updateSupportedModelCounts(models);
+            reconcileModelSelections(models, owner);
             Set<String> selected = selectedModelIds(client, cli);
             ModelPickerDialog dialog = new ModelPickerDialog(this, client, models, selected,
                 chosen -> {
@@ -538,6 +541,7 @@ final class TokenProFrame extends JFrame {
             saved.put("image_model", imageModel == null ? "" : imageModel.name());
             saved.put("image_models", imageModels.stream().map(PricedModel::name).toList());
             saved.put("key_id", managed.id());
+            saved.put("account_id", accountId);
             targetStore.write("codex-selected.json", Json.stringify(saved));
             if(cli) CliLauncher.install(store, "codex");
             return chosen;
@@ -1113,14 +1117,32 @@ final class TokenProFrame extends JFrame {
             protected List<PricedModel> doInBackground() throws Exception { return api.pricedModels(token); }
             protected void done() {
                 try {
-                    if (Objects.equals(token, accessToken)) updateSupportedModelCounts(get());
+                    if (Objects.equals(token, accessToken)) {
+                        List<PricedModel> models = get();
+                        updateSupportedModelCounts(models);
+                        reconcileModelSelections(models, accountId);
+                    }
                 } catch (Exception ignored) {
                     homeCodexSupport.reset();
                     homeClaudeSupport.reset();
+                    homeCodexCliSupport.reset();
+                    homeClaudeCliSupport.reset();
                     premiumModelTicker.reset();
                 }
             }
         }.execute();
+    }
+
+    private void reconcileModelSelections(List<PricedModel> models, String owner) {
+        try {
+            int removed = ModelSelectionReconciler.reconcileAll(store, owner, models);
+            updateCodexStatus(); updateBridgeStatus();
+            updateCommandControls("codex", codexCliInstalled);
+            updateCommandControls("claude", claudeCliInstalled);
+            if(removed > 0) status("已移除 " + removed + " 个失效模型选择；现有程序保持打开，点击连接后加载新列表");
+        } catch(Exception failure) {
+            status("最新模型列表已加载，但旧选择清理未全部完成：" + ErrorMessages.describe(failure));
+        }
     }
 
     private void updateSupportedModelCounts(List<PricedModel> models) {
@@ -1790,11 +1812,16 @@ final class TokenProFrame extends JFrame {
                 SecureStore target = cli ? store.cli(command) : store;
                 Map<String,Object> user = api.me(token);
                 if (!ClaudeBridgeServer.sameIdentifier(owner, user.get("id"))) throw new IllegalStateException("账户已变化，请重新登录");
-                ApiClient.ManagedKey key = api.globalKey(token);
-                List<PricedModel> selected = app.equals("Codex") ? savedCodexModels(target)
+                List<PricedModel> catalog = api.pricedModels(token);
+                if(catalog.isEmpty()) throw new IllegalStateException("暂未取得可用模型，原配置保留；请稍后重试");
+                List<PricedModel> saved = app.equals("Codex") ? savedCodexModels(target)
                     : ClaudeBridgeConfig.load(target).routes().stream()
                         .map(r -> new PricedModel(r.name(), r.platform(), r.groupName(), r.groupId())).toList();
-                if (selected.isEmpty()) throw new IllegalStateException("请先选择模型");
+                List<PricedModel> selected = ModelSelectionReconciler.currentModels(saved, catalog, app);
+                if(!Objects.equals(token, accessToken)) throw new IllegalStateException("账户已变化，连接已取消");
+                ModelSelectionReconciler.reconcile(target, app.equals("Codex") ? "codex-selected.json" : ClaudeBridgeConfig.FILE, app, owner, catalog);
+                if (selected.isEmpty()) throw new IllegalStateException("之前选择的模型已不可用，请重新选择模型；原程序未关闭");
+                ApiClient.ManagedKey key = api.globalKey(token);
                 ClientReconnect.reconnect(() -> {
                     if (app.equals("Codex")) {
                         CodexConfig config = cli ? new CodexConfig(target, target.root().resolve("home/config.toml")) : codex;
