@@ -61,7 +61,7 @@ final class TokenProDialogs {
 
         JPanel content = transparent(new BorderLayout(15, 0));
         content.add(new ToneIcon(tone), BorderLayout.WEST);
-        JTextArea copy = new JTextArea(message == null ? "" : message);
+        JTextArea copy = new JTextArea(compactMessage(message));
         copy.setEditable(false);
         copy.setFocusable(false);
         copy.setLineWrap(true);
@@ -71,7 +71,7 @@ final class TokenProDialogs {
         copy.setFont(font(13, Font.PLAIN));
         copy.setBorder(new EmptyBorder(2, 0, 0, 0));
         copy.setColumns(32);
-        copy.setRows(estimatedRows(message));
+        copy.setRows(2);
         content.add(copy, BorderLayout.CENTER);
         surface.add(content, BorderLayout.CENTER);
 
@@ -102,14 +102,35 @@ final class TokenProDialogs {
         return result;
     }
 
-    static int estimatedRows(String message) {
-        if (message == null || message.isBlank()) return 2;
-        int rows = 0;
-        for (String line : message.split("\\R", -1)) {
-            double units = line.codePoints().mapToDouble(value -> value < 128 ? .55 : 1.0).sum();
-            rows += Math.max(1, (int) Math.ceil(units / 28.0));
+    static String compactMessage(String message) {
+        if (message == null || message.isBlank()) return "";
+        String[] rawLines = message.strip().split("\\R+");
+        java.util.List<String> lines = new java.util.ArrayList<>();
+        for (String raw : rawLines) {
+            String line = raw.replaceAll("[\\t ]+", " ").trim();
+            if (!line.isBlank()) lines.add(line);
         }
-        return Math.max(2, Math.min(8, rows));
+        if (lines.isEmpty()) return "";
+        if (lines.size() == 1) return clipToUnits(lines.getFirst(), 56);
+        String first = clipToUnits(lines.getFirst(), 28);
+        String remainder = String.join(" ", lines.subList(1, lines.size()));
+        return first + "\n" + clipToUnits(remainder, 28);
+    }
+
+    private static String clipToUnits(String text, int maxUnits) {
+        int limit = maxUnits * 10;
+        int total = text.codePoints().map(point -> point < 128 ? 6 : 10).sum();
+        if (total <= limit) return text;
+        int used = 0, end = 0;
+        for (int offset = 0; offset < text.length();) {
+            int point = text.codePointAt(offset);
+            int width = point < 128 ? 6 : 10;
+            if (used + width > limit - 10) break;
+            used += width;
+            offset += Character.charCount(point);
+            end = offset;
+        }
+        return text.substring(0, end).stripTrailing() + "…";
     }
 
     private static JPanel transparent(LayoutManager layout) {

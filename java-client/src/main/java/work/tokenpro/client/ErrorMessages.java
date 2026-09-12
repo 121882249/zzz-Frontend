@@ -79,7 +79,7 @@ final class ErrorMessages {
             .replaceAll("\\bsk-[A-Za-z0-9_-]{6,}", "[密钥已隐藏]")
             .replaceAll("(?i)((?:access_token|refresh_token|password|api_key)\\s*[:=]\\s*)[^\\s,;]+", "$1[已隐藏]")
             .replaceAll("[\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f]", "").trim();
-        return text.length() > 280 ? text.substring(0, 280) + "…" : text;
+        return text.length() > 120 ? text.substring(0, 120) + "…" : text;
     }
 
     static void show(Component owner, Throwable error) {
