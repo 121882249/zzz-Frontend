@@ -27,6 +27,16 @@ final class SelfTest {
         String restoredConfig = CodexConfig.restoreRootOverrides(liveConfig, config);
         check(restoredConfig.startsWith("model = \"old\"\nmodel_provider = \"openai\"\n"), "official root model settings restored"); passed++;
         check(restoredConfig.contains("apps = false") && restoredConfig.contains("[new_setting]"), "restore preserves newer Codex settings"); passed++;
+        String compatibleOfficial = CodexConfig.restoreWithHistoryCompatibility(config);
+        check(compatibleOfficial.contains("model_provider = \"openai\"") && compatibleOfficial.contains("[model_providers.custom]"), "official defaults retain TokenPro history provider"); passed++;
+        check(!compatibleOfficial.contains("model_catalog_json") && compatibleOfficial.contains("requires_openai_auth = true"), "official history alias uses native OpenAI catalog and login"); passed++;
+        check(compatibleOfficial.contains("apps = true") && !compatibleOfficial.contains("experimental_bearer_token"), "official restore preserves settings without TokenPro credentials"); passed++;
+        String staleTokenProBackup = "model = \"relay-model\"\nmodel_provider = \"custom\"\n[features]\napps = true\n";
+        String repairedOfficial = CodexConfig.restoreWithHistoryCompatibility(staleTokenProBackup);
+        check(!repairedOfficial.contains("model_provider = \"custom\"") && repairedOfficial.contains("[model_providers.custom]"), "stale TokenPro backup falls back to official provider"); passed++;
+        String userCustom = "model_provider = \"custom\"\n[model_providers.custom]\nname = \"Private\"\nbase_url = \"https://example.test/v1\"\n";
+        String preservedCustom = CodexConfig.restoreWithHistoryCompatibility(userCustom);
+        check(preservedCustom.indexOf("[model_providers.custom]") == preservedCustom.lastIndexOf("[model_providers.custom]") && preservedCustom.contains("name = \"Private\""), "existing custom provider is not duplicated"); passed++;
         check("https://tokenpro.work/v1".equals(CodexConfig.providerBaseUrl("https://tokenpro.work/v1")), "Codex provider keeps v1 route"); passed++;
         String managedActor = "# >>> TokenPro managed >>>\n[model_providers.custom]\nname = \"Codex\"\nhttp_headers = { \"x-openai-actor-authorization\" = \"Codex\", \"x-tokenpro-image-model\" = \"gpt-image\" }\n# <<< TokenPro managed <<<\n";
         String emailActor = CodexConfig.withActor(managedActor, "user@example.com");

@@ -11,11 +11,19 @@ import java.util.regex.Pattern;
 final class CodexConfig {
     private static final String START = "# >>> TokenPro managed >>>";
     private static final String END = "# <<< TokenPro managed <<<";
+    private static final String HISTORY_PROVIDER_START = "# >>> TokenPro history provider >>>";
+    private static final String HISTORY_PROVIDER_END = "# <<< TokenPro history provider <<<";
     private static final Pattern MANAGED_ROOT_KEY = Pattern.compile("^(model|model_provider|review_model|model_catalog_json|model_reasoning_effort|model_context_window|model_auto_compact_token_limit)\\s*=.*$");
     private final SecureStore store;
     private final Path configPath;
-    CodexConfig(SecureStore store) { this(store, Platform.codexConfig()); }
-    CodexConfig(SecureStore store, Path configPath) { this.store = store; this.configPath = configPath; }
+    private final boolean preserveDesktopHistoryProvider;
+    CodexConfig(SecureStore store) { this(store, Platform.codexConfig(), true); }
+    CodexConfig(SecureStore store, Path configPath) { this(store, configPath, false); }
+    private CodexConfig(SecureStore store, Path configPath, boolean preserveDesktopHistoryProvider) {
+        this.store = store;
+        this.configPath = configPath;
+        this.preserveDesktopHistoryProvider = preserveDesktopHistoryProvider;
+    }
 
     void apply(String baseUrl, List<PricedModel> models, String key, String accountEmail) throws Exception {
         models = ModelPickerDialog.orderedModels(models, "Codex");
@@ -45,7 +53,8 @@ final class CodexConfig {
         validate(block);
         // TokenPro owns the active Codex config while connected. Replacing the
         // file avoids ambiguous TOML merges and duplicate keys; restore() puts
-        // the byte-for-byte original configuration back.
+        // the original defaults back while retaining an OpenAI-backed alias for
+        // conversations whose persisted provider id is still `custom`.
         writeAtomic(target, block);
         } catch (Exception failure) {
             if (previousCatalog.isPresent()) store.write("codex-model-catalog.json", previousCatalog.get());
@@ -65,10 +74,13 @@ final class CodexConfig {
         // No selected models / no backup is a normal, repeatable no-op. If a
         // managed block survives without its backup, remove only that block.
         // Never erase unrelated settings, history, or the user's auth file.
-        String restored = original.isPresent() ? original.get() : stripManaged(current);
+        String restored = original.isPresent() && preserveDesktopHistoryProvider
+            ? restoreWithHistoryCompatibility(original.get())
+            : original.orElseGet(() -> stripManaged(current));
         boolean changed = !restored.equals(current);
         if (changed) {
             Files.createDirectories(target.getParent());
+            validate(restored);
             writeAtomic(target, restored);
         }
         store.delete("codex-original.toml");
@@ -77,6 +89,88 @@ final class CodexConfig {
         store.delete(CodexImageBridge.FILE);
         store.delete(ConnectionEvidence.FILE);
         return changed;
+    }
+
+    static String restoreWithHistoryCompatibility(String original) {
+        String clean = stripMarkedBlock(original, HISTORY_PROVIDER_START, HISTORY_PROVIDER_END);
+        if (clean.contains(START)) clean = stripManaged(clean);
+
+        Optional<String> originalProvider = rootAssignment(clean, "model_provider");
+        if (originalProvider.isPresent() && assignmentValue(originalProvider.get()).equals("custom")) {
+            // A stale TokenPro backup must not become the default again. Remove
+            // all TokenPro-owned root selections and let Codex use OpenAI's
+            // built-in defaults while the provider remains available below.
+            clean = stripRootOverrides(clean);
+        }
+        StringBuilder out = new StringBuilder();
+        boolean bom = clean.startsWith("\uFEFF");
+        if (bom) clean = clean.substring(1);
+        if (bom) out.append('\uFEFF');
+        out.append(clean);
+        if (table(clean, "[model_providers.custom]").isEmpty()) {
+            if (!clean.isEmpty() && !clean.endsWith("\n")) out.append('\n');
+            if (!clean.isBlank()) out.append('\n');
+            out.append(HISTORY_PROVIDER_START).append('\n');
+            // Codex persists the provider id in each conversation. Keep the old
+            // id resolvable, but route it through the user's normal OpenAI login
+            // while official mode is active. No TokenPro key or catalog remains.
+            out.append("[model_providers.custom]\n");
+            out.append("name = \"OpenAI\"\n");
+            out.append("wire_api = \"responses\"\n");
+            out.append("requires_openai_auth = true\n");
+            out.append("supports_websockets = true\n");
+            out.append("supports_standalone_web_search = true\n");
+            out.append(HISTORY_PROVIDER_END).append('\n');
+        }
+        return out.toString();
+    }
+
+    private static Optional<String> rootAssignment(String text, String key) {
+        boolean root = true;
+        Pattern assignment = Pattern.compile("^" + Pattern.quote(key) + "\\s*=.*$");
+        for (String line : text.split("\\R", -1)) {
+            String trimmed = line.stripLeading();
+            if (trimmed.startsWith("[")) root = false;
+            if (root && assignment.matcher(trimmed).matches()) return Optional.of(trimmed);
+        }
+        return Optional.empty();
+    }
+
+    private static String assignmentValue(String assignment) {
+        int equals = assignment.indexOf('=');
+        if (equals < 0) return "";
+        String value = assignment.substring(equals + 1).trim();
+        if (value.length() >= 2 && value.startsWith("\"") && value.endsWith("\"")) return value.substring(1, value.length() - 1);
+        return value;
+    }
+
+    private static Optional<String> table(String text, String header) {
+        StringBuilder out = new StringBuilder();
+        boolean collecting = false;
+        for (String line : text.split("(?<=\\n)", -1)) {
+            String trimmed = line.strip();
+            if (!collecting) {
+                if (!trimmed.equals(header)) continue;
+                collecting = true;
+            } else if (trimmed.startsWith("[") && !trimmed.startsWith(header.substring(0, header.length() - 1) + ".")) {
+                break;
+            } else if (trimmed.equals(END) || trimmed.equals(HISTORY_PROVIDER_END)) {
+                break;
+            }
+            out.append(line);
+        }
+        return collecting ? Optional.of(out.toString().stripTrailing()) : Optional.empty();
+    }
+
+    private static String stripMarkedBlock(String text, String startMarker, String endMarker) {
+        int start = text.indexOf(startMarker);
+        if (start < 0) return text;
+        int end = text.indexOf(endMarker, start);
+        if (end < 0) throw new IllegalStateException("Codex 配置中的 TokenPro 历史兼容标记不完整，已停止修改");
+        end += endMarker.length();
+        if (end < text.length() && text.charAt(end) == '\r') end++;
+        if (end < text.length() && text.charAt(end) == '\n') end++;
+        return text.substring(0, start) + text.substring(end);
     }
 
     void updateActor(String accountEmail) throws Exception {

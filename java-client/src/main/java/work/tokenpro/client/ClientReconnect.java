@@ -5,7 +5,7 @@ import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
-/** Explicit Connect actions only. Model selection must never call this class. */
+/** Restarts only the explicitly confirmed target after configuration preflight succeeds. */
 final class ClientReconnect {
     private ClientReconnect() {}
     interface Action { void run() throws Exception; }

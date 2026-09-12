@@ -276,7 +276,7 @@ final class TokenProFrame extends JFrame {
                 status("请先安装 " + iconName + " 客户端");
                 return;
             }
-            showModelMenu(menu, chooseModel, restore);
+            showModelMenu(menu, iconName, chooseModel, restore);
         });
         if (iconName.equals("Codex")) codexModelMenuButton = menu; else claudeModelMenuButton = menu;
         JPanel modelControl = transparent(); modelControl.setLayout(new BoxLayout(modelControl, BoxLayout.Y_AXIS));
@@ -290,11 +290,11 @@ final class TokenProFrame extends JFrame {
         actions.add(launch); card.add(actions, BorderLayout.EAST); return card;
     }
 
-    private void showModelMenu(JButton anchor, Runnable chooseModel, Runnable restore) {
-        showModelMenu(anchor, chooseModel, restore, false);
+    private void showModelMenu(JButton anchor, String client, Runnable chooseModel, Runnable restore) {
+        showModelMenu(anchor, client, chooseModel, restore, false);
     }
 
-    private void showModelMenu(JButton anchor, Runnable chooseModel, Runnable restore, boolean cli) {
+    private void showModelMenu(JButton anchor, String client, Runnable chooseModel, Runnable restore, boolean cli) {
         hideModelMenu();
         JLayeredPane layered = getLayeredPane();
         JPanel overlay = new JPanel(null);
@@ -305,15 +305,21 @@ final class TokenProFrame extends JFrame {
         });
 
         CosmosMenuPanel menu = new CosmosMenuPanel();
+        boolean officialMode = !cli && "Codex".equals(client) && codexOfficialMode();
+        int itemCount = 0;
         CosmosMenuButton choose = new CosmosMenuButton("选择模型", false);
         choose.addActionListener(event -> { hideModelMenu(); chooseModel.run(); });
-        CosmosMenuButton official = new CosmosMenuButton("恢复配置", true);
-        official.addActionListener(event -> { hideModelMenu(); restore.run(); });
         menu.add(choose);
-        menu.add(official);
+        itemCount++;
+        if (!officialMode) {
+            CosmosMenuButton official = new CosmosMenuButton(cli ? "恢复配置" : "恢复官方配置", true);
+            official.addActionListener(event -> { hideModelMenu(); restore.run(); });
+            menu.add(official);
+            itemCount++;
+        }
 
         int width = 186;
-        int height = 84;
+        int height = 8 + itemCount * 38;
         Point point = SwingUtilities.convertPoint(anchor, 0, anchor.getHeight() + 6, layered);
         int x = Math.max(8, Math.min(point.x, layered.getWidth() - width - 8));
         int y = Math.max(8, Math.min(point.y, layered.getHeight() - height - 8));
@@ -368,7 +374,7 @@ final class TokenProFrame extends JFrame {
             if(!(codexCli ? codexCliInstalled : claudeCliInstalled)) {
                 status("请先安装 " + iconName + " 命令行工具"); return;
             }
-            showModelMenu(menu, () -> chooseModels(iconName, true, false), () -> restoreCli(command), true);
+            showModelMenu(menu, iconName, () -> chooseModels(iconName, true, false), () -> restoreCli(command), true);
         });
         if(codexCli) codexCliModelMenuButton = menu; else claudeCliModelMenuButton = menu;
         JPanel modelControl = transparent(); modelControl.setLayout(new BoxLayout(modelControl, BoxLayout.Y_AXIS));
@@ -543,23 +549,59 @@ final class TokenProFrame extends JFrame {
             saved.put("key_id", managed.id());
             saved.put("account_id", accountId);
             targetStore.write("codex-selected.json", Json.stringify(saved));
-            if(cli) CliLauncher.install(store, "codex");
+            if (cli) CliLauncher.install(store, "codex");
+            else store.delete("codex-official-mode.txt");
             return chosen;
         }, configured -> {
             if (!cli) setDesktopCardState("Codex", selectionStatus(chosen.size()), true);
             else updateCommandControls("codex", codexCliInstalled);
             status((cli ? "Codex 命令行独立配置" : "Codex 客户端配置") + "已保存 " + configured.size() + " 个模型；点击连接后加载，尚未验证实际请求通道");
             if (cli && launchCli) launchTerminal("codex");
+            else if (!cli) reconnectApp("Codex");
         });
     }
 
     private void restoreCodex() {
         try {
-            boolean changed = codex.restore(); store.delete("codex-selected.json");
-            setDesktopCardState("Codex", "请先选择模型", false);
-            status(changed ? "Codex 配置已恢复；重新启动该客户端后生效" : "当前没有需要恢复的 Codex 配置，无需重复恢复");
+            boolean running = !ClientReconnect.desktopProcesses("Codex").isEmpty();
+            if (running && JOptionPane.showConfirmDialog(this,
+                "将终止 Codex 当前请求并重新启动，以加载 OpenAI 官方配置。\n请先保存正在进行的工作；其他应用不会关闭。",
+                "恢复官方配置", JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE) != JOptionPane.OK_OPTION) return;
+            // Keep the last TokenPro selection as a preference only. The live
+            // Codex config is official, so no TokenPro key or route remains in use.
+            boolean changed = codex.restore();
+            store.write("codex-official-mode.txt", "official");
+            setDesktopCardState("Codex", "官方模型 · 历史对话可用", true);
+            status(changed ? "Codex 已切回官方默认 GPT；历史对话保留" : "当前已是官方配置");
+            restartOfficialCodex();
         }
         catch (Exception ex) { error(ex); }
+    }
+
+    private void restartOfficialCodex() {
+        String identity = "codex-desktop";
+        if (!connectingClients.begin(identity)) return;
+        refreshConnectControls();
+        status("正在重新启动 Codex 并加载官方配置…");
+        new SwingWorker<Boolean, Void>() {
+            protected Boolean doInBackground() throws Exception {
+                ClientReconnect.reconnect(() -> {}, () -> {
+                    ClientReconnect.stopDesktop("Codex");
+                    CodexImageBridge.stop(store);
+                }, () -> {
+                    if (!Platform.openApplication("Codex")) throw new IllegalStateException("无法启动 Codex");
+                });
+                ClientReconnect.awaitStarted(store, "Codex", false);
+                return true;
+            }
+            protected void done() {
+                finishConnection(identity);
+                try {
+                    get();
+                    status("Codex 已使用 OpenAI 官方配置重新启动；历史对话保留");
+                } catch (Exception failure) { error(failure.getCause() == null ? failure : failure.getCause()); }
+            }
+        }.execute();
     }
 
     private JComponent toolsPanel() {
@@ -719,6 +761,10 @@ final class TokenProFrame extends JFrame {
     }
 
     private void updateCodexStatus() {
+        if (codexOfficialMode()) {
+            setDesktopCardState("Codex", "官方模型 · 历史对话可用", true);
+            return;
+        }
         try {
             Optional<String> raw = store.read("codex-selected.json");
             if (raw.isEmpty()) throw new IllegalStateException("未选择");
@@ -731,6 +777,11 @@ final class TokenProFrame extends JFrame {
                 setDesktopCardState("Codex", selectionStatus(1), true);
             }
         } catch (Exception ignored) { setDesktopCardState("Codex", "请先选择模型", false); }
+    }
+
+    private boolean codexOfficialMode() {
+        try { return store.read("codex-official-mode.txt").filter("official"::equals).isPresent(); }
+        catch (Exception ignored) { return false; }
     }
 
     private void setDesktopCardState(String client, String installedText, boolean canConnect) {
