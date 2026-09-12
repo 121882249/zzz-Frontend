@@ -80,7 +80,10 @@ final class CodexConfig {
         boolean changed = !restored.equals(current);
         if (changed) {
             Files.createDirectories(target.getParent());
-            validate(restored);
+            // Desktop restore adds a compatibility provider and must be parsed
+            // by the installed Codex binary. CLI/test restores are byte-for-byte
+            // copies and may run on clean build hosts without Codex installed.
+            if (preserveDesktopHistoryProvider) validate(restored);
             writeAtomic(target, restored);
         }
         store.delete("codex-original.toml");
