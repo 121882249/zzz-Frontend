@@ -157,12 +157,20 @@ final class TokenProFrame extends JFrame {
         if (!initializeServices) return;
         refreshInstallationState();
         restoreSession();
-        new SwingWorker<Void, Void>() {
-            protected Void doInBackground() throws Exception {
+        new SwingWorker<Boolean, Void>() {
+            protected Boolean doInBackground() throws Exception {
+                // An older release may already have marked official mode after
+                // removing the `custom` provider. Repair that upgrade path on
+                // startup so the user does not have to switch away and back.
+                boolean repairedOfficialHistory = codexOfficialMode() && codex.restore();
                 BridgeLifecycle.resumeConfigured(store);
-                return null;
+                return repairedOfficialHistory;
             }
-            protected void done() { try { get(); } catch (Exception e) { status("部分本机连接未恢复，请在相应卡片点击连接重试"); } }
+            protected void done() {
+                try {
+                    if (get()) status("Codex 官方配置已自动修复；请重新打开旧对话");
+                } catch (Exception e) { status("部分本机连接未恢复，请在相应卡片点击连接重试"); }
+            }
         }.execute();
         javax.swing.Timer updateTimer = new javax.swing.Timer(2500, e -> checkForUpdates(null, true));
         updateTimer.setRepeats(false);
@@ -311,12 +319,10 @@ final class TokenProFrame extends JFrame {
         choose.addActionListener(event -> { hideModelMenu(); chooseModel.run(); });
         menu.add(choose);
         itemCount++;
-        if (!officialMode) {
-            CosmosMenuButton official = new CosmosMenuButton(cli ? "恢复配置" : "恢复官方配置", true);
-            official.addActionListener(event -> { hideModelMenu(); restore.run(); });
-            menu.add(official);
-            itemCount++;
-        }
+        CosmosMenuButton official = new CosmosMenuButton(cli ? "恢复配置" : officialMode ? "刷新官方配置" : "恢复官方配置", true);
+        official.addActionListener(event -> { hideModelMenu(); restore.run(); });
+        menu.add(official);
+        itemCount++;
 
         int width = 186;
         int height = 8 + itemCount * 38;

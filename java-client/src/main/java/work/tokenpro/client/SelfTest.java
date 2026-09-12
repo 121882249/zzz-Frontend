@@ -34,6 +34,9 @@ final class SelfTest {
         String staleTokenProBackup = "model = \"relay-model\"\nmodel_provider = \"custom\"\n[features]\napps = true\n";
         String repairedOfficial = CodexConfig.restoreWithHistoryCompatibility(staleTokenProBackup);
         check(!repairedOfficial.contains("model_provider = \"custom\"") && repairedOfficial.contains("[model_providers.custom]"), "stale TokenPro backup falls back to official provider"); passed++;
+        String upgradedWithoutBackup = CodexConfig.restoreContent(sample, Optional.empty(), true);
+        check(upgradedWithoutBackup.equals("before\nafter\n\n# >>> TokenPro history provider >>>\n[model_providers.custom]\nname = \"OpenAI\"\nwire_api = \"responses\"\nrequires_openai_auth = true\nsupports_websockets = true\nsupports_standalone_web_search = true\n# <<< TokenPro history provider <<<\n"), "desktop restore without backup keeps old TokenPro conversations resolvable"); passed++;
+        check(CodexConfig.restoreContent(sample, Optional.empty(), false).equals("before\nafter\n"), "CLI restore without backup remains isolated from desktop compatibility"); passed++;
         String userCustom = "model_provider = \"custom\"\n[model_providers.custom]\nname = \"Private\"\nbase_url = \"https://example.test/v1\"\n";
         String preservedCustom = CodexConfig.restoreWithHistoryCompatibility(userCustom);
         check(preservedCustom.indexOf("[model_providers.custom]") == preservedCustom.lastIndexOf("[model_providers.custom]") && preservedCustom.contains("name = \"Private\""), "existing custom provider is not duplicated"); passed++;

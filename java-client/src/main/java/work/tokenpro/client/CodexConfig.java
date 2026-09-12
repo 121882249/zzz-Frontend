@@ -74,9 +74,7 @@ final class CodexConfig {
         // No selected models / no backup is a normal, repeatable no-op. If a
         // managed block survives without its backup, remove only that block.
         // Never erase unrelated settings, history, or the user's auth file.
-        String restored = original.isPresent() && preserveDesktopHistoryProvider
-            ? restoreWithHistoryCompatibility(original.get())
-            : original.orElseGet(() -> stripManaged(current));
+        String restored = restoreContent(current, original, preserveDesktopHistoryProvider);
         boolean changed = !restored.equals(current);
         if (changed) {
             Files.createDirectories(target.getParent());
@@ -92,6 +90,14 @@ final class CodexConfig {
         store.delete(CodexImageBridge.FILE);
         store.delete(ConnectionEvidence.FILE);
         return changed;
+    }
+
+    static String restoreContent(String current, Optional<String> original, boolean preserveDesktopHistoryProvider) {
+        String baseline = original.orElseGet(() -> stripManaged(current));
+        // Upgraded desktop users may no longer have codex-original.toml because
+        // an earlier restore already consumed it. They still need the `custom`
+        // alias: old conversations persist that provider id in their history.
+        return preserveDesktopHistoryProvider ? restoreWithHistoryCompatibility(baseline) : baseline;
     }
 
     static String restoreWithHistoryCompatibility(String original) {
