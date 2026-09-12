@@ -13,7 +13,7 @@ final class ConnectionRegressionTest {
         }
         check(!BrowserOpenGate.protects("https://tokenpro.work/downloads/latest/release-v2.json") && !BrowserOpenGate.protects("https://other.example/docs"), "updates and unrelated links do not share web cooldown"); passed++;
         check(links.begin(), "first web click is accepted"); passed++;
-        for (int i=0;i<100;i++) check(!links.begin(), "rapid or cross-entry clicks never queue a second browser launch"); passed++;
+        for (int i=0;i<100;i++) check(!links.begin(), "rapid clicks on the same entry never queue a second browser launch"); passed++;
         linkClock.addAndGet(30000);
         check(!links.begin(), "slow background ticket request remains locked after fifteen seconds"); passed++;
         links.opened();
@@ -25,6 +25,36 @@ final class ConnectionRegressionTest {
         links.failed();
         check(links.begin(), "failed open can be retried immediately"); passed++;
         links.failed();
+        java.util.concurrent.atomic.AtomicLong independentClock = new java.util.concurrent.atomic.AtomicLong(1000);
+        Map<String,BrowserOpenGate> entries = BrowserOpenGate.independentGates(independentClock::get);
+        BrowserOpenGate admin = entries.get(BrowserOpenGate.key("https://tokenpro.work/admin/dashboard"));
+        BrowserOpenGate docs = entries.get(BrowserOpenGate.key("https://tokenpro.work/docs"));
+        BrowserOpenGate purchase = entries.get(BrowserOpenGate.key("https://tokenpro.work/purchase"));
+        check(admin != docs && docs != purchase && admin != purchase, "three entries have separate state"); passed++;
+        check(admin.begin() && docs.begin() && purchase.begin(), "pending admin request does not block docs or purchase"); passed++;
+        admin.opened();
+        independentClock.addAndGet(3000); docs.opened();
+        purchase.failed();
+        check(purchase.begin() && !admin.begin() && !docs.begin(), "one failed entry can retry without clearing another cooldown"); passed++;
+        purchase.opened();
+        independentClock.addAndGet(12000);
+        check(admin.begin() && !docs.begin() && !purchase.begin(), "cooldowns expire independently from each successful open"); passed++;
+        admin.failed();
+        for (String label : List.of("后台管理", "使用文档", "充值/订阅")) {
+            javax.swing.SwingUtilities.invokeAndWait(() -> {
+                BrowserOpenGate buttonGate = new BrowserOpenGate(independentClock::get);
+                javax.swing.JButton button = new javax.swing.JButton(label);
+                TokenProFrame.applyWebButtonState(button, buttonGate);
+                check(button.isEnabled() && label.equals(button.getText()), "idle label unchanged");
+                buttonGate.begin(); TokenProFrame.applyWebButtonState(button, buttonGate);
+                check(!button.isEnabled() && label.equals(button.getText()), "pending state has no suffix");
+                buttonGate.opened(); TokenProFrame.applyWebButtonState(button, buttonGate);
+                check(!button.isEnabled() && label.equals(button.getText()) && !button.getToolTipText().matches(".*\\d.*"), "cooldown is enforced without visible numbers");
+                independentClock.addAndGet(BrowserOpenGate.INTERVAL_MS); TokenProFrame.applyWebButtonState(button, buttonGate);
+                check(button.isEnabled() && label.equals(button.getText()), "label unchanged after cooldown");
+            });
+            passed += 4;
+        }
         java.util.concurrent.atomic.AtomicLong now = new java.util.concurrent.atomic.AtomicLong(1000);
         ConnectionGate gate = new ConnectionGate(now::get);
         for (String client : List.of("codex-desktop", "claude-desktop", "codex-cli", "claude-cli")) {

@@ -106,7 +106,7 @@ final class TokenProFrame extends JFrame {
     private final AtomicBoolean installationScanInProgress = new AtomicBoolean();
     private final AtomicBoolean accountRefreshInProgress = new AtomicBoolean();
     private final ConnectionGate connectingClients = new ConnectionGate();
-    private final BrowserOpenGate browserOpenGate = new BrowserOpenGate();
+    private final Map<String,BrowserOpenGate> browserOpenGates = BrowserOpenGate.independentGates();
     private final List<JButton> guardedWebButtons = new ArrayList<>();
     private final javax.swing.Timer webLinkTimer = new javax.swing.Timer(250, e -> updateWebButtons());
     private long lastAccountRefresh;
@@ -216,8 +216,8 @@ final class TokenProFrame extends JFrame {
         JPanel top = new JPanel(); top.setOpaque(false); top.setBorder(new EmptyBorder(25, 12, 10, 12)); top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
         JLabel brand = new JLabel("TokenPro", resourceIconContained("TokenProCosmosIcon.png", 28, 28, false), SwingConstants.LEFT); brand.setIconTextGap(11); brand.setFont(appFont(17, Font.BOLD)); brand.setForeground(TEXT); brand.setBorder(new EmptyBorder(0, 5, 24, 0)); top.add(brand);
         addNav(top, "首页", "SparklesLucide.png");
-        JButton backend = sideAction("后台管理", "WebCog.png"); guardWebButton(backend); backend.addActionListener(e -> browse("https://tokenpro.work/admin/dashboard")); top.add(backend); top.add(Box.createVerticalStrut(6));
-        JButton docs = sideAction("使用文档", "WebBook.png"); guardWebButton(docs); docs.addActionListener(e -> browse("https://tokenpro.work/docs")); top.add(docs); top.add(Box.createVerticalStrut(6));
+        JButton backend = sideAction("后台管理", "WebCog.png"); guardWebButton(backend, "admin"); backend.addActionListener(e -> browse("https://tokenpro.work/admin/dashboard")); top.add(backend); top.add(Box.createVerticalStrut(6));
+        JButton docs = sideAction("使用文档", "WebBook.png"); guardWebButton(docs, "docs"); docs.addActionListener(e -> browse("https://tokenpro.work/docs")); top.add(docs); top.add(Box.createVerticalStrut(6));
         panel.add(top, BorderLayout.NORTH);
         JPanel bottom = new JPanel(new BorderLayout()); bottom.setOpaque(false); bottom.setBorder(new EmptyBorder(0, 12, 18, 12)); NavButton accountNav = new NavButton("我的账户"); accountNav.setIcon(resourceIconContained("CircleUserLucide.png", 17, 17, true)); accountNav.setIconTextGap(12); accountNav.addActionListener(e -> openAccount()); navButtons.put("我的账户", accountNav); bottom.add(accountNav); panel.add(bottom, BorderLayout.SOUTH); return panel;
     }
@@ -236,7 +236,7 @@ final class TokenProFrame extends JFrame {
         RoundedPanel wallet = new RoundedPanel(20, new Color(22, 38, 78, 228), new Color(75, 190, 151, 145)); wallet.setLayout(new GridBagLayout()); wallet.setBorder(new EmptyBorder(0, 7, 0, 7)); wallet.setPreferredSize(headerCardSize); wallet.setMinimumSize(headerCardSize);
         JPanel walletContent = transparent(new FlowLayout(FlowLayout.CENTER, 14, 0));
         JPanel captions = transparent(); captions.setLayout(new BoxLayout(captions, BoxLayout.Y_AXIS)); JLabel balanceText = new JLabel("钱包余额"); balanceText.setFont(appFont(12, Font.PLAIN)); balanceText.setForeground(MUTED); JLabel rate = new JLabel("充值比例  1￥ = 1$"); rate.setFont(appFont(10, Font.PLAIN)); rate.setForeground(MUTED); captions.add(balanceText); captions.add(rate); walletContent.add(captions);
-        headerBalance.setFont(appFont(26, Font.BOLD)); headerBalance.setForeground(new Color(105, 220, 194)); walletContent.add(headerBalance); refreshAccountButton = soft("刷新"); refreshAccountButton.setToolTipText("刷新钱包余额和订阅信息"); refreshAccountButton.setIcon(resourceIconContained("RefreshCwLucide.png", 15, 15, true)); refreshAccountButton.addActionListener(e -> refreshAccount()); walletContent.add(refreshAccountButton); JButton recharge = soft("充值/订阅"); guardWebButton(recharge); recharge.setIcon(resourceIconContained("PlusLucide.png", 15, 15, true)); recharge.addActionListener(e -> browse("https://tokenpro.work/purchase")); walletContent.add(recharge); wallet.add(walletContent);
+        headerBalance.setFont(appFont(26, Font.BOLD)); headerBalance.setForeground(new Color(105, 220, 194)); walletContent.add(headerBalance); refreshAccountButton = soft("刷新"); refreshAccountButton.setToolTipText("刷新钱包余额和订阅信息"); refreshAccountButton.setIcon(resourceIconContained("RefreshCwLucide.png", 15, 15, true)); refreshAccountButton.addActionListener(e -> refreshAccount()); walletContent.add(refreshAccountButton); JButton recharge = soft("充值/订阅"); guardWebButton(recharge, "purchase"); recharge.setIcon(resourceIconContained("PlusLucide.png", 15, 15, true)); recharge.addActionListener(e -> browse("https://tokenpro.work/purchase")); walletContent.add(recharge); wallet.add(walletContent);
         subscriptionSlot.setPreferredSize(headerCardSize); subscriptionSlot.setMinimumSize(headerCardSize);
         JPanel row = transparent(new GridBagLayout());
         GridBagConstraints walletConstraints = new GridBagConstraints(); walletConstraints.gridx = 0; walletConstraints.weightx = 1; walletConstraints.fill = GridBagConstraints.BOTH;
@@ -567,7 +567,7 @@ final class TokenProFrame extends JFrame {
             new AbstractMap.SimpleEntry<>("打开 Codex", (Runnable) () -> openApp("Codex")),
             new AbstractMap.SimpleEntry<>("打开 Claude", (Runnable) this::openClaude))) {
             JButton button = new JButton(item.getKey());
-            if (item.getKey().equals("打开充值页面")) guardWebButton(button);
+            if (item.getKey().equals("打开充值页面")) guardWebButton(button, "purchase");
             soft(button);
             button.setAlignmentX(Component.LEFT_ALIGNMENT);
             button.addActionListener(e -> item.getValue().run());
@@ -1665,9 +1665,11 @@ final class TokenProFrame extends JFrame {
     }
 
     private void browse(String url) {
-        boolean guarded = BrowserOpenGate.protects(url);
-        if (guarded && !browserOpenGate.begin()) {
-            status(browserOpenGate.pending() ? "网页正在打开，请勿重复点击" : "网页入口冷却中，请 " + browserOpenGate.secondsRemaining() + " 秒后再试");
+        String entry = BrowserOpenGate.key(url);
+        BrowserOpenGate gate = entry == null ? null : browserOpenGates.get(entry);
+        boolean guarded = gate != null;
+        if (guarded && !gate.begin()) {
+            status(gate.pending() ? "该网页正在打开，请勿重复点击" : "请稍后再打开此链接");
             return;
         }
         if (guarded) { updateWebButtons(); webLinkTimer.start(); }
@@ -1683,31 +1685,37 @@ final class TokenProFrame extends JFrame {
                 try {
                     if (!Objects.equals(token, accessToken)) throw new IllegalStateException("登录账户已变化，请重新点击网页入口");
                     Platform.browse(get());
-                    if (guarded) browserOpenGate.opened();
-                    status(guarded ? "已打开网页，15 秒后可再次使用网页入口" : "已在系统浏览器打开网页");
+                    if (guarded) gate.opened();
+                    status("已在系统浏览器打开网页");
                 } catch (Exception e) {
-                    if (guarded) browserOpenGate.failed();
+                    if (guarded) gate.failed();
                     error(e.getCause() == null ? e : e.getCause());
                 } finally { if (guarded) updateWebButtons(); }
             }
         }.execute();
     }
 
-    private void guardWebButton(JButton button) {
-        button.putClientProperty("tokenpro.webLabel", button.getText());
+    private void guardWebButton(JButton button, String entry) {
+        button.putClientProperty("tokenpro.webGate", browserOpenGates.get(entry));
         guardedWebButtons.add(button);
     }
 
     private void updateWebButtons() {
-        int seconds = browserOpenGate.secondsRemaining();
-        boolean pending = browserOpenGate.pending();
+        boolean anyBlocked = false;
         for (JButton button : guardedWebButtons) {
-            String label = Objects.toString(button.getClientProperty("tokenpro.webLabel"), "打开网页");
-            button.setEnabled(!pending && seconds == 0);
-            button.setText(pending ? label + "…" : seconds > 0 ? label + " (" + seconds + "s)" : label);
-            button.setToolTipText(pending ? "网页正在打开，请勿重复点击" : seconds > 0 ? "请 " + seconds + " 秒后再试" : "网页入口间隔 15 秒，防止重复打开窗口");
+            BrowserOpenGate gate = (BrowserOpenGate) button.getClientProperty("tokenpro.webGate");
+            applyWebButtonState(button, gate);
+            anyBlocked |= !button.isEnabled();
         }
-        if (!pending && seconds == 0) webLinkTimer.stop();
+        if (!anyBlocked) webLinkTimer.stop();
+    }
+
+    static void applyWebButtonState(JButton button, BrowserOpenGate gate) {
+        boolean pending = gate.pending();
+        boolean cooling = gate.secondsRemaining() > 0;
+        button.setEnabled(!pending && !cooling);
+        // Keep the original label in every state: no countdown or animated suffix.
+        button.setToolTipText(pending ? "该网页正在打开，请勿重复点击" : cooling ? "请稍后再打开此链接" : "打开网页");
     }
     private void openApp(String app) {
         status("正在打开 " + app + "…");
