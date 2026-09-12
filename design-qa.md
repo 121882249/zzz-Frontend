@@ -128,3 +128,10 @@ The UI harness tests local control state; live API latency/failure and native Wi
 - Version declarations advanced to 1.2.81. Build passed 392 self-tests; desktop layout and independent cooldown regressions passed.
 - Confirmed v1.2.65 lacks CodexCommandLine.png, causing upgraded installations to fall back to the desktop logo. ApplicationArtwork embeds the existing artwork into class data, compatible with the current class-only updater. ApplicationIcon draws clean desktop/Claude backgrounds at display scale, removing the old baked-in grain; Codex CLI retains its existing purple terminal artwork.
 - Loaded icons directly from TokenPro-update.jar in an isolated classloader with no assets directory and successfully rendered all four at 1×/2×/3×. Inspected 2× output. Original runtime asset files remain unchanged, so old-client delta compatibility is retained.
+
+## v1.2.82 final scope and validation
+
+- v1.2.81 was not published: the Intel artifact upload failed with GitHub DNS ENOTFOUND, and the release job was skipped.
+- User correction: restore both desktop client icons exactly to their existing resource path. Only command-line icons change: Codex CLI uses the existing embedded purple terminal artwork; Claude CLI uses the supplied orange pixel-character silhouette, rendered directly without screenshot text/background.
+- Keep the approved dynamic account width and independent 3-second recharge/subscription cooldown changes.
+- Build passed 392 checks; desktop UI regression passed; class-only update archive rendered both CLI icons without any asset resources at 1×/2×/3×. Inspected 3× icon preview. Original Resources remain unchanged.

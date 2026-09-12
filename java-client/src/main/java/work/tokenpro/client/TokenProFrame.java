@@ -1875,9 +1875,11 @@ final class TokenProFrame extends JFrame {
         return name.equals("Codex") ? resourceIconContained("OpenAIBlossomRuntime.png", size, size, true) : resourceIconContained("ClaudeSparkRuntime.png", size, size, false);
     }
 
-    private static Icon clientIcon(String name, int size) { return new ApplicationIcon(name, size, false); }
+    private static Icon clientIcon(String name, int size) {
+        return resourceIconContained(name.equals("Codex") ? "CodexOriginal.png" : "ClaudeOriginal.png", size, size, false);
+    }
 
-    private static Icon commandIcon(String name, int size) { return new ApplicationIcon(name, size, true); }
+    private static Icon commandIcon(String name, int size) { return new ApplicationIcon(name, size); }
 
     private <T> void async(String running, Callable<T> task, java.util.function.Consumer<T> done) {
         status(running);
