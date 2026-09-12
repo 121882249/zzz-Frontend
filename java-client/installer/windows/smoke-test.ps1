@@ -50,7 +50,13 @@ function Invoke-FixtureProcess([string]$Executable, [string[]]$Arguments, [strin
         -RedirectStandardError (Join-Path $testRoot ($LogName + '.stderr.log'))
     if (-not $process.WaitForExit(120000)) { throw "$LogName timed out; fixture retained for diagnosis" }
     $process.WaitForExit()
-    if ($process.ExitCode -ne 0) { throw "$LogName failed with exit code $($process.ExitCode)" }
+    if ($process.ExitCode -ne 0) {
+        foreach ($suffix in @('.stdout.log', '.stderr.log')) {
+            $logPath = Join-Path $testRoot ($LogName + $suffix)
+            if (Test-Path -LiteralPath $logPath) { Get-Content -LiteralPath $logPath -Tail 24 | Write-Output }
+        }
+        throw "$LogName failed with exit code $($process.ExitCode)"
+    }
 }
 
 $setupArguments = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/SP-', '/NORESTART', '/NOCLOSEAPPLICATIONS',
