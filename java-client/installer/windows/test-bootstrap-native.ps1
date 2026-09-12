@@ -13,7 +13,9 @@ $app=Join-Path $Output 'Existing Custom Location/TokenPro'
 Copy-Item -LiteralPath $Image -Destination $app -Recurse
 $core=Join-Path $app 'app/TokenPro.jar'
 # Simulate the old version constant in a full native image. Original image is untouched.
-$archive=[IO.Compression.ZipFile]::Open($core,[IO.Compression.ZipArchiveMode]::Update)
+$archive=[IO.Compression.ZipFile]::OpenRead($core)
+$fixtureCore=$core+'.fixture'
+$fixtureArchive=[IO.Compression.ZipFile]::Open($fixtureCore,[IO.Compression.ZipArchiveMode]::Create)
 try {
     $entry=$archive.GetEntry('work/tokenpro/client/Main.class')
     $memory=[IO.MemoryStream]::new(); $input=$entry.Open()
@@ -26,9 +28,20 @@ try {
         if($matches){$bytes[$i+$needle.Length-1]=[byte][char]'4';$changes++}
     }
     if($changes -ne 1){throw 'Unexpected version constant count'}
-    $entry.Delete(); $replacement=$archive.CreateEntry('work/tokenpro/client/Main.class').Open()
-    try {$replacement.Write($bytes,0,$bytes.Length)} finally {$replacement.Dispose()}
-} finally {$archive.Dispose()}
+    foreach($original in $archive.Entries) {
+        $replacement=$fixtureArchive.CreateEntry($original.FullName).Open()
+        try {
+            if($original.FullName -eq 'work/tokenpro/client/Main.class') {
+                $replacement.Write($bytes,0,$bytes.Length)
+            } else {
+                $originalStream=$original.Open()
+                try {$originalStream.CopyTo($replacement)} finally {$originalStream.Dispose()}
+            }
+        } finally {$replacement.Dispose()}
+    }
+} finally {$fixtureArchive.Dispose(); $archive.Dispose()}
+# Only replace the disposable copied core; never mutate the packaged image.
+[IO.File]::Move($fixtureCore,$core,$true)
 $launcher=Join-Path $app 'TokenPro.exe'
 $hash=(Get-FileHash -LiteralPath $core -Algorithm SHA256).Hash.ToLowerInvariant()
 $deltaHash=(Get-FileHash -LiteralPath $Delta -Algorithm SHA256).Hash.ToLowerInvariant()
