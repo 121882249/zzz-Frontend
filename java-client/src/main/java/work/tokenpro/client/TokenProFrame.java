@@ -976,7 +976,7 @@ final class TokenProFrame extends JFrame {
         });
     }
 
-    private static String selectionStatus(int count) { return count > 0 ? "当前：TokenPro已选" + count + "款模型" : "请先选择模型"; }
+    private static String selectionStatus(int count) { return count > 0 ? "当前：TokenPro·已选" + count + "款模型" : "请先选择模型"; }
     private static String officialStatus(String client) {
         return client.equals("Claude") ? "当前：Claude 官网配置" : "当前：GPT 官网配置";
     }
