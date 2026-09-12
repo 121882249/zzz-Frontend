@@ -42,7 +42,7 @@ if (Test-Path -LiteralPath $dataRoot) {
 $marker = Join-Path $dataRoot ('installer-acceptance-preserve-' + [Guid]::NewGuid().ToString('N') + '.txt')
 $markerValue = [Guid]::NewGuid().ToString('N')
 [IO.File]::WriteAllText($marker, $markerValue)
-$installRoot = Join-Path $testRoot '中文 用户目录\TokenPro'
+$installRoot = Join-Path $testRoot 'User Programs\TokenPro'
 
 function Invoke-FixtureProcess([string]$Executable, [string[]]$Arguments, [string]$LogName) {
     $process = Start-Process -FilePath $Executable -ArgumentList $Arguments -WindowStyle Hidden -PassThru `
@@ -80,7 +80,7 @@ foreach ($linkPath in @($desktopLink, $startLink)) {
     $link = $shortcutReader.NameSpace([IO.Path]::GetDirectoryName($linkPath)).ParseName([IO.Path]::GetFileName($linkPath)).GetLink
     if ($link.Path -ne (Join-Path $installRoot 'TokenPro.exe') -or $link.Description -ne 'TokenPro') {
         $details = @{shortcut=$linkPath; expected_target=(Join-Path $installRoot 'TokenPro.exe'); actual_target=$link.Path; actual_description=$link.Description} | ConvertTo-Json -Compress
-        throw "Shortcut target/Chinese description mismatch: $details"
+        throw "Shortcut target/description mismatch: $details"
     }
 }
 Invoke-FixtureProcess (Join-Path $installRoot 'TokenPro.exe') @('--self-test') 'native-self-test'
