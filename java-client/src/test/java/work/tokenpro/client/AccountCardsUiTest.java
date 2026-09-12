@@ -31,6 +31,18 @@ public class AccountCardsUiTest {
  call(f,"showSubscriptions",new Class[]{List.class},List.of(c.newInstance("Pro专业额度卡",200d,"2026-10-13T04:01:00Z"),c.newInstance("标准额度卡",50d,"2026-10-20T04:01:00Z")));
  JButton update=(JButton)get(f,"updateButton");call(f,"setUpdateButtonState",new Class[]{String.class,String.class},"latest","已是最新 v"+Main.VERSION);
  f.addNotify();capture(f,args[0]+"/preview-home.png",1280);
+ JButton accountAction=(JButton)get(f,"headerAccountButton");
+ for(String accountName:List.of("121882249", "121882249@example.com", "long.account.name.for.layout@example.com")){
+ ((JLabel)get(f,"headerUser")).setText(accountName);
+ for(int width:new int[]{1280,1080}){
+ capture(f,args[0]+"/preview-dynamic-user-"+width+".png",width);
+ int needed=accountAction.getFontMetrics(accountAction.getFont()).stringWidth(accountName)+accountAction.getIcon().getIconWidth()+accountAction.getIconTextGap()+24;
+ if(accountAction.getWidth()<needed)throw new AssertionError("username clipped: "+accountName);
+ Rectangle accountBounds=SwingUtilities.convertRectangle(accountAction.getParent(),accountAction.getBounds(),f.getContentPane());
+ if(!new Rectangle(0,0,width,820).contains(accountBounds))throw new AssertionError("username outside viewport");
+ }
+ }
+ ((JLabel)get(f,"headerUser")).setText("演示账户");capture(f,args[0]+"/preview-home.png",1280);
  Container slot=(Container)get(f,"subscriptionSlot");Rectangle slotBounds=slot.getBounds();
  JButton picker=button(slot,"Pro专业额度卡");if(picker==null)throw new AssertionError("missing picker");picker.doClick();
  JButton option=button((Container)get(f,"activeModelMenuOverlay"),"标准额度卡");if(option==null)throw new AssertionError("missing option");option.doClick();
@@ -38,7 +50,7 @@ public class AccountCardsUiTest {
  if(button(slot,"标准额度卡")==null || !label(slot,"$50.00 · 2026-10-20"))throw new AssertionError("subscription details did not switch");
  if(!slotBounds.equals(slot.getBounds()))throw new AssertionError("card moved after switching");
  JButton purchase=(JButton)get(f,"subscriptionPurchaseButton");JButton recharge=button(f.getContentPane(),"充值");
- if(recharge==null || purchase.getClientProperty("tokenpro.webGate")!=recharge.getClientProperty("tokenpro.webGate"))throw new AssertionError("purchase gate differs");
+ if(recharge==null || purchase.getClientProperty("tokenpro.webGate")==recharge.getClientProperty("tokenpro.webGate"))throw new AssertionError("purchase controls must have separate gates");
  JButton b=(JButton)get(f,"claudeCliLaunch");Rectangle before=b.getBounds();b.setText("连接中…");b.setEnabled(false);capture(f,args[0]+"/preview-connecting.png",1280);if(!before.equals(b.getBounds()))throw new AssertionError("button moved");
  capture(f,args[0]+"/preview-narrow.png",1080);
  String[] statuses={"homeCodexStatus","homeClaudeStatus","homeCodexCliStatus","homeClaudeCliStatus"};int[] counts={4,10,100,999};
@@ -62,7 +74,7 @@ public class AccountCardsUiTest {
  }
  call(f,"finishAccountRefresh",new Class[]{String.class},"订阅刷新失败，点击重试");
  for(String n:List.of("refreshAccountButton","refreshSubscriptionButton"))if(!((JButton)get(f,n)).isEnabled())throw new AssertionError("retry button disabled");
- System.out.println("UI regression passed: long subscription, refresh retry, guard cleanup, subscription switching, fixed card bounds, shared purchase gate, inactive card, counts 4/10/100/999 and connection loading bounds.");
+ System.out.println("UI regression passed: long subscription, refresh retry, guard cleanup, subscription switching, fixed card bounds, independent purchase gates, inactive card, counts 4/10/100/999 and connection loading bounds.");
  }catch(Exception e){throw new RuntimeException(e);}finally{if(f!=null)f.dispose();}});System.exit(0);
  }
 }

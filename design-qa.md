@@ -116,3 +116,15 @@ The UI harness tests local control state; live API latency/failure and native Wi
 - Synchronized the existing v1.2.79 release commit without dropping local changes; advanced all five runtime/build/package version declarations to 1.2.80.
 - Release build passed 388 self-tests. Desktop AccountCardsUiTest passed with version 1.2.80. Incremental archive contains only supported class entries; runtime assets are unchanged from v1.2.79.
 - Deployment uses the existing tagged GitHub Actions workflow for macOS arm64/x64, Windows x64, Linux x64, class-only incremental package and tokenpro.work download metadata.
+
+### Follow-up: dynamic username and independent purchase cooldowns
+
+- Homepage account entry now measures its text and avatar for its preferred width; long usernames/emails no longer inherit a fixed 120px width. The site title uses the remaining header space. Checked numeric names and two email lengths at 1280px and 1080px.
+- Recharge and subscription have separate three-second cooldown gates, both starting after a successful browser open. Both still open the existing purchase URL. Admin/docs retain their independent fifteen-second gates. Failures remain immediately retryable.
+- Added deterministic clock regression for the 2999/3000ms boundary and staggered independent expiry; updated desktop assertions to require separate purchase gates.
+
+## v1.2.81 release validation
+
+- Version declarations advanced to 1.2.81. Build passed 392 self-tests; desktop layout and independent cooldown regressions passed.
+- Confirmed v1.2.65 lacks CodexCommandLine.png, causing upgraded installations to fall back to the desktop logo. ApplicationArtwork embeds the existing artwork into class data, compatible with the current class-only updater. ApplicationIcon draws clean desktop/Claude backgrounds at display scale, removing the old baked-in grain; Codex CLI retains its existing purple terminal artwork.
+- Loaded icons directly from TokenPro-update.jar in an isolated classloader with no assets directory and successfully rendered all four at 1×/2×/3×. Inspected 2× output. Original runtime asset files remain unchanged, so old-client delta compatibility is retained.

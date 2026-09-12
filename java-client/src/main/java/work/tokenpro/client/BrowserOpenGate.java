@@ -8,13 +8,15 @@ import java.util.function.LongSupplier;
 final class BrowserOpenGate {
     static final long INTERVAL_MS = 15000;
     private final LongSupplier clock;
+    private final long intervalMs;
     private boolean pending;
     private long readyAt = Long.MIN_VALUE;
     BrowserOpenGate() { this(() -> System.nanoTime() / 1_000_000); }
-    BrowserOpenGate(LongSupplier clock) { this.clock = clock; }
+    BrowserOpenGate(LongSupplier clock) { this(clock, INTERVAL_MS); }
+    BrowserOpenGate(LongSupplier clock, long intervalMs) { this.clock = clock; this.intervalMs = intervalMs; }
     static Map<String,BrowserOpenGate> independentGates() { return independentGates(() -> System.nanoTime() / 1_000_000); }
     static Map<String,BrowserOpenGate> independentGates(LongSupplier clock) {
-        return Map.of("admin", new BrowserOpenGate(clock), "docs", new BrowserOpenGate(clock), "purchase", new BrowserOpenGate(clock));
+        return Map.of("admin", new BrowserOpenGate(clock), "docs", new BrowserOpenGate(clock), "purchase", new BrowserOpenGate(clock, 3000), "subscription", new BrowserOpenGate(clock, 3000));
     }
     static boolean protects(String url) {
         return key(url) != null;
@@ -33,7 +35,7 @@ final class BrowserOpenGate {
         if (pending || secondsRemaining() > 0) return false;
         pending = true; return true;
     }
-    synchronized void opened() { pending = false; readyAt = clock.getAsLong() + INTERVAL_MS; }
+    synchronized void opened() { pending = false; readyAt = clock.getAsLong() + intervalMs; }
     synchronized void failed() { pending = false; readyAt = Long.MIN_VALUE; }
     synchronized boolean pending() { return pending; }
     synchronized int secondsRemaining() {

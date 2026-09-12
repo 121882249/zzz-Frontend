@@ -245,10 +245,10 @@ final class TokenProFrame extends JFrame {
 
     private JComponent header() {
         GradientPanel panel = new GradientPanel(); panel.setLayout(new BorderLayout(0, 16)); panel.setBorder(new EmptyBorder(23, 28, 20, 28));
-        JPanel title = transparent(new BorderLayout()); headerTitle.setFont(appFont(23, Font.BOLD)); headerTitle.setIcon(new TechGlobeIcon(30)); headerTitle.setIconTextGap(10); headerTitle.setGradient(true); headerTitle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)); headerTitle.setToolTipText("打开 TokenPro 主页"); headerTitle.addMouseListener(new MouseAdapter() { @Override public void mouseClicked(MouseEvent event) { if ("https://tokenpro.work".equals(headerTitle.getText())) browse("https://tokenpro.work"); } }); title.add(headerTitle, BorderLayout.WEST);
+        JPanel title = transparent(new BorderLayout()); headerTitle.setFont(appFont(23, Font.BOLD)); headerTitle.setIcon(new TechGlobeIcon(30)); headerTitle.setIconTextGap(10); headerTitle.setGradient(true); headerTitle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)); headerTitle.setToolTipText("打开 TokenPro 主页"); headerTitle.addMouseListener(new MouseAdapter() { @Override public void mouseClicked(MouseEvent event) { if ("https://tokenpro.work".equals(headerTitle.getText())) browse("https://tokenpro.work"); } }); title.add(headerTitle, BorderLayout.CENTER);
         JPanel right = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         updateButton = headerControl("正在核对版本…", 168); setUpdateButtonState("checking", "正在核对版本…"); updateButton.addActionListener(e -> updateFromButton()); right.add(updateButton);
-        JButton user = headerControl("登录账户", 120); headerAccountButton = user; user.setIcon(new MembershipAvatarIcon(false)); user.setToolTipText("打开我的账户"); user.addActionListener(e -> openAccount()); headerUser.addPropertyChangeListener("text", e -> { user.setText(headerUser.getText()); user.setToolTipText("我的账户 · " + headerUser.getText()); }); right.add(user);
+        JButton user = headerControl("登录账户", 120); user.putClientProperty("tokenpro.dynamicHeaderWidth", true); headerAccountButton = user; user.setIcon(new MembershipAvatarIcon(false)); user.setToolTipText("打开我的账户"); user.addActionListener(e -> openAccount()); headerUser.addPropertyChangeListener("text", e -> { user.setText(headerUser.getText()); user.setToolTipText("我的账户 · " + headerUser.getText()); }); right.add(user);
         title.add(right, BorderLayout.EAST); panel.add(title, BorderLayout.NORTH);
         Dimension headerCardSize = new Dimension(430, 64);
         RoundedPanel wallet = new RoundedPanel(20, new Color(22, 38, 78, 228), new Color(75, 190, 151, 145));
@@ -1391,7 +1391,7 @@ final class TokenProFrame extends JFrame {
         refreshSubscriptionButton = accountRefreshButton(tone, "刷新订阅");
         refreshSubscriptionButton.setEnabled(refreshAccountButton == null || refreshAccountButton.isEnabled());
         refreshSubscriptionButton.setToolTipText("刷新钱包余额和订阅信息"); refreshSubscriptionButton.getAccessibleContext().setAccessibleName("刷新订阅"); refreshSubscriptionButton.addActionListener(event -> refreshAccount()); actions.add(refreshSubscriptionButton);
-        JButton purchase = soft("订阅"); subscriptionPurchaseButton = purchase; guardWebButton(purchase, "purchase"); applyWebButtonState(purchase, browserOpenGates.get("purchase")); purchase.setForeground(active ? tone : new Color(211, 218, 232)); purchase.setIcon(resourceIconContained("PlusLucide.png", 15, 15, true)); purchase.setToolTipText("打开充值/订阅页面"); purchase.addActionListener(event -> browse("https://tokenpro.work/purchase")); actions.add(purchase); card.add(actions, BorderLayout.EAST);
+        JButton purchase = soft("订阅"); subscriptionPurchaseButton = purchase; guardWebButton(purchase, "subscription"); applyWebButtonState(purchase, browserOpenGates.get("subscription")); purchase.setForeground(active ? tone : new Color(211, 218, 232)); purchase.setIcon(resourceIconContained("PlusLucide.png", 15, 15, true)); purchase.setToolTipText("打开充值/订阅页面"); purchase.addActionListener(event -> browse("https://tokenpro.work/purchase", "subscription")); actions.add(purchase); card.add(actions, BorderLayout.EAST);
         card.add(details, BorderLayout.CENTER); subscriptionSlot.add(card, BorderLayout.CENTER);
         subscriptionSlot.revalidate();
         subscriptionSlot.repaint();
@@ -1875,15 +1875,9 @@ final class TokenProFrame extends JFrame {
         return name.equals("Codex") ? resourceIconContained("OpenAIBlossomRuntime.png", size, size, true) : resourceIconContained("ClaudeSparkRuntime.png", size, size, false);
     }
 
-    private static ImageIcon clientIcon(String name, int size) {
-        return resourceIconContained(name.equals("Codex") ? "CodexOriginal.png" : "ClaudeOriginal.png", size, size, false);
-    }
+    private static Icon clientIcon(String name, int size) { return new ApplicationIcon(name, size, false); }
 
-    private static ImageIcon commandIcon(String name, int size) {
-        if (!name.equals("Codex")) return resourceIconContained("ClaudeOriginal.png", size, size, false);
-        ImageIcon icon = resourceIconContained("CodexCommandLine.png", size, size, false);
-        return icon == null ? resourceIconContained("CodexOriginal.png", size, size, false) : icon;
-    }
+    private static Icon commandIcon(String name, int size) { return new ApplicationIcon(name, size, true); }
 
     private <T> void async(String running, Callable<T> task, java.util.function.Consumer<T> done) {
         status(running);
@@ -1893,8 +1887,9 @@ final class TokenProFrame extends JFrame {
         }.execute();
     }
 
-    private void browse(String url) {
-        String entry = BrowserOpenGate.key(url);
+    private void browse(String url) { browse(url, BrowserOpenGate.key(url)); }
+
+    private void browse(String url, String entry) {
         BrowserOpenGate gate = entry == null ? null : browserOpenGates.get(entry);
         boolean guarded = gate != null;
         if (guarded && !gate.begin()) {
@@ -2875,6 +2870,20 @@ final class TokenProFrame extends JFrame {
     private static final class ActionButton extends JButton {
         private final boolean prominent;
         ActionButton(String text, boolean prominent) { super(text); this.prominent = prominent; setContentAreaFilled(false); setOpaque(false); setBorderPainted(false); setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)); }
+        @Override public Dimension getPreferredSize() {
+            if (Boolean.TRUE.equals(getClientProperty("tokenpro.dynamicHeaderWidth"))) {
+                Icon icon = getIcon();
+                int iconSpace = icon == null ? 0 : icon.getIconWidth() + getIconTextGap();
+                return new Dimension(Math.max(120, getFontMetrics(getFont()).stringWidth(getText()) + iconSpace + 28), 34);
+            }
+            return super.getPreferredSize();
+        }
+        @Override public Dimension getMinimumSize() {
+            return Boolean.TRUE.equals(getClientProperty("tokenpro.dynamicHeaderWidth")) ? getPreferredSize() : super.getMinimumSize();
+        }
+        @Override public Dimension getMaximumSize() {
+            return Boolean.TRUE.equals(getClientProperty("tokenpro.dynamicHeaderWidth")) ? getPreferredSize() : super.getMaximumSize();
+        }
         protected void paintComponent(Graphics graphics) {
             Graphics2D g = (Graphics2D) graphics.create(); g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             String updateState = String.valueOf(getClientProperty("tokenpro.updateState"));

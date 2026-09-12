@@ -38,8 +38,20 @@ final class ConnectionRegressionTest {
         check(purchase.begin() && !admin.begin() && !docs.begin(), "one failed entry can retry without clearing another cooldown"); passed++;
         purchase.opened();
         independentClock.addAndGet(12000);
-        check(admin.begin() && !docs.begin() && !purchase.begin(), "cooldowns expire independently from each successful open"); passed++;
+        check(admin.begin() && !docs.begin() && purchase.begin(), "cooldowns expire independently from each successful open"); passed++;
         admin.failed();
+        purchase.failed();
+        BrowserOpenGate subscription = entries.get("subscription");
+        check(purchase.begin() && subscription.begin(), "recharge and subscription can open independently"); passed++;
+        purchase.opened();
+        independentClock.addAndGet(1000); subscription.opened();
+        independentClock.addAndGet(1999);
+        check(!purchase.begin() && !subscription.begin(), "purchase controls remain locked before three seconds"); passed++;
+        independentClock.incrementAndGet();
+        check(purchase.begin() && !subscription.begin(), "recharge unlocks at three seconds without unlocking subscription"); passed++;
+        independentClock.addAndGet(1000);
+        check(subscription.begin(), "subscription unlocks three seconds after its own successful open"); passed++;
+        purchase.failed(); subscription.failed();
         for (String label : List.of("后台管理", "使用文档", "充值/订阅")) {
             javax.swing.SwingUtilities.invokeAndWait(() -> {
                 BrowserOpenGate buttonGate = new BrowserOpenGate(independentClock::get);
