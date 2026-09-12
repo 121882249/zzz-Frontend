@@ -96,7 +96,8 @@ jobs:
           mkdir release-files
           cp release-assets/TokenPro-macOS-Apple-Silicon/*.dmg "release-files/TokenPro-${GITHUB_REF_NAME}-macOS-arm64.dmg"
           cp release-assets/TokenPro-macOS-Intel/*.dmg "release-files/TokenPro-${GITHUB_REF_NAME}-macOS-x64.dmg"
-          cp release-assets/TokenPro-Windows-x64/*.exe "release-files/TokenPro-${GITHUB_REF_NAME}-Windows-x64.exe"
+          cp release-assets/TokenPro-Windows-x64/*-Windows-x64.exe "release-files/TokenPro-${GITHUB_REF_NAME}-Windows-x64.exe"
+          cp release-assets/TokenPro-Windows-x64/*-Windows-incremental.exe "release-files/TokenPro-${GITHUB_REF_NAME}-Windows-incremental.exe"
           cp release-assets/TokenPro-Linux-x64/*.deb "release-files/TokenPro-${GITHUB_REF_NAME}-Linux-x64.deb"
           previous_tag=$(git tag --sort=-version:refname | grep -v "^${GITHUB_REF_NAME}$" | head -1 || true)
           if [ -n "$previous_tag" ] && git diff --quiet "$previous_tag" "$GITHUB_REF_NAME" -- Resources Router.icns Router.ico; then

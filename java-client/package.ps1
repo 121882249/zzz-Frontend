@@ -29,7 +29,12 @@ if ($LASTEXITCODE -ne 0) { throw "jpackage failed with exit code $LASTEXITCODE" 
 & $compiler ("/DAppImageDir=" + (Join-Path $imageRoot 'TokenPro')) `
   ("/DOutputDirPath=" + (Join-Path $PSScriptRoot 'dist')) 'installer/windows/TokenPro.iss'
 if ($LASTEXITCODE -ne 0) { throw "中文安装包编译失败，退出码 $LASTEXITCODE" }
+& './installer/windows/build-incremental-bootstrap.ps1' -DeltaPath (Join-Path $PSScriptRoot 'build/TokenPro-update.jar') -OutputDirectory (Join-Path $PSScriptRoot 'dist')
 if ($env:GITHUB_ACTIONS -eq 'true' -and $env:RUNNER_ENVIRONMENT -eq 'github-hosted') {
+  & './installer/windows/test-bootstrap-native.ps1' `
+    -Bootstrap (Join-Path $PSScriptRoot 'dist/TokenPro-1.2.65-Windows-incremental.exe') `
+    -Image (Join-Path $imageRoot 'TokenPro') -Delta (Join-Path $PSScriptRoot 'build/TokenPro-update.jar') `
+    -Output (Join-Path $packageRoot 'bootstrap-native-acceptance')
   & './installer/windows/smoke-test.ps1' `
     -Installer (Join-Path $PSScriptRoot 'dist/TokenPro-1.2.65-Windows-x64.exe') `
     -AppImage (Join-Path $imageRoot 'TokenPro') -OutputRoot (Join-Path $packageRoot 'acceptance')
