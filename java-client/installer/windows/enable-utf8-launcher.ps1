@@ -21,7 +21,7 @@ $codePage=$settings.SelectSingleNode("*[local-name()='activeCodePage']")
 if(-not $codePage){$codePage=$document.CreateElement('activeCodePage','http://schemas.microsoft.com/SMI/2019/WindowsSettings');[void]$settings.AppendChild($codePage)}
 $codePage.InnerText='UTF-8'
 $document.Save($manifestPath)
-& $manifestTool '-nologo' ("-manifest:$manifestPath") ("-outputresource:$launcherPath;#1")
+& $manifestTool '-nologo' '-manifest' $manifestPath ("-outputresource:$launcherPath;#1")
 if($LASTEXITCODE -ne 0){throw 'Could not embed per-application UTF-8 manifest'}
 & $manifestTool '-nologo' ("-inputresource:$launcherPath;#1") ("-out:$manifestPath")
 if($LASTEXITCODE -ne 0){throw 'Could not verify embedded manifest'}

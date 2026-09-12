@@ -3,12 +3,11 @@ package work.tokenpro.client;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
-/** Per-user Windows delta updater. Never elevates or changes installation ACLs. */
+/** Windows delta updater. Requests UAC only for an unwritable installation; never changes ACLs. */
 final class WindowsUpdater {
     private WindowsUpdater() {}
 
@@ -31,30 +30,20 @@ final class WindowsUpdater {
         if (!sourceRoot.resolve("app/TokenPro.jar").equals(currentJar.toAbsolutePath().normalize()))
             throw new IOException("程序与核心文件路径不一致，已停止更新");
         validateImage(sourceRoot);
-        Path destination = sourceRoot;
-        boolean migrated = !canReplace(currentJar);
-        if (migrated) {
-            String local = System.getenv("LOCALAPPDATA");
-            if (local == null || local.isBlank()) throw new IOException("找不到当前用户的应用目录");
-            destination = Path.of(local, "Programs", "TokenPro").toAbsolutePath().normalize();
-            migrateImage(sourceRoot, destination);
-        }
-        Path target = destination.resolve("app/TokenPro.jar");
-        if (!canReplace(target)) throw new IOException("当前用户目录不可写，未申请管理员权限，也未退出程序");
+        Path target = sourceRoot.resolve("app/TokenPro.jar");
+        boolean elevationRequired = !canReplace(target);
         Path jobRoot = Files.createTempDirectory("TokenPro-update-job-").toAbsolutePath();
         Platform.privateFile(jobRoot);
-        Map<String,Object> job = job(merged, target, destination.resolve("TokenPro.exe"), parentPid, jobRoot);
+        Map<String,Object> job = job(merged, target, executable, parentPid, jobRoot);
         job.put("version", version);
-        job.put("migrated", migrated);
-        job.put("previousLauncher", executable.toString());
         job.put("result", Platform.dataDirectory().resolve("windows-update-result.json").toString());
         Path jobFile = jobRoot.resolve("job.json");
         Files.writeString(jobFile, Json.stringify(job), StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
         Platform.privateFile(jobFile);
-        Process process = new ProcessBuilder(command(jobFile))
+        Process process = new ProcessBuilder(elevationRequired ? elevationCommand(jobFile, job) : command(jobFile))
             .redirectErrorStream(true).redirectOutput(jobRoot.resolve("helper.log").toFile()).start();
         Path ready = jobRoot.resolve("ready.json");
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(elevationRequired ? 180 : 15);
         while (!Files.isRegularFile(ready)) {
             if (!process.isAlive() || System.nanoTime() >= deadline) {
                 // Cancellation is observed before any replacement if startup did not acknowledge readiness.
@@ -80,8 +69,6 @@ final class WindowsUpdater {
         job.put("version", Main.VERSION);
         job.put("launch", true);
         job.put("showErrors", true);
-        job.put("createShortcuts", true);
-        job.put("migrated", false);
         job.put("result", jobRoot.resolve("result.json").toAbsolutePath().toString());
         return job;
     }
@@ -91,6 +78,75 @@ final class WindowsUpdater {
         // Inline, locally generated commands; no execution-policy changes or downloaded scripts.
         return List.of(powershell.toString(), "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden",
             "-Command", "& { " + script() + " } -JobFile '" + jobFile.toAbsolutePath().toString().replace("'", "''") + "'");
+    }
+
+    static String quote(String value) { return "'" + value.replace("'", "''") + "'"; }
+
+    static String encoded(String script) {
+        return Base64.getEncoder().encodeToString(script.getBytes(StandardCharsets.UTF_16LE));
+    }
+
+    static List<String> elevationCommand(Path jobFile, Map<String,Object> job) throws IOException {
+        String broker = elevationBrokerScript(jobFile, job);
+        // Keep the broker unencoded: the embedded elevated command is already Base64 UTF-16LE.
+        // Refuse overlong paths/payloads instead of silently truncating the exact update target.
+        if (broker.length() > 30000) throw new IOException("更新路径过长，无法安全请求管理员授权，程序未退出");
+        return List.of(command(jobFile).getFirst(), "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", broker);
+    }
+
+    static String elevationBrokerScript(Path jobFile, Map<String,Object> original) {
+        Path jobRoot = jobFile.toAbsolutePath().getParent();
+        Map<String,Object> elevated = new LinkedHashMap<>(original);
+        // The elevated helper only replaces the already hashed core. It must not execute the
+        // application, write another administrator's profile, or trust a mutable JSON job file.
+        elevated.put("launch", false);
+        elevated.put("showErrors", false);
+        elevated.put("administrator", true);
+        elevated.put("result", jobRoot.resolve("elevated-result.json").toString());
+        String pinnedJob = Base64.getEncoder().encodeToString(Json.stringify(elevated).getBytes(StandardCharsets.UTF_8));
+        String helper = script().replace(
+            "$job=Get-Content -LiteralPath $JobFile -Raw -Encoding UTF8|ConvertFrom-Json",
+            "$job=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + pinnedJob + "'))|ConvertFrom-Json");
+        helper = "& { " + helper + " } -JobFile " + quote(jobFile.toAbsolutePath().toString());
+        return """
+            $ErrorActionPreference='Stop'
+            [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
+            $jobRoot=__ROOT__
+            $ready=Join-Path $jobRoot 'ready.json'
+            $cancel=Join-Path $jobRoot 'cancel'
+            $receipt=Join-Path $jobRoot 'elevated-result.json'
+            function Save-State($path,$state) {
+                $temp=$path+'.'+[Guid]::NewGuid().ToString('N')
+                [IO.File]::WriteAllText($temp,($state|ConvertTo-Json -Compress),[Text.UTF8Encoding]::new($false))
+                if(Test-Path -LiteralPath $path){[IO.File]::Replace($temp,$path,[NullString]::Value)}else{[IO.File]::Move($temp,$path)}
+            }
+            try {
+                if(Test-Path -LiteralPath $cancel){throw '更新授权已取消'}
+                $elevated=Start-Process -FilePath __POWERSHELL__ -Verb RunAs -WindowStyle Hidden -PassThru -ArgumentList @('-NoProfile','-NonInteractive','-WindowStyle','Hidden','-EncodedCommand','__ENCODED__')
+                $elevated.WaitForExit()
+                if(-not (Test-Path -LiteralPath $receipt)){throw '管理员更新未完成，原程序未被强制关闭'}
+                $result=Get-Content -LiteralPath $receipt -Raw -Encoding UTF8|ConvertFrom-Json
+                if($result.status -ne 'complete'){throw $result.message}
+                if($elevated.ExitCode -ne 0 -or $result.sha256 -ne __SHA__){throw '管理员更新结果校验失败'}
+                Save-State __RESULT__ $result
+                # This broker retains the ORIGINAL user's token. Never start TokenPro elevated.
+                if(__LAUNCH__){Start-Process -FilePath __LAUNCHER__ -WorkingDirectory __APPROOT__}
+            } catch {
+                $failure=$_.Exception.Message
+                if($_.Exception.NativeErrorCode -eq 1223 -or ($_.Exception.InnerException -and $_.Exception.InnerException.NativeErrorCode -eq 1223)){$failure='已取消管理员授权，未更新；TokenPro 保持打开'}
+                Save-State $ready @{ready=$false;message=$failure}
+                Save-State __RESULT__ @{status='failed';message=$failure;administrator=$true}
+                Write-Error $failure -ErrorAction Continue
+                exit 1
+            }
+            """.replace("__ROOT__", quote(jobRoot.toString()))
+            .replace("__POWERSHELL__", quote(command(jobFile).getFirst()))
+            .replace("__ENCODED__", encoded(helper))
+            .replace("__SHA__", quote(original.get("sourceSha256").toString()))
+            .replace("__RESULT__", quote(original.get("result").toString()))
+            .replace("__LAUNCHER__", quote(original.get("launcher").toString()))
+            .replace("__APPROOT__", quote(Path.of(original.get("launcher").toString()).getParent().toString()))
+            .replace("__LAUNCH__", Boolean.TRUE.equals(original.get("launch")) ? "$true" : "$false");
     }
 
     static boolean canReplace(Path target) {
@@ -110,44 +166,6 @@ final class WindowsUpdater {
             rejectLinks(file);
             if (!Files.isRegularFile(file)) throw new IOException("本地程序文件不完整，缺少：" + relative);
         }
-    }
-
-    static void migrateImage(Path source, Path destination) throws Exception {
-        source = source.toAbsolutePath().normalize();
-        destination = destination.toAbsolutePath().normalize();
-        validateImage(source);
-        rejectLinks(destination);
-        if (source.equals(destination)) throw new IOException("用户目录也不可写，不能原地迁移");
-        if (Files.exists(destination)) {
-            validateImage(destination);
-            if (!sha256(source.resolve("app/TokenPro.jar")).equals(sha256(destination.resolve("app/TokenPro.jar"))))
-                throw new IOException("用户目录已存在其他版本，请从该目录的 TokenPro 检查更新；未覆盖原文件");
-            return;
-        }
-        Files.createDirectories(destination.getParent());
-        Path staging = Files.createTempDirectory(destination.getParent(), "TokenPro-migration-");
-        // D:\\ can be a legacy app root. Never recurse over that root or copy unrelated user files.
-        Files.copy(source.resolve("TokenPro.exe"), staging.resolve("TokenPro.exe"));
-        for (String directory : List.of("app", "runtime")) {
-            Path subtree = source.resolve(directory);
-            Path output = staging.resolve(directory);
-            Files.walkFileTree(subtree, new SimpleFileVisitor<>() {
-                @Override public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attributes) throws IOException {
-                    rejectLinks(dir);
-                    Files.createDirectories(output.resolve(subtree.relativize(dir)));
-                    return FileVisitResult.CONTINUE;
-                }
-                @Override public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
-                    rejectLinks(file);
-                    if (!attributes.isRegularFile()) throw new IOException("迁移目录包含非普通文件");
-                    Files.copy(file, output.resolve(subtree.relativize(file)));
-                    return FileVisitResult.CONTINUE;
-                }
-            });
-        }
-        validateImage(staging);
-        // Destination must not exist; failed staging remains available for diagnosis, never broadly deleted.
-        Files.move(staging, destination);
     }
 
     static void rejectLinks(Path path) throws IOException {
@@ -177,9 +195,12 @@ final class WindowsUpdater {
             $jobRoot=[IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($JobFile))
             $ready=Join-Path $jobRoot 'ready.json'
             $cancel=Join-Path $jobRoot 'cancel'
-            $lock=$null; $changed=$false; $job=$null; $next=$null; $backup=$null
+            $lock=$null; $sourceLock=$null; $changed=$false; $job=$null; $next=$null; $backup=$null
             function Save-Json($path,$value) {
-                [IO.File]::WriteAllText($path,($value|ConvertTo-Json -Depth 6 -Compress),[Text.UTF8Encoding]::new($false))
+                Plain-Path $path
+                $temp=$path+'.'+[Guid]::NewGuid().ToString('N')
+                [IO.File]::WriteAllText($temp,($value|ConvertTo-Json -Depth 6 -Compress),[Text.UTF8Encoding]::new($false))
+                if(Test-Path -LiteralPath $path){[IO.File]::Replace($temp,$path,[NullString]::Value)}else{[IO.File]::Move($temp,$path)}
             }
             function Hash($path) {
                 $algorithm=[Security.Cryptography.SHA256]::Create()
@@ -203,6 +224,7 @@ final class WindowsUpdater {
                 if([IO.Path]::GetFileName($job.target) -ne 'TokenPro.jar' -or [IO.Path]::GetFileName([IO.Path]::GetDirectoryName($job.target)) -ne 'app'){throw '核心文件目标不正确'}
                 $appRoot=[IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName($job.target))
                 if($job.launcher -ne (Join-Path $appRoot 'TokenPro.exe')){throw '启动程序与更新目标不一致'}
+                $sourceLock=[IO.File]::Open($job.source,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
                 if((Hash $job.source) -ne $job.sourceSha256 -or (Hash $job.target) -ne $job.baseSha256){throw '更新文件校验失败'}
                 $lock=[IO.File]::Open(($job.target+'.update.lock'),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
                 $suffix=[Guid]::NewGuid().ToString('N')
@@ -229,27 +251,8 @@ final class WindowsUpdater {
                     catch [IO.IOException] { if([DateTime]::UtcNow -gt $replaceDeadline){throw}; Start-Sleep -Milliseconds 200 }
                 }
                 if((Hash $job.target) -ne $job.sourceSha256){throw '更新后校验失败'}
-                $shortcutError=$null
-                if($job.migrated -and $job.createShortcuts) {
-                    try {
-                        $shell=New-Object -ComObject WScript.Shell
-                        $desktop=[Environment]::GetFolderPath('Desktop')
-                        $programs=[Environment]::GetFolderPath('Programs')
-                        foreach($folder in @($desktop,$programs)) {
-                            $linkPath=Join-Path $folder 'TokenPro.lnk'
-                            $link=$shell.CreateShortcut($linkPath)
-                            if((Test-Path -LiteralPath $linkPath) -and
-                               $link.TargetPath -ne $job.previousLauncher -and $link.TargetPath -ne $job.launcher) {
-                                $shortcutError='已有同名快捷方式指向其他程序，未覆盖：'+$linkPath
-                                continue
-                            }
-                            $link.TargetPath=$job.launcher; $link.WorkingDirectory=$appRoot
-                            $link.Description='TokenPro'; $link.Save()
-                        }
-                    } catch { $shortcutError=$_.Exception.Message }
-                }
                 if($job.launch){Start-Process -FilePath $job.launcher -WorkingDirectory $appRoot}
-                Save-Json $job.result @{status='complete';version=$job.version;sha256=$job.sourceSha256;launcher=$job.launcher;backup=$backup;migrated=[bool]$job.migrated;shortcutWarning=$shortcutError;administrator=$false}
+                Save-Json $job.result @{status='complete';version=$job.version;sha256=$job.sourceSha256;launcher=$job.launcher;backup=$backup;administrator=[bool]$job.administrator}
             } catch {
                 $failure=$_.Exception.Message
                 $restored=$false
@@ -259,7 +262,7 @@ final class WindowsUpdater {
                 }
                 Save-Json $ready @{ready=$false;message=$failure}
                 if($job) {
-                    Save-Json $job.result @{status='failed';message=$failure;restored=$restored;backup=$backup;administrator=$false}
+                    Save-Json $job.result @{status='failed';message=$failure;restored=$restored;backup=$backup;administrator=[bool]$job.administrator}
                     if($job.showErrors) {
                         Add-Type -AssemblyName System.Windows.Forms
                         [void][System.Windows.Forms.MessageBox]::Show(('增量更新未完成：'+$failure+[Environment]::NewLine+'原程序和账户配置已保留。请查看更新日志。'),'TokenPro 更新提示')
@@ -269,6 +272,7 @@ final class WindowsUpdater {
                 exit 1
             } finally {
                 if($lock){$lock.Dispose()}
+                if($sourceLock){$sourceLock.Dispose()}
             }
             """;
     }

@@ -1465,6 +1465,12 @@ final class TokenProFrame extends JFrame {
 
     private void installUpdate(ReleaseInfo release) {
         if (!updateInProgress.compareAndSet(false, true)) return;
+        if (Platform.OS_KIND == Platform.OS.WINDOWS && !release.hasIncrementalUpdate()) {
+            updateInProgress.set(false);
+            setUpdateButtonState("check", "重新核对版本");
+            status("此版本暂未提供增量更新包，未下载完整安装包，也未更改安装位置");
+            return;
+        }
         if (release.preferredUrl().isBlank()) {
             updateInProgress.set(false);
             setUpdateButtonState("check", "重新核对版本");
@@ -1538,8 +1544,7 @@ final class TokenProFrame extends JFrame {
         new SwingWorker<Void,Void>() {
             protected Void doInBackground() throws Exception {
                 BridgeLifecycle.update(BridgeLifecycle.running(store), () -> {
-                    if(release.hasIncrementalUpdate() && Platform.OS_KIND == Platform.OS.WINDOWS) WindowsUpdater.installDelta(installer, release.version());
-                    else if(release.hasIncrementalUpdate()) Updater.installIncremental(installer, release.version());
+                    if(release.hasIncrementalUpdate()) Updater.installIncremental(installer, release.version());
                     else Updater.install(installer);
                 });
                 return null;

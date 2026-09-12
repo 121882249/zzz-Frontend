@@ -23,10 +23,11 @@ AppUpdatesURL=https://tokenpro.work
 VersionInfoDescription=TokenPro · AI 模型接入与用量管理
 VersionInfoProductName=TokenPro
 VersionInfoProductTextVersion={#AppVersion}
-DefaultDirName={localappdata}\Programs\TokenPro
-UsePreviousAppDir=no
+DefaultDirName={autopf}\TokenPro
+UsePreviousAppDir=yes
 DefaultGroupName=TokenPro
 PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=dialog
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
@@ -61,9 +62,9 @@ Name: "zh_CN"; MessagesFile: "ChineseSimplified.isl"
 [Messages]
 SetupWindowTitle=TokenPro · 安装
 WelcomeLabel1=连接每一颗 AI 星辰
-WelcomeLabel2=欢迎使用 TokenPro%n%n一个入口，连接主流 AI 模型。%n管理客户端与命令行连接，查看用量与余额。%n%n仅为当前用户安装，无需管理员权限。%n安装不会清除已有账号、模型配置和聊天记录。
+WelcomeLabel2=欢迎使用 TokenPro%n%n一个入口，连接主流 AI 模型。%n管理客户端与命令行连接，查看用量与余额。%n%n安装位置由你选择；仅在需要时请求管理员授权。%n安装不会清除已有账号、模型配置和聊天记录。
 SelectDirLabel3=为 TokenPro 选择安装位置
-SelectDirBrowseLabel=推荐保留当前用户目录，方便后续免管理员增量更新。
+SelectDirBrowseLabel=可自行选择安装位置。更新会保留此位置；写入受保护目录时需要管理员授权。
 InstallingLabel=正在准备你的 AI 模型控制中心，请稍候。
 FinishedHeadingLabel=你的模型宇宙，准备就绪
 FinishedLabel=TokenPro 已安装完成。%n%n打开应用并登录账号，即可选择模型、连接客户端。后续请在应用内点击“检查更新”。
@@ -80,11 +81,11 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: 
 Source: "{#AppImageDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{userprograms}\TokenPro"; Filename: "{app}\TokenPro.exe"; WorkingDir: "{app}"; Comment: "TokenPro"
-Name: "{userdesktop}\TokenPro"; Filename: "{app}\TokenPro.exe"; WorkingDir: "{app}"; Tasks: desktopicon; Comment: "TokenPro"
+Name: "{autoprograms}\TokenPro"; Filename: "{app}\TokenPro.exe"; WorkingDir: "{app}"; Comment: "TokenPro"
+Name: "{autodesktop}\TokenPro"; Filename: "{app}\TokenPro.exe"; WorkingDir: "{app}"; Tasks: desktopicon; Comment: "TokenPro"
 
 [Run]
-Filename: "{app}\TokenPro.exe"; Description: "立即开启 TokenPro"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\TokenPro.exe"; Description: "立即开启 TokenPro"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent runasoriginaluser
 
 [Code]
 var BrandFooter: TNewStaticText;
@@ -114,18 +115,34 @@ begin
     AddBackslash(Lowercase(ExpandFileName(Candidate)))) = 1;
 end;
 
-function NextButtonClick(CurPageID: Integer): Boolean;
+function InstallationPathError: String;
 var Target: String;
+begin
+  Result := '';
+  Target := ExpandFileName(WizardDirValue);
+  if WithinDirectory(Target, ExpandConstant('{win}')) or
+     (Length(RemoveBackslashUnlessRoot(Target)) <= 3) then
+    Result := '请为 TokenPro 选择独立的应用文件夹，避免与系统文件或磁盘根目录中的其他文件混用。'
+  else if (not IsAdminInstallMode) and
+    (WithinDirectory(Target, ExpandConstant('{commonpf32}')) or
+     WithinDirectory(Target, ExpandConstant('{commonpf64}'))) then
+    Result := '此位置需要管理员权限。请重新打开安装包，选择“为所有用户安装”并完成 Windows 授权，然后选择此位置。无需改用指定目录。';
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+var PathError: String;
 begin
   Result := True;
   if CurPageID <> wpSelectDir then Exit;
-  Target := ExpandFileName(WizardDirValue);
-  if WithinDirectory(Target, ExpandConstant('{commonpf32}')) or
-     WithinDirectory(Target, ExpandConstant('{commonpf64}')) or
-     WithinDirectory(Target, ExpandConstant('{win}')) or
-     (Length(RemoveBackslashUnlessRoot(Target)) <= 3) then
+  PathError := InstallationPathError;
+  if PathError <> '' then
   begin
-    MsgBox('这个位置需要额外权限，或属于磁盘根目录。请使用推荐的当前用户目录，或选择其他可写文件夹。', mbError, MB_OK);
+    MsgBox(PathError, mbError, MB_OK);
     Result := False;
   end;
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  Result := InstallationPathError;
 end;

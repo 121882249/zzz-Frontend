@@ -59,7 +59,7 @@ function Invoke-FixtureProcess([string]$Executable, [string[]]$Arguments, [strin
     }
 }
 
-$setupArguments = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/SP-', '/NORESTART', '/NOCLOSEAPPLICATIONS',
+$setupArguments = @('/CURRENTUSER', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/SP-', '/NORESTART', '/NOCLOSEAPPLICATIONS',
     '/NORESTARTAPPLICATIONS', '/RESTARTEXITCODE=23', '/TASKS=desktopicon',
     ('/DIR="' + $installRoot + '"'), ('/LOG="' + (Join-Path $testRoot 'setup.log') + '"'))
 Invoke-FixtureProcess $Installer $setupArguments 'install'

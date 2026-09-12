@@ -29,12 +29,16 @@ final class Updater {
         String command = ProcessHandle.current().info().command().orElse("");
         switch (Platform.OS_KIND) {
             case MAC -> installMac(installer, pid, macApplication(command));
-            case WINDOWS -> installWindows(installer, pid, command);
+            case WINDOWS -> throw new IOException("Windows 应用内仅支持增量更新，未启动完整安装包");
             case LINUX -> installLinux(installer, pid);
         }
     }
 
     static void installIncremental(Path update, String version) throws Exception {
+        if (Platform.OS_KIND == Platform.OS.WINDOWS) {
+            WindowsUpdater.installDelta(update, version);
+            return;
+        }
         long pid = ProcessHandle.current().pid();
         String command = ProcessHandle.current().info().command().orElse("");
         Path target = applicationJar(command);
@@ -42,7 +46,7 @@ final class Updater {
         Files.deleteIfExists(update);
         switch (Platform.OS_KIND) {
             case MAC -> installMacIncremental(merged, pid, target, macApplication(command), version);
-            case WINDOWS -> installWindowsIncremental(merged, pid, target, command);
+            case WINDOWS -> throw new IllegalStateException("Windows 更新必须由 WindowsUpdater 处理");
             case LINUX -> installLinuxIncremental(merged, pid, target, command);
         }
     }
@@ -230,39 +234,6 @@ final class Updater {
             rm -f "$source"
             rm -f "$0"
             """;
-    }
-
-    private static void installWindows(Path installer, long pid, String command) throws Exception {
-        String body = """
-            @echo off
-            setlocal
-            :wait
-            tasklist /FI "PID eq %~1" 2>NUL | find "%~1" >NUL
-            if not errorlevel 1 (timeout /T 1 /NOBREAK >NUL & goto wait)
-            start /wait "" "%~2" /quiet
-            if not "%~3"=="" start "" "%~3"
-            del /Q "%~2" >NUL 2>&1
-            del /Q "%~f0" >NUL 2>&1
-            """;
-        Path script = script("tokenpro-update-", ".cmd", body);
-        startUpdater(new ProcessBuilder("cmd", "/c", "start", "", "/b", script.toString(), Long.toString(pid), installer.toString(), command));
-    }
-
-    private static void installWindowsIncremental(Path source, long pid, Path target, String command) throws Exception {
-        String body = """
-            @echo off
-            setlocal
-            :wait
-            tasklist /FI "PID eq %~1" 2>NUL | find "%~1" >NUL
-            if not errorlevel 1 (timeout /T 1 /NOBREAK >NUL & goto wait)
-            copy /Y "%~2" "%~3" >NUL
-            if errorlevel 1 exit /b 1
-            start "" "%~4"
-            del /Q "%~2" >NUL 2>&1
-            del /Q "%~f0" >NUL 2>&1
-            """;
-        Path script = script("tokenpro-update-", ".cmd", body);
-        startUpdater(new ProcessBuilder("cmd", "/c", "start", "", "/b", script.toString(), Long.toString(pid), source.toString(), target.toString(), command));
     }
 
     private static void installLinux(Path installer, long pid) throws Exception {
