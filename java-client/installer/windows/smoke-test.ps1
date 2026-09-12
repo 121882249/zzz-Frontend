@@ -66,12 +66,14 @@ foreach ($relative in @('TokenPro.exe', 'app\TokenPro.jar', 'app\TokenPro.cfg', 
     $actual = (Get-FileHash -LiteralPath (Join-Path $installRoot $relative) -Algorithm SHA256).Hash
     if ($expected -ne $actual) { throw "Installed file mismatch: $relative" }
 }
-$shortcutReader = New-Object -ComObject WScript.Shell
+$shortcutReader = New-Object -ComObject Shell.Application
 foreach ($linkPath in @($desktopLink, $startLink)) {
     if (-not (Test-Path -LiteralPath $linkPath)) { throw 'Shortcut missing' }
-    $link = $shortcutReader.CreateShortcut($linkPath)
-    if ($link.TargetPath -ne (Join-Path $installRoot 'TokenPro.exe') -or $link.Description -ne 'TokenPro · AI 模型接入') {
-        $details = @{shortcut=$linkPath; expected_target=(Join-Path $installRoot 'TokenPro.exe'); actual_target=$link.TargetPath; actual_description=$link.Description} | ConvertTo-Json -Compress
+    # Read through Explorer's ShellLinkObject; WScript.Shell uses a legacy ANSI accessor.
+    # https://learn.microsoft.com/en-us/windows/win32/shell/folderitem-getlink
+    $link = $shortcutReader.NameSpace([IO.Path]::GetDirectoryName($linkPath)).ParseName([IO.Path]::GetFileName($linkPath)).GetLink
+    if ($link.Path -ne (Join-Path $installRoot 'TokenPro.exe') -or $link.Description -ne 'TokenPro · AI 模型接入') {
+        $details = @{shortcut=$linkPath; expected_target=(Join-Path $installRoot 'TokenPro.exe'); actual_target=$link.Path; actual_description=$link.Description} | ConvertTo-Json -Compress
         throw "Shortcut target/Chinese description mismatch: $details"
     }
 }
