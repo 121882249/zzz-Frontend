@@ -239,7 +239,7 @@ final class TokenProFrame extends JFrame {
         GradientPanel panel = new GradientPanel(); panel.setLayout(new BorderLayout(0, 16)); panel.setBorder(new EmptyBorder(23, 28, 20, 28));
         JPanel title = transparent(new BorderLayout()); headerTitle.setFont(appFont(23, Font.BOLD)); headerTitle.setIcon(new TechGlobeIcon(30)); headerTitle.setIconTextGap(10); headerTitle.setGradient(true); headerTitle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)); headerTitle.setToolTipText("打开 TokenPro 主页"); headerTitle.addMouseListener(new MouseAdapter() { @Override public void mouseClicked(MouseEvent event) { if ("https://tokenpro.work".equals(headerTitle.getText())) browse("https://tokenpro.work"); } }); title.add(headerTitle, BorderLayout.WEST);
         JPanel right = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        updateButton = soft("正在核对版本…"); setUpdateButtonState("checking", "正在核对版本…"); updateButton.addActionListener(e -> updateFromButton()); right.add(updateButton);
+        updateButton = soft("正在核对版本…"); updateButton.setFont(appFont(11, Font.BOLD)); setUpdateButtonState("checking", "正在核对版本…"); updateButton.addActionListener(e -> updateFromButton()); right.add(updateButton);
         JButton user = soft("登录账户"); user.setIcon(resourceIconContained("CircleUserLucide.png", 17, 17, true)); user.addActionListener(e -> openAccount()); headerUser.addPropertyChangeListener("text", e -> user.setText(headerUser.getText())); right.add(user);
         title.add(right, BorderLayout.EAST); panel.add(title, BorderLayout.NORTH);
         Dimension headerCardSize = new Dimension(430, 64);
@@ -1408,7 +1408,7 @@ final class TokenProFrame extends JFrame {
                         }
                     } else if (compareVersions(release.version(), Main.VERSION) > 0) {
                         availableUpdate = release;
-                        setUpdateButtonState("check", "发现更新 v" + release.version());
+                        setUpdateButtonState("check", "发现更新 v" + release.version() + "  ⚠");
                         status("发现新版本 " + release.version());
                         if (!automatic) installUpdate(release);
                     } else {
@@ -1548,7 +1548,7 @@ final class TokenProFrame extends JFrame {
                 } catch (Exception ex) {
                     updateInProgress.set(false);
                     if (updateButton != null) updateButton.setEnabled(true);
-                    setUpdateButtonState("check", "更新失败，点击重试");
+                    setUpdateButtonState("check", "更新失败，点击重试  ⚠");
                     setUpdateProgress(-1);
                     Throwable cause = ex.getCause() == null ? ex : ex.getCause();
                     status("自动更新失败：" + (cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage()));
@@ -1570,7 +1570,7 @@ final class TokenProFrame extends JFrame {
                 try { get(); dispose(); System.exit(0); }
                 catch(Exception ex) {
                     updateInProgress.set(false);
-                    setUpdateButtonState("check", "更新失败，点击重试");
+                    setUpdateButtonState("check", "更新失败，点击重试  ⚠");
                     setUpdateProgress(-1);
                     Throwable cause = ex.getCause() == null ? ex : ex.getCause();
                     status("更新失败，已尝试恢复原有连接：" + cause.getMessage()
@@ -1715,7 +1715,9 @@ final class TokenProFrame extends JFrame {
     }
 
     private static ImageIcon commandIcon(String name, int size) {
-        return resourceIconContained(name.equals("Codex") ? "CodexCommandLine.png" : "ClaudeOriginal.png", size, size, false);
+        if (!name.equals("Codex")) return resourceIconContained("ClaudeOriginal.png", size, size, false);
+        ImageIcon icon = resourceIconContained("CodexCommandLine.png", size, size, false);
+        return icon == null ? resourceIconContained("CodexOriginal.png", size, size, false) : icon;
     }
 
     private <T> void async(String running, Callable<T> task, java.util.function.Consumer<T> done) {
@@ -2596,7 +2598,19 @@ final class TokenProFrame extends JFrame {
                 g.setClip(oldClip);
                 g.setColor(stroke); g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 18, 18);
             }
-            g.setFont(getFont()); g.setColor("latest".equals(updateState) ? new Color(218, 248, 239) : (isEnabled() ? getForeground() : new Color(137, 145, 177))); FontMetrics fm = g.getFontMetrics(); Icon icon = getIcon(); int textWidth = fm.stringWidth(getText()); int iconWidth = icon == null ? 0 : icon.getIconWidth(); int gap = icon == null || getText().isBlank() ? 0 : getIconTextGap(); int total = iconWidth + gap + textWidth; int x = (getWidth() - total) / 2; if (icon != null) { icon.paintIcon(this, g, x, (getHeight() - icon.getIconHeight()) / 2); x += iconWidth + gap; } g.drawString(getText(), x, (getHeight() - fm.getHeight()) / 2 + fm.getAscent()); g.dispose();
+            g.setFont(getFont());
+            Color textColor = "latest".equals(updateState) ? new Color(218, 248, 239) : (isEnabled() ? getForeground() : new Color(137, 145, 177));
+            FontMetrics fm = g.getFontMetrics(); Icon icon = getIcon();
+            boolean warning = getText().endsWith("⚠");
+            String label = warning ? getText().substring(0, getText().length() - 1).stripTrailing() : getText();
+            int warningGap = warning ? 7 : 0, warningWidth = warning ? fm.stringWidth("⚠") : 0;
+            int textWidth = fm.stringWidth(label); int iconWidth = icon == null ? 0 : icon.getIconWidth(); int gap = icon == null || label.isBlank() ? 0 : getIconTextGap();
+            int total = iconWidth + gap + textWidth + warningGap + warningWidth; int x = (getWidth() - total) / 2;
+            if (icon != null) { icon.paintIcon(this, g, x, (getHeight() - icon.getIconHeight()) / 2); x += iconWidth + gap; }
+            int baseline = (getHeight() - fm.getHeight()) / 2 + fm.getAscent();
+            g.setColor(textColor); g.drawString(label, x, baseline);
+            if (warning) { g.setColor(new Color(255, 204, 82)); g.drawString("⚠", x + textWidth + warningGap, baseline); }
+            g.dispose();
         }
     }
 }

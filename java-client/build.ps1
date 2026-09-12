@@ -30,12 +30,12 @@ Copy-Item ../Resources/PlusLucide.png build/classes/assets/PlusLucide.png
 @"
 Main-Class: work.tokenpro.client.Main
 Implementation-Title: TokenPro
-Implementation-Version: 1.2.73
+Implementation-Version: 1.2.74
 
 "@ | Set-Content -Encoding ascii build/manifest.mf
 & "$env:JAVA_HOME/bin/jar.exe" --create --file build/TokenPro.jar --manifest build/manifest.mf -C build/classes .
 if ($LASTEXITCODE -ne 0) { throw "TokenPro.jar packaging failed with exit code $LASTEXITCODE" }
-& "$env:JAVA_HOME/bin/jar.exe" --create --file build/TokenPro-update.jar --no-manifest -C build/classes work -C build/classes assets/CodexCommandLine.png
+& "$env:JAVA_HOME/bin/jar.exe" --create --file build/TokenPro-update.jar --no-manifest -C build/classes work
 if ($LASTEXITCODE -ne 0) { throw "TokenPro-update.jar packaging failed with exit code $LASTEXITCODE" }
 & "$env:JAVA_HOME/bin/java.exe" -jar build/TokenPro.jar --self-test
 if ($LASTEXITCODE -ne 0) { throw "self-test failed with exit code $LASTEXITCODE" }

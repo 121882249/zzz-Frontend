@@ -94,7 +94,7 @@ final class Updater {
         String leaf = name.startsWith(prefix) ? name.substring(prefix.length()) : "";
         boolean allowedClass = name.endsWith(".class") && !leaf.isBlank()
             && !leaf.contains("/") && !leaf.contains("\\") && !leaf.contains("..");
-        return allowedDirectory || allowedClass || name.equals("assets/CodexCommandLine.png");
+        return allowedDirectory || allowedClass;
     }
 
     private static void copyEntry(ZipFile source, ZipEntry entry, ZipOutputStream output) throws IOException {

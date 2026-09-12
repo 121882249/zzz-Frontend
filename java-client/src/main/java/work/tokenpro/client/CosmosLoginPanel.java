@@ -252,10 +252,19 @@ final class CosmosLoginPanel extends JPanel {
             g.setColor(stroke);
             g.drawRoundRect(0, 0, width, height, 14, 14);
             g.setFont(getFont());
-            g.setColor(getForeground());
             FontMetrics metrics = g.getFontMetrics();
-            g.drawString(getText(), (getWidth() - metrics.stringWidth(getText())) / 2,
-                (getHeight() - metrics.getHeight()) / 2 + metrics.getAscent());
+            boolean warning = getText().endsWith("⚠");
+            String label = warning ? getText().substring(0, getText().length() - 1).stripTrailing() : getText();
+            int warningGap = warning ? 7 : 0;
+            int totalWidth = metrics.stringWidth(label) + warningGap + (warning ? metrics.stringWidth("⚠") : 0);
+            int x = (getWidth() - totalWidth) / 2;
+            int baseline = (getHeight() - metrics.getHeight()) / 2 + metrics.getAscent();
+            g.setColor(getForeground());
+            g.drawString(label, x, baseline);
+            if (warning) {
+                g.setColor(new Color(255, 204, 82));
+                g.drawString("⚠", x + metrics.stringWidth(label) + warningGap, baseline);
+            }
             g.dispose();
         }
     }

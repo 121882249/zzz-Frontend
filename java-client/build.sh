@@ -36,11 +36,11 @@ cp ../Resources/PlusLucide.png build/classes/assets/PlusLucide.png
 cat > build/manifest.mf <<'EOF'
 Main-Class: work.tokenpro.client.Main
 Implementation-Title: TokenPro
-Implementation-Version: 1.2.73
+Implementation-Version: 1.2.74
 
 EOF
 "$JAVA_HOME/bin/jar" --create --file build/TokenPro.jar --manifest build/manifest.mf -C build/classes .
 "$JAVA_HOME/bin/jar" --create --file build/TokenPro-update.jar --no-manifest \
-  -C build/classes work -C build/classes assets/CodexCommandLine.png
+  -C build/classes work
 "$JAVA_HOME/bin/java" -jar build/TokenPro.jar --self-test
 echo "Built java-client/build/TokenPro.jar and TokenPro-update.jar"

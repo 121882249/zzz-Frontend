@@ -86,16 +86,21 @@ jobs:
             echo "::error::No baseline tag is available for incremental validation."
             exit 1
           fi
-          # Java implementation changes and the explicitly allowlisted Codex CLI
-          # icon are shipped inside the delta. Every other runtime asset must stay
-          # compatible; never silently switch to an installer.
-          changed_runtime_assets=$(git diff --name-only "$previous_tag" HEAD -- Resources Router.icns Router.ico | grep -v '^Resources/CodexCommandLine.png$' || true)
+          # Existing clients only accept class files in a delta. Runtime assets
+          # therefore require a new full-install baseline instead of a delta.
+          changed_runtime_assets=$(git diff --name-only "$previous_tag" HEAD -- Resources Router.icns Router.ico || true)
           if [ -n "$changed_runtime_assets" ]; then
             printf '%s\n' "$changed_runtime_assets"
             echo "::error::Runtime assets changed. Stop and prepare a compatible incremental update."
             exit 1
           fi
-          unzip -l java-client/build/TokenPro-update.jar | grep -q 'assets/CodexCommandLine.png'
+          unzip -Z1 java-client/build/TokenPro-update.jar | grep -q '^work/tokenpro/client/Main.class$'
+          invalid_entries=$(unzip -Z1 java-client/build/TokenPro-update.jar | grep -Ev '^(work/|work/tokenpro/|work/tokenpro/client/|work/tokenpro/client/[^/]+\.class)$' || true)
+          if [ -n "$invalid_entries" ]; then
+            printf '%s\n' "$invalid_entries"
+            echo "::error::Incremental package contains entries rejected by existing clients."
+            exit 1
+          fi
       - uses: actions/upload-artifact@v6
         with:
           name: TokenPro-incremental
@@ -121,7 +126,7 @@ jobs:
           cp release-assets/TokenPro-Windows-x64/*-Windows-x64.exe "release-files/TokenPro-${GITHUB_REF_NAME}-Windows-x64.exe"
           cp release-assets/TokenPro-Linux-x64/*.deb "release-files/TokenPro-${GITHUB_REF_NAME}-Linux-x64.deb"
           previous_tag=$(git tag --sort=-version:refname | grep -v "^${GITHUB_REF_NAME}$" | head -1 || true)
-          changed_runtime_assets=$(git diff --name-only "$previous_tag" "$GITHUB_REF_NAME" -- Resources Router.icns Router.ico | grep -v '^Resources/CodexCommandLine.png$' || true)
+          changed_runtime_assets=$(git diff --name-only "$previous_tag" "$GITHUB_REF_NAME" -- Resources Router.icns Router.ico || true)
           if [ "$GITHUB_REF_NAME" = "v1.2.65" ]; then
             echo "Fresh-install baseline: installers only; do not publish an old-version delta."
           elif [ -n "$previous_tag" ] && [ -z "$changed_runtime_assets" ]; then
