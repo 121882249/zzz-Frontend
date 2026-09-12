@@ -30,6 +30,7 @@ final class WindowsUpdaterTest {
             check(command.getLast().contains("中文 '' 引号"), "job path quoted"); passed++;
             check(!WindowsUpdater.script().contains("RunAs") && !WindowsUpdater.script().contains("taskkill") && !WindowsUpdater.script().contains("timeout /T"), "no elevation, process killing or stdin-dependent waits"); passed++;
             check(WindowsUpdater.script().contains("[IO.File]::Replace") && WindowsUpdater.script().contains("baseSha256") && WindowsUpdater.script().contains("rollback-"), "atomic replacement with verification and backup"); passed++;
+            check(WindowsUpdater.script().contains("'TokenPro.lnk'") && !WindowsUpdater.script().contains("TokenPro（用户版）") && WindowsUpdater.script().contains("$link.TargetPath -ne $job.previousLauncher"), "plain TokenPro shortcut name and foreign shortcut protection"); passed++;
             if (Platform.OS_KIND == Platform.OS.WINDOWS) {
                 passed += execute(root.resolve("成功更新 中文 ' 路径"), false, false, false);
                 passed += execute(root.resolve("校验失败保留原文件"), true, false, false);

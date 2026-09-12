@@ -236,9 +236,13 @@ final class WindowsUpdater {
                         $desktop=[Environment]::GetFolderPath('Desktop')
                         $programs=[Environment]::GetFolderPath('Programs')
                         foreach($folder in @($desktop,$programs)) {
-                            $linkPath=Join-Path $folder 'TokenPro（用户版）.lnk'
-                            if(Test-Path -LiteralPath $linkPath){continue}
+                            $linkPath=Join-Path $folder 'TokenPro.lnk'
                             $link=$shell.CreateShortcut($linkPath)
+                            if((Test-Path -LiteralPath $linkPath) -and
+                               $link.TargetPath -ne $job.previousLauncher -and $link.TargetPath -ne $job.launcher) {
+                                $shortcutError='已有同名快捷方式指向其他程序，未覆盖：'+$linkPath
+                                continue
+                            }
                             $link.TargetPath=$job.launcher; $link.WorkingDirectory=$appRoot
                             $link.Description='TokenPro · AI 模型接入'; $link.Save()
                         }

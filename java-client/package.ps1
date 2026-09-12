@@ -28,4 +28,9 @@ if ($LASTEXITCODE -ne 0) { throw "jpackage failed with exit code $LASTEXITCODE" 
 & $compiler ("/DAppImageDir=" + (Join-Path $imageRoot 'TokenPro')) `
   ("/DOutputDirPath=" + (Join-Path $PSScriptRoot 'dist')) 'installer/windows/TokenPro.iss'
 if ($LASTEXITCODE -ne 0) { throw "中文安装包编译失败，退出码 $LASTEXITCODE" }
+if ($env:GITHUB_ACTIONS -eq 'true' -and $env:RUNNER_ENVIRONMENT -eq 'github-hosted') {
+  & './installer/windows/smoke-test.ps1' `
+    -Installer (Join-Path $PSScriptRoot 'dist/TokenPro-1.2.65-Windows-x64.exe') `
+    -AppImage (Join-Path $imageRoot 'TokenPro') -OutputRoot (Join-Path $packageRoot 'acceptance')
+}
 Write-Host '已生成中文星空主题 Windows 安装包，默认仅为当前用户安装。'
