@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory=$true)][string]$Installer,
     [Parameter(Mandatory=$true)][string]$AppImage,
-    [Parameter(Mandatory=$true)][string]$OutputRoot
+    [Parameter(Mandatory=$true)][string]$OutputRoot,
+    [Parameter(Mandatory=$true)][string]$Version
 )
 $ErrorActionPreference = 'Stop'
 # This installs/uninstalls only on a fresh, disposable GitHub-hosted Windows runner.
@@ -64,7 +65,7 @@ $setupArguments = @('/CURRENTUSER', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/SP-', 
     ('/DIR="' + $installRoot + '"'), ('/LOG="' + (Join-Path $testRoot 'setup.log') + '"'))
 Invoke-FixtureProcess $Installer $setupArguments 'install'
 $registration = Get-ItemProperty -LiteralPath $userRegistration
-if ($registration.DisplayVersion -ne '1.2.65' -or $registration.'Inno Setup: Language' -ne 'zh_CN') { throw 'Version/language registration mismatch' }
+if ($registration.DisplayVersion -ne $Version -or $registration.'Inno Setup: Language' -ne 'zh_CN') { throw 'Version/language registration mismatch' }
 if ([IO.Path]::GetFullPath($registration.InstallLocation).TrimEnd('\') -ne $installRoot) { throw 'Installation escaped fixture directory' }
 if (Test-Path -LiteralPath $machineRegistration) { throw 'Installer wrote machine-wide registration' }
 foreach ($relative in @('TokenPro.exe', 'app\TokenPro.jar', 'app\TokenPro.cfg', 'runtime\release', 'runtime\bin\java.dll', 'runtime\bin\jli.dll', 'runtime\bin\server\jvm.dll')) {

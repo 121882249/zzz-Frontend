@@ -8,7 +8,9 @@
 #ifndef OutputDirPath
   #error OutputDirPath must point to the packaging output directory
 #endif
-#define AppVersion "1.2.65"
+#ifndef AppVersion
+  #define AppVersion "1.2.65"
+#endif
 #define RepoRoot AddBackslash(SourcePath) + "..\..\.."
 
 [Setup]
