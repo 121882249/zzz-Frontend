@@ -135,3 +135,9 @@ The UI harness tests local control state; live API latency/failure and native Wi
 - User correction: restore both desktop client icons exactly to their existing resource path. Only command-line icons change: Codex CLI uses the existing embedded purple terminal artwork; Claude CLI uses the supplied orange pixel-character silhouette, rendered directly without screenshot text/background.
 - Keep the approved dynamic account width and independent 3-second recharge/subscription cooldown changes.
 - Build passed 392 checks; desktop UI regression passed; class-only update archive rendered both CLI icons without any asset resources at 1×/2×/3×. Inspected 3× icon preview. Original Resources remain unchanged.
+
+## v1.2.83 approved icon treatment
+
+- Both CLI icons now use matching rounded-square bounds and corner radius. Codex keeps its purple terminal illustration within the tile; Claude uses a warm gray-purple tile and the supplied orange pixel character at the final reduced scale (60% of icon width). No gold outline remains.
+- Desktop client icons remain unchanged. Includes previously approved dynamic username width and independent three-second purchase controls.
+- Release build: 392 checks passed. Desktop UI regression and class-only CLI icon rendering at 1×/2×/3× passed. Source assets remain unchanged for incremental compatibility.
