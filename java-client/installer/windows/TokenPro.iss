@@ -80,8 +80,8 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: 
 Source: "{#AppImageDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{userprograms}\TokenPro"; Filename: "{app}\TokenPro.exe"; WorkingDir: "{app}"; Comment: "TokenPro · AI 模型接入"
-Name: "{userdesktop}\TokenPro"; Filename: "{app}\TokenPro.exe"; WorkingDir: "{app}"; Tasks: desktopicon; Comment: "TokenPro · AI 模型接入"
+Name: "{userprograms}\TokenPro"; Filename: "{app}\TokenPro.exe"; WorkingDir: "{app}"; Comment: "TokenPro"
+Name: "{userdesktop}\TokenPro"; Filename: "{app}\TokenPro.exe"; WorkingDir: "{app}"; Tasks: desktopicon; Comment: "TokenPro"
 
 [Run]
 Filename: "{app}\TokenPro.exe"; Description: "立即开启 TokenPro"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent

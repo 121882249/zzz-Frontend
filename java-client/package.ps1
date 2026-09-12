@@ -25,6 +25,7 @@ Copy-Item -LiteralPath 'build/TokenPro.jar' -Destination (Join-Path $inputRoot '
   --icon ../Router.ico `
   --vendor TokenPro --description 'TokenPro · AI 模型接入与用量管理' --dest $imageRoot
 if ($LASTEXITCODE -ne 0) { throw "jpackage failed with exit code $LASTEXITCODE" }
+& './installer/windows/enable-utf8-launcher.ps1' -Launcher (Join-Path $imageRoot 'TokenPro/TokenPro.exe')
 & $compiler ("/DAppImageDir=" + (Join-Path $imageRoot 'TokenPro')) `
   ("/DOutputDirPath=" + (Join-Path $PSScriptRoot 'dist')) 'installer/windows/TokenPro.iss'
 if ($LASTEXITCODE -ne 0) { throw "中文安装包编译失败，退出码 $LASTEXITCODE" }

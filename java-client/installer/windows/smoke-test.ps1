@@ -67,7 +67,7 @@ $registration = Get-ItemProperty -LiteralPath $userRegistration
 if ($registration.DisplayVersion -ne '1.2.65' -or $registration.'Inno Setup: Language' -ne 'zh_CN') { throw 'Version/language registration mismatch' }
 if ([IO.Path]::GetFullPath($registration.InstallLocation).TrimEnd('\') -ne $installRoot) { throw 'Installation escaped fixture directory' }
 if (Test-Path -LiteralPath $machineRegistration) { throw 'Installer wrote machine-wide registration' }
-foreach ($relative in @('TokenPro.exe', 'app\TokenPro.jar', 'app\TokenPro.cfg', 'runtime\release')) {
+foreach ($relative in @('TokenPro.exe', 'app\TokenPro.jar', 'app\TokenPro.cfg', 'runtime\release', 'runtime\bin\java.dll', 'runtime\bin\jli.dll', 'runtime\bin\server\jvm.dll')) {
     $expected = (Get-FileHash -LiteralPath (Join-Path $AppImage $relative) -Algorithm SHA256).Hash
     $actual = (Get-FileHash -LiteralPath (Join-Path $installRoot $relative) -Algorithm SHA256).Hash
     if ($expected -ne $actual) { throw "Installed file mismatch: $relative" }
@@ -78,7 +78,7 @@ foreach ($linkPath in @($desktopLink, $startLink)) {
     # Read through Explorer's ShellLinkObject; WScript.Shell uses a legacy ANSI accessor.
     # https://learn.microsoft.com/en-us/windows/win32/shell/folderitem-getlink
     $link = $shortcutReader.NameSpace([IO.Path]::GetDirectoryName($linkPath)).ParseName([IO.Path]::GetFileName($linkPath)).GetLink
-    if ($link.Path -ne (Join-Path $installRoot 'TokenPro.exe') -or $link.Description -ne 'TokenPro · AI 模型接入') {
+    if ($link.Path -ne (Join-Path $installRoot 'TokenPro.exe') -or $link.Description -ne 'TokenPro') {
         $details = @{shortcut=$linkPath; expected_target=(Join-Path $installRoot 'TokenPro.exe'); actual_target=$link.Path; actual_description=$link.Description} | ConvertTo-Json -Compress
         throw "Shortcut target/Chinese description mismatch: $details"
     }

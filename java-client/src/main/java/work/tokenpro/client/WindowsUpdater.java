@@ -244,7 +244,7 @@ final class WindowsUpdater {
                                 continue
                             }
                             $link.TargetPath=$job.launcher; $link.WorkingDirectory=$appRoot
-                            $link.Description='TokenPro · AI 模型接入'; $link.Save()
+                            $link.Description='TokenPro'; $link.Save()
                         }
                     } catch { $shortcutError=$_.Exception.Message }
                 }
