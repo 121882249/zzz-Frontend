@@ -24,7 +24,8 @@ VersionInfoDescription=TokenPro · AI 模型接入与用量管理
 VersionInfoProductName=TokenPro
 VersionInfoProductTextVersion={#AppVersion}
 DefaultDirName={autopf}\TokenPro
-UsePreviousAppDir=yes
+; Fresh baseline installation: suggest the system default, not an old installation.
+UsePreviousAppDir=no
 DefaultGroupName=TokenPro
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog

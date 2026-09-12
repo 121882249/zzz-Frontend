@@ -14,10 +14,13 @@ suffixes=(
   macOS-arm64.dmg
   macOS-x64.dmg
   Windows-x64.exe
-  Windows-incremental.exe
   Linux-x64.deb
 )
 update_file="$source_dir/TokenPro-${version}-update.jar"
+if [[ "$version" == "v1.2.65" && -e "$update_file" ]]; then
+  echo "Fresh-install baseline must not contain an old-version delta" >&2
+  exit 1
+fi
 
 for suffix in "${suffixes[@]}"; do
   file="$source_dir/TokenPro-${version}-${suffix}"
@@ -59,14 +62,13 @@ fi
 mac_arm_sha=$(sha256sum "$release_dir/TokenPro-${version}-macOS-arm64.dmg" | awk '{print $1}')
 mac_x64_sha=$(sha256sum "$release_dir/TokenPro-${version}-macOS-x64.dmg" | awk '{print $1}')
 windows_x64_sha=$(sha256sum "$release_dir/TokenPro-${version}-Windows-x64.exe" | awk '{print $1}')
-windows_bootstrap_sha=$(sha256sum "$release_dir/TokenPro-${version}-Windows-incremental.exe" | awk '{print $1}')
 linux_x64_sha=$(sha256sum "$release_dir/TokenPro-${version}-Linux-x64.deb" | awk '{print $1}')
 cat > "$latest_dir/release.json.new" <<EOF
 {"tag_name":"$version","html_url":"https://tokenpro.work/#download-dock-title","downloads":{"macos-arm64":{"url":"https://tokenpro.work/downloads/latest/TokenPro-macOS-arm64.dmg","sha256":"$mac_arm_sha"},"macos-x64":{"url":"https://tokenpro.work/downloads/latest/TokenPro-macOS-x64.dmg","sha256":"$mac_x64_sha"},"windows-x64":{"url":"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe","sha256":"$windows_x64_sha"},"linux-x64":{"url":"https://tokenpro.work/downloads/latest/TokenPro-Linux-x64.deb","sha256":"$linux_x64_sha"}}}
 EOF
 mv "$latest_dir/release.json.new" "$latest_dir/release.json"
 cat > "$latest_dir/release-v2.json.new" <<EOF
-{"tag_name":"$version","html_url":"https://tokenpro.work/#download-dock-title"${incremental_json},"windows_incremental_bootstrap":{"url":"https://tokenpro.work/downloads/latest/TokenPro-Windows-incremental.exe","sha256":"$windows_bootstrap_sha"},"downloads":{"macos-arm64":{"url":"https://tokenpro.work/downloads/latest/TokenPro-macOS-arm64.dmg","sha256":"$mac_arm_sha"},"macos-x64":{"url":"https://tokenpro.work/downloads/latest/TokenPro-macOS-x64.dmg","sha256":"$mac_x64_sha"},"windows-x64":{"url":"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe","sha256":"$windows_x64_sha"},"linux-x64":{"url":"https://tokenpro.work/downloads/latest/TokenPro-Linux-x64.deb","sha256":"$linux_x64_sha"}}}
+{"tag_name":"$version","html_url":"https://tokenpro.work/#download-dock-title"${incremental_json},"minimum_incremental_version":"v1.2.65","downloads":{"macos-arm64":{"url":"https://tokenpro.work/downloads/latest/TokenPro-macOS-arm64.dmg","sha256":"$mac_arm_sha"},"macos-x64":{"url":"https://tokenpro.work/downloads/latest/TokenPro-macOS-x64.dmg","sha256":"$mac_x64_sha"},"windows-x64":{"url":"https://tokenpro.work/downloads/latest/TokenPro-Windows-x64.exe","sha256":"$windows_x64_sha"},"linux-x64":{"url":"https://tokenpro.work/downloads/latest/TokenPro-Linux-x64.deb","sha256":"$linux_x64_sha"}}}
 EOF
 mv "$latest_dir/release-v2.json.new" "$latest_dir/release-v2.json"
 

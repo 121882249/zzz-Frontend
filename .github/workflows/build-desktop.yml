@@ -60,6 +60,24 @@ jobs:
           distribution: temurin
           java-version: "21"
       - run: chmod +x java-client/build.sh && ./java-client/build.sh
+      - name: Verify fresh-install baseline publishing
+        shell: bash
+        run: |
+          bash -n scripts/publish-downloads.sh
+          fixture=$(mktemp -d)
+          mkdir -p "$fixture/source" "$fixture/target/latest"
+          for suffix in macOS-arm64.dmg macOS-x64.dmg Windows-x64.exe Linux-x64.deb; do
+            printf 'fixture' > "$fixture/source/TokenPro-v1.2.65-$suffix"
+          done
+          ln -s ../old-update.jar "$fixture/target/latest/TokenPro-update.jar"
+          bash scripts/publish-downloads.sh v1.2.65 "$fixture/source" "$fixture/target"
+          test ! -L "$fixture/target/latest/TokenPro-update.jar"
+          jq -e '.tag_name == "v1.2.65" and (.downloads | length == 4) and (has("incremental") | not) and (has("windows_incremental_bootstrap") | not)' "$fixture/target/latest/release-v2.json"
+          (cd "$fixture/target/v1.2.65" && sha256sum -c SHA256SUMS)
+          printf 'unexpected delta' > "$fixture/source/TokenPro-v1.2.65-update.jar"
+          if bash scripts/publish-downloads.sh v1.2.65 "$fixture/source" "$fixture/rejected"; then
+            echo '::error::Baseline accepted an old-version delta'; exit 1
+          fi
       - name: Verify incremental asset compatibility
         shell: bash
         run: |
@@ -97,10 +115,11 @@ jobs:
           cp release-assets/TokenPro-macOS-Apple-Silicon/*.dmg "release-files/TokenPro-${GITHUB_REF_NAME}-macOS-arm64.dmg"
           cp release-assets/TokenPro-macOS-Intel/*.dmg "release-files/TokenPro-${GITHUB_REF_NAME}-macOS-x64.dmg"
           cp release-assets/TokenPro-Windows-x64/*-Windows-x64.exe "release-files/TokenPro-${GITHUB_REF_NAME}-Windows-x64.exe"
-          cp release-assets/TokenPro-Windows-x64/*-Windows-incremental.exe "release-files/TokenPro-${GITHUB_REF_NAME}-Windows-incremental.exe"
           cp release-assets/TokenPro-Linux-x64/*.deb "release-files/TokenPro-${GITHUB_REF_NAME}-Linux-x64.deb"
           previous_tag=$(git tag --sort=-version:refname | grep -v "^${GITHUB_REF_NAME}$" | head -1 || true)
-          if [ -n "$previous_tag" ] && git diff --quiet "$previous_tag" "$GITHUB_REF_NAME" -- Resources Router.icns Router.ico; then
+          if [ "$GITHUB_REF_NAME" = "v1.2.65" ]; then
+            echo "Fresh-install baseline: installers only; do not publish an old-version delta."
+          elif [ -n "$previous_tag" ] && git diff --quiet "$previous_tag" "$GITHUB_REF_NAME" -- Resources Router.icns Router.ico; then
             cp release-assets/TokenPro-incremental/TokenPro-update.jar "release-files/TokenPro-${GITHUB_REF_NAME}-update.jar"
           else
             echo "::error::Incremental compatibility validation failed; release stopped without installer fallback."
@@ -113,7 +132,11 @@ jobs:
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" release-files/* --clobber --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$GITHUB_REF_NAME" release-files/* --title "TokenPro $GITHUB_REF_NAME" --generate-notes --repo "$GITHUB_REPOSITORY"
+            if [ "$GITHUB_REF_NAME" = "v1.2.65" ]; then
+              gh release create "$GITHUB_REF_NAME" release-files/* --title "TokenPro $GITHUB_REF_NAME · 全新安装基线" --notes "本版本为新的安装基线：所有用户请重新下载对应系统安装包并安装。Windows 安装目录可自行选择，不要求覆盖旧目录，不自动删除旧安装或账户配置。快捷方式名称为 TokenPro。后续版本以 v1.2.65 为基线提供应用内增量更新。本次不提供旧版增量包或独立增量工具。安装包数字签名暂未提供。" --repo "$GITHUB_REPOSITORY"
+            else
+              gh release create "$GITHUB_REF_NAME" release-files/* --title "TokenPro $GITHUB_REF_NAME" --generate-notes --repo "$GITHUB_REPOSITORY"
+            fi
           fi
       - name: Configure TokenPro download server
         env:
