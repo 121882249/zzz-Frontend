@@ -25,12 +25,21 @@ $machineRegistration = 'HKLM:\' + $registryRelative
 $desktopLink = Join-Path ([Environment]::GetFolderPath('Desktop')) 'TokenPro.lnk'
 $startLink = Join-Path ([Environment]::GetFolderPath('Programs')) 'TokenPro.lnk'
 $dataRoot = Join-Path $env:APPDATA 'TokenPro'
-foreach ($existing in @($userRegistration, $machineRegistration, $desktopLink, $startLink, $dataRoot)) {
-    if (Test-Path -LiteralPath $existing) { throw 'Runner already has TokenPro state; refusing to overwrite it' }
+foreach ($existing in @($userRegistration, $machineRegistration, $desktopLink, $startLink)) {
+    if (Test-Path -LiteralPath $existing) { throw "Runner already has a TokenPro installation; refusing to overwrite: $existing" }
+}
+# Earlier --self-test may create the app-data directory. Snapshot, never clear, any such data.
+$existingData = @{}
+if (Test-Path -LiteralPath $dataRoot) {
+    $items = @((Get-Item -LiteralPath $dataRoot -Force)) + @(Get-ChildItem -LiteralPath $dataRoot -Recurse -Force)
+    foreach ($item in $items) {
+        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'App-data fixture contains a reparse point' }
+        if (-not $item.PSIsContainer) { $existingData[$item.FullName] = (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash }
+    }
 }
 [void][IO.Directory]::CreateDirectory($testRoot)
 [void][IO.Directory]::CreateDirectory($dataRoot)
-$marker = Join-Path $dataRoot 'installer-acceptance-preserve.txt'
+$marker = Join-Path $dataRoot ('installer-acceptance-preserve-' + [Guid]::NewGuid().ToString('N') + '.txt')
 $markerValue = [Guid]::NewGuid().ToString('N')
 [IO.File]::WriteAllText($marker, $markerValue)
 $installRoot = Join-Path $testRoot '中文 用户目录\TokenPro'
@@ -83,6 +92,9 @@ foreach ($removed in @($userRegistration, $desktopLink, $startLink)) {
     if (Test-Path -LiteralPath $removed) { throw 'Uninstaller left registration or shortcut behind' }
 }
 if ([IO.File]::ReadAllText($marker) -ne $markerValue -or [IO.File]::ReadAllText($unrelated) -ne $markerValue) { throw 'Uninstaller removed user data' }
+foreach ($path in $existingData.Keys) {
+    if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ne $existingData[$path]) { throw 'Installer lifecycle changed pre-existing app data' }
+}
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $principal = [Security.Principal.WindowsPrincipal]::new($identity)
 $report = [ordered]@{

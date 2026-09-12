@@ -97,8 +97,6 @@ final class TokenProFrame extends JFrame {
     private JButton claudeCliModelMenuButton;
     private JButton codexLaunch;
     private JButton claudeLaunch;
-    private JButton codexCliDownload;
-    private JButton claudeCliDownload;
     private JButton codexCliLaunch;
     private JButton claudeCliLaunch;
     private JButton updateButton;
@@ -113,6 +111,8 @@ final class TokenProFrame extends JFrame {
     private final javax.swing.Timer webLinkTimer = new javax.swing.Timer(250, e -> updateWebButtons());
     private long lastAccountRefresh;
     private volatile boolean installationScanCompleted;
+    private final Set<String> knownInstallationTargets = new HashSet<>();
+    private boolean installationScanFailed;
     private volatile long lastInstallationScanAtNanos;
     private JComponent activeModelMenuOverlay;
     private JComponent dashboardHeader;
@@ -376,13 +376,15 @@ final class TokenProFrame extends JFrame {
         state.setFont(appFont(11, Font.BOLD)); state.setHorizontalAlignment(SwingConstants.CENTER);
         modelControl.add(menu); modelControl.add(Box.createVerticalStrut(7)); modelControl.add(state);
         buttons.add(modelControl);
-        JButton download = soft("正在检测…"); download.setEnabled(false);
-        download.addActionListener(event -> browse(downloadUrl));
         JButton terminal = primary("连接 " + iconName + " 命令行"); terminal.setEnabled(false);
-        terminal.addActionListener(event -> openTerminal(command));
-        if(codexCli) { codexCliDownload = download; codexCliLaunch = terminal; }
-        else { claudeCliDownload = download; claudeCliLaunch = terminal; }
-        buttons.add(download); buttons.add(terminal); card.add(buttons, BorderLayout.EAST);
+        terminal.addActionListener(event -> {
+            if (!knownInstallationTargets.contains(command + "-cli")) return;
+            if (codexCli ? codexCliInstalled : claudeCliInstalled) openTerminal(command);
+            else browse(downloadUrl);
+        });
+        if(codexCli) codexCliLaunch = terminal; else claudeCliLaunch = terminal;
+        applyCliActionState(terminal, menu, state, iconName, false, false, 0, false);
+        buttons.add(terminal); card.add(buttons, BorderLayout.EAST);
         return card;
     }
 
@@ -452,6 +454,8 @@ final class TokenProFrame extends JFrame {
     }
 
     private void showDashboardScreen() {
+        // Resolve controls before the first dashboard paint, including a still-running installation scan.
+        refreshConnectControls();
         views.show(viewHost, "dashboard");
     }
 
@@ -795,6 +799,7 @@ final class TokenProFrame extends JFrame {
             @Override protected void done() {
                 try {
                     boolean installed = get();
+                    knownInstallationTargets.add(key);
                     switch (key) {
                         case "codex-client" -> codexClientInstalled = installed;
                         case "claude-client" -> claudeClientInstalled = installed;
@@ -828,6 +833,7 @@ final class TokenProFrame extends JFrame {
         if (installationScanCompleted && now - lastInstallationScanAtNanos < java.util.concurrent.TimeUnit.SECONDS.toNanos(3)) return;
         if (!installationScanInProgress.compareAndSet(false, true)) return;
         lastInstallationScanAtNanos = now;
+        installationScanFailed = false;
         setInstallationScanState(true);
         Platform.InstallationSnapshot known = installationScanCompleted
             ? new Platform.InstallationSnapshot(codexClientInstalled, claudeClientInstalled, codexCliInstalled, claudeCliInstalled)
@@ -836,7 +842,7 @@ final class TokenProFrame extends JFrame {
             @Override protected Platform.InstallationSnapshot doInBackground() { return Platform.installationSnapshot(known); }
             @Override protected void done() {
                 try { applyInstallationSnapshot(get()); installationScanCompleted = true; }
-                catch (Exception ignored) { status("应用安装状态检测失败，请稍后切回 TokenPro 重试"); }
+                catch (Exception ignored) { installationScanFailed = true; refreshConnectControls(); status("应用安装状态检测失败，请点击查找程序重试"); }
                 finally { installationScanInProgress.set(false); setInstallationScanState(false); }
             }
         }.execute();
@@ -859,6 +865,7 @@ final class TokenProFrame extends JFrame {
     }
 
     private void applyInstallationSnapshot(Platform.InstallationSnapshot snapshot) {
+        knownInstallationTargets.addAll(List.of("codex-client", "claude-client", "codex-cli", "claude-cli"));
         codexClientInstalled = snapshot.codexClient();
         claudeClientInstalled = snapshot.claudeClient();
         codexCliInstalled = snapshot.codexCli();
@@ -897,6 +904,12 @@ final class TokenProFrame extends JFrame {
         JButton menu = client.equals("Codex") ? codexModelMenuButton : claudeModelMenuButton;
         JLabel state = client.equals("Codex") ? homeCodexStatus : homeClaudeStatus;
         if (launch == null) return;
+        if (!knownInstallationTargets.contains(client.toLowerCase(Locale.ROOT) + "-client")) {
+            launch.setText("连接 " + client + " 客户端"); launch.setEnabled(false);
+            if (menu != null) menu.setEnabled(false);
+            state.setText(installationScanFailed ? "检测失败，请重新检测" : "正在检查安装状态…");
+            return;
+        }
         if (connectingClients.blocked(client.toLowerCase(Locale.ROOT) + "-desktop")) {
             launch.setText("连接中…"); launch.setEnabled(false);
             if (menu != null) menu.setEnabled(false);
@@ -910,25 +923,23 @@ final class TokenProFrame extends JFrame {
     }
 
     private void updateCommandControls(String command, boolean installed) {
-        JButton download = command.equals("codex") ? codexCliDownload : claudeCliDownload;
         JButton launch = command.equals("codex") ? codexCliLaunch : claudeCliLaunch;
         JButton menu = command.equals("codex") ? codexCliModelMenuButton : claudeCliModelMenuButton;
         JLabel state = command.equals("codex") ? homeCodexCliStatus : homeClaudeCliStatus;
-        int count = cliSelectedCount(command);
-        if (connectingClients.blocked(command + "-cli")) {
-            if (launch != null) { launch.setText("连接中…"); launch.setEnabled(false); }
-            if (menu != null) menu.setEnabled(false);
-            return;
-        }
-        if(download != null) {
-            download.setText("去官方下载"); download.setEnabled(!installed); download.setVisible(!installed);
-        }
-        if(menu != null) menu.setEnabled(installed);
-        state.setText(installed ? selectionStatus(count) : "请先安装应用");
-        if(launch != null) {
-            launch.setText("连接 " + (command.equals("codex") ? "Codex" : "Claude") + " 命令行");
-            launch.setEnabled(installed && count > 0);
-        }
+        boolean known = knownInstallationTargets.contains(command + "-cli");
+        applyCliActionState(launch, menu, state, command.equals("codex") ? "Codex" : "Claude",
+            known, installed, known ? cliSelectedCount(command) : 0, connectingClients.blocked(command + "-cli"));
+        if (!known && installationScanFailed) state.setText("检测失败，请重新检测");
+    }
+
+    static void applyCliActionState(JButton launch, JButton menu, JLabel state, String name,
+                                    boolean known, boolean installed, int count, boolean connecting) {
+        if (launch == null || menu == null) return;
+        String connect = "连接 " + name + " 命令行";
+        launch.setText(!known ? connect : connecting ? "连接中…" : installed ? connect : "去官方下载");
+        launch.setEnabled(known && !connecting && (!installed || count > 0));
+        menu.setEnabled(known && installed && !connecting);
+        state.setText(!known ? "正在检查安装状态…" : installed ? selectionStatus(count) : "请先安装应用");
     }
 
     private int cliSelectedCount(String command) {
