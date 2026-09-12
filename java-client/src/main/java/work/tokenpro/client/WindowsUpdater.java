@@ -271,7 +271,7 @@ final class WindowsUpdater {
                     Save-Json $job.result @{status='failed';message=$failure;restored=$restored;backup=$backup;administrator=[bool]$job.administrator}
                     if($job.showErrors) {
                         Add-Type -AssemblyName System.Windows.Forms
-                        [void][System.Windows.Forms.MessageBox]::Show(('增量更新未完成：'+$failure+[Environment]::NewLine+'原程序和账户配置已保留。请查看更新日志。'),'TokenPro 更新提示')
+                        [void][System.Windows.Forms.MessageBox]::Show(('更新失败：'+$failure+[Environment]::NewLine+'原程序和配置未更改。'),'TokenPro 更新')
                     }
                 }
                 Write-Error $failure -ErrorAction Continue

@@ -152,7 +152,7 @@ final class ModelPickerDialog extends JDialog {
             long imageCount = selected.stream().filter(PricedModel::isImageGeneration).count();
             if (selected.isEmpty()) {
                 TokenProDialogs.warning(this, "请选择模型",
-                    codex ? "请全局至少选择 1 个模型；生图模型可自由多选" : "请至少选择一个模型");
+                    codex ? "请至少选择 1 款模型；生图模型可多选。" : "请至少选择 1 款模型。");
                 return;
             }
             dispose();

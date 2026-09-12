@@ -70,6 +70,8 @@ final class TokenProDialogs {
         copy.setForeground(new Color(226, 232, 252));
         copy.setFont(font(13, Font.PLAIN));
         copy.setBorder(new EmptyBorder(2, 0, 0, 0));
+        copy.setColumns(32);
+        copy.setRows(estimatedRows(message));
         content.add(copy, BorderLayout.CENTER);
         surface.add(content, BorderLayout.CENTER);
 
@@ -85,8 +87,9 @@ final class TokenProDialogs {
         surface.add(actions, BorderLayout.SOUTH);
 
         dialog.setContentPane(shell);
-        int length = message == null ? 0 : message.length();
-        dialog.setSize(540, Math.min(310, Math.max(224, 190 + Math.max(0, length - 56) / 3)));
+        dialog.pack();
+        Dimension preferred = dialog.getPreferredSize();
+        dialog.setSize(Math.max(520, preferred.width), Math.max(224, preferred.height));
         dialog.setLocationRelativeTo(owner);
         dialog.getRootPane().setDefaultButton(primary);
         dialog.getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
@@ -97,6 +100,16 @@ final class TokenProDialogs {
         dialog.setVisible(true);
         dialog.dispose();
         return result;
+    }
+
+    static int estimatedRows(String message) {
+        if (message == null || message.isBlank()) return 2;
+        int rows = 0;
+        for (String line : message.split("\\R", -1)) {
+            double units = line.codePoints().mapToDouble(value -> value < 128 ? .55 : 1.0).sum();
+            rows += Math.max(1, (int) Math.ceil(units / 28.0));
+        }
+        return Math.max(2, Math.min(8, rows));
     }
 
     private static JPanel transparent(LayoutManager layout) {

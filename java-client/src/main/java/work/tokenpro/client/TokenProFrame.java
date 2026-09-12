@@ -602,7 +602,7 @@ final class TokenProFrame extends JFrame {
         try {
             boolean running = !ClientReconnect.desktopProcesses("Codex").isEmpty();
             if (running && !TokenProDialogs.confirm(this, "恢复官网配置",
-                "将退出 Codex（包括托盘进程）并重新启动，以加载 OpenAI 官网配置。\n正在进行的请求会终止，请先保存当前工作；其他应用不会关闭。",
+                "将退出并重启 Codex，切换至官网配置。\n进行中的请求会终止，请先保存。",
                 "恢复并重启")) return;
             // Keep the last TokenPro selection as a preference only. The live
             // Codex config is official, so no TokenPro key or route remains in use.
@@ -1843,7 +1843,7 @@ final class TokenProFrame extends JFrame {
             boolean running = cli ? !ClientReconnect.cliProcesses(store, command).isEmpty()
                 : !ClientReconnect.desktopProcesses(app).isEmpty();
             if (running && !TokenProDialogs.confirm(this, "重新连接 " + label,
-                "将完整退出 " + label + "（包括后台或托盘进程）并重新启动，以加载模型和 TokenPro 通道。\n正在进行的请求会终止，请先保存当前工作；其他应用不会关闭。",
+                "将退出并重启 " + label + "，应用 TokenPro 配置。\n进行中的请求会终止，请先保存。",
                 "退出并重启")) {
                 finishConnection(identity); return;
             }
@@ -1899,7 +1899,7 @@ final class TokenProFrame extends JFrame {
                     else updateCommandControls(command, true);
                     status(label + " 已启动，已配置 " + count + " 个模型；费用以 TokenPro 用量记录为准");
                     if (app.equals("Codex") && !cli) TokenProDialogs.info(TokenProFrame.this, "连接完成",
-                        "已配置 TokenPro 通道并重新启动客户端。\n原先创建于官网通道的旧任务不保证自动切换，请新建对话使用 TokenPro。\n模型名称不代表计费通道；连接按钮提示会显示是否已观察到 TokenPro 请求，费用以用量记录为准。");
+                        "TokenPro 通道已启用，客户端已重启。\n请新建对话使用当前通道。");
                     lastAccountRefresh = 0; refreshAccountSilently();
                 } catch (Exception e) { error(e.getCause() == null ? e : e.getCause()); }
             }

@@ -25,6 +25,8 @@ final class ErrorAndRestoreTest {
         check(ErrorMessages.describe(new java.util.concurrent.ExecutionException(new java.net.http.HttpTimeoutException("timeout"))).contains("超时"), "async timeout is unwrapped"); passed++;
         check(ErrorMessages.describe(new IllegalStateException("17")).contains("错误代码 17"), "unknown numeric exit code has an explanation without invented mapping"); passed++;
         check(!ErrorMessages.safe("Bearer secret-access-token password=secret-password sk-fixture-secret").contains("secret"), "credentials are hidden from errors"); passed++;
+        check(ErrorMessages.safe("很长".repeat(200)).length() <= 281, "oversized dialog errors are compacted"); passed++;
+        check(TokenProDialogs.estimatedRows("短提示") == 2 && TokenProDialogs.estimatedRows("较长的提示文字".repeat(20)) > 2, "dialog height follows wrapped message rows"); passed++;
         javax.swing.JScrollPane component = ErrorMessages.messageComponent(new IllegalStateException("恢复配置测试"));
         javax.swing.JTextArea text = (javax.swing.JTextArea)component.getViewport().getView();
         check(text.getForeground().getRed() > 200 && text.getBackground().getRed() < 30 && text.getLineWrap(), "error message is readable on the dark background"); passed++;
