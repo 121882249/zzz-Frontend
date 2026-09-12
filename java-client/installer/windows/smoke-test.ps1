@@ -70,7 +70,10 @@ $shortcutReader = New-Object -ComObject WScript.Shell
 foreach ($linkPath in @($desktopLink, $startLink)) {
     if (-not (Test-Path -LiteralPath $linkPath)) { throw 'Shortcut missing' }
     $link = $shortcutReader.CreateShortcut($linkPath)
-    if ($link.TargetPath -ne (Join-Path $installRoot 'TokenPro.exe') -or $link.Description -ne 'TokenPro · AI 模型接入') { throw 'Shortcut target/Chinese description mismatch' }
+    if ($link.TargetPath -ne (Join-Path $installRoot 'TokenPro.exe') -or $link.Description -ne 'TokenPro · AI 模型接入') {
+        $details = @{shortcut=$linkPath; expected_target=(Join-Path $installRoot 'TokenPro.exe'); actual_target=$link.TargetPath; actual_description=$link.Description} | ConvertTo-Json -Compress
+        throw "Shortcut target/Chinese description mismatch: $details"
+    }
 }
 Invoke-FixtureProcess (Join-Path $installRoot 'TokenPro.exe') @('--self-test') 'native-self-test'
 $testOutput = [IO.File]::ReadAllText((Join-Path $testRoot 'native-self-test.stdout.log'))
