@@ -1,5 +1,6 @@
 package work.tokenpro.client;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -14,6 +15,8 @@ final class CodexConfig {
     private static final String HISTORY_PROVIDER_START = "# >>> TokenPro history provider >>>";
     private static final String HISTORY_PROVIDER_END = "# <<< TokenPro history provider <<<";
     private static final Pattern MANAGED_ROOT_KEY = Pattern.compile("^(model|model_provider|review_model|model_catalog_json|model_reasoning_effort|model_context_window|model_auto_compact_token_limit)\\s*=.*$");
+    private static final Pattern HISTORY_PROVIDER_ID = Pattern.compile("\\\"model_provider\\\"\\s*:\\s*\\\"([A-Za-z0-9_-]{1,64})\\\"");
+    private static final Set<String> RESERVED_PROVIDER_IDS = Set.of("openai", "ollama", "lmstudio");
     private final SecureStore store;
     private final Path configPath;
     private final boolean preserveDesktopHistoryProvider;
@@ -49,7 +52,7 @@ final class CodexConfig {
         // an older chat whose model is changed to an image model inside Codex.
         boolean bridged = url.equals("https://tokenpro.work/v1");
         String localToken = bridged ? CodexImageBridge.configure(store, url, key.trim()) : key.trim();
-        String block = managedBlock(bridged ? CodexImageBridge.baseUrl(store) : url, primaryModel, imageModel, catalog, localToken, actor, current);
+        String block = managedBlock(bridged ? CodexImageBridge.baseUrl(store) : url, primaryModel, imageModel, catalog, localToken, actor, current, historicalProviderIds());
         validate(block);
         // TokenPro owns the active Codex config while connected. Replacing the
         // file avoids ambiguous TOML merges and duplicate keys; restore() puts
@@ -74,7 +77,10 @@ final class CodexConfig {
         // No selected models / no backup is a normal, repeatable no-op. If a
         // managed block survives without its backup, remove only that block.
         // Never erase unrelated settings, history, or the user's auth file.
-        String restored = restoreContent(current, original, preserveDesktopHistoryProvider);
+        String baseline = original.orElseGet(() -> stripManaged(current));
+        String restored = preserveDesktopHistoryProvider
+            ? restoreWithHistoryCompatibility(baseline, historicalProviderIds())
+            : baseline;
         boolean changed = !restored.equals(current);
         if (changed) {
             Files.createDirectories(target.getParent());
@@ -101,37 +107,90 @@ final class CodexConfig {
     }
 
     static String restoreWithHistoryCompatibility(String original) {
+        return restoreWithHistoryCompatibility(original, Set.of("custom"));
+    }
+
+    static String restoreWithHistoryCompatibility(String original, Collection<String> historicalProviderIds) {
         String clean = stripMarkedBlock(original, HISTORY_PROVIDER_START, HISTORY_PROVIDER_END);
         if (clean.contains(START)) clean = stripManaged(clean);
 
         Optional<String> originalProvider = rootAssignment(clean, "model_provider");
-        if (originalProvider.isPresent() && assignmentValue(originalProvider.get()).equals("custom")) {
-            // A stale TokenPro backup must not become the default again. Remove
-            // all TokenPro-owned root selections and let Codex use OpenAI's
-            // built-in defaults while the provider remains available below.
+        if (originalProvider.isPresent() && !assignmentValue(originalProvider.get()).equals("openai")) {
+            // A stale relay selection must not remain the default after the
+            // user explicitly restores official mode. Old provider ids remain
+            // available below only for opening their persisted conversations.
             clean = stripRootOverrides(clean);
         }
+        LinkedHashSet<String> aliases = new LinkedHashSet<>();
+        aliases.add("custom");
+        historicalProviderIds.stream().filter(CodexConfig::compatibleProviderId).sorted().forEach(aliases::add);
+        String restoredBase = clean;
+        List<String> missing = aliases.stream()
+            .filter(id -> table(restoredBase, providerHeader(id)).isEmpty())
+            .toList();
+
         StringBuilder out = new StringBuilder();
         boolean bom = clean.startsWith("\uFEFF");
         if (bom) clean = clean.substring(1);
         if (bom) out.append('\uFEFF');
         out.append(clean);
-        if (table(clean, "[model_providers.custom]").isEmpty()) {
+        if (!missing.isEmpty()) {
             if (!clean.isEmpty() && !clean.endsWith("\n")) out.append('\n');
             if (!clean.isBlank()) out.append('\n');
             out.append(HISTORY_PROVIDER_START).append('\n');
-            // Codex persists the provider id in each conversation. Keep the old
-            // id resolvable, but route it through the user's normal OpenAI login
-            // while official mode is active. No TokenPro key or catalog remains.
-            out.append("[model_providers.custom]\n");
-            out.append("name = \"OpenAI\"\n");
-            out.append("wire_api = \"responses\"\n");
-            out.append("requires_openai_auth = true\n");
-            out.append("supports_websockets = true\n");
-            out.append("supports_standalone_web_search = true\n");
+            for (String id : missing) out.append(officialHistoryProvider(id));
             out.append(HISTORY_PROVIDER_END).append('\n');
         }
         return out.toString();
+    }
+
+    private static String officialHistoryProvider(String id) {
+        // Codex persists provider ids in conversations. Keep each old id
+        // resolvable, but route it through the user's normal OpenAI login while
+        // official mode is active. No TokenPro key or catalog remains.
+        return providerHeader(id) + "\n"
+            + "name = \"OpenAI\"\n"
+            + "wire_api = \"responses\"\n"
+            + "requires_openai_auth = true\n"
+            + "supports_websockets = true\n"
+            + "supports_standalone_web_search = true\n";
+    }
+
+    private Set<String> historicalProviderIds() {
+        Path root = configPath.getParent();
+        return root == null ? Set.of("custom") : historicalProviderIds(root.resolve("sessions"));
+    }
+
+    static Set<String> historicalProviderIds(Path sessionsRoot) {
+        LinkedHashSet<String> ids = new LinkedHashSet<>();
+        ids.add("custom");
+        if (!Files.isDirectory(sessionsRoot)) return ids;
+        try (var paths = Files.walk(sessionsRoot)) {
+            Iterator<Path> iterator = paths.filter(path -> Files.isRegularFile(path) && path.getFileName().toString().endsWith(".jsonl")).iterator();
+            while (iterator.hasNext() && ids.size() < 64) {
+                try (BufferedReader reader = Files.newBufferedReader(iterator.next(), StandardCharsets.UTF_8)) {
+                    String line;
+                    int metadataLines = 24;
+                    while (metadataLines-- > 0 && (line = reader.readLine()) != null && ids.size() < 64) {
+                        Matcher matcher = HISTORY_PROVIDER_ID.matcher(line);
+                        while (matcher.find() && ids.size() < 64) {
+                            String id = matcher.group(1);
+                            if (compatibleProviderId(id)) ids.add(id);
+                        }
+                    }
+                } catch (IOException ignored) {}
+            }
+        } catch (IOException ignored) {}
+        return ids;
+    }
+
+    private static boolean compatibleProviderId(String id) {
+        return id != null && id.matches("[A-Za-z0-9_-]{1,64}") && !RESERVED_PROVIDER_IDS.contains(id);
+    }
+
+    private static String providerHeader(String id) {
+        if (!compatibleProviderId(id)) throw new IllegalArgumentException("不支持的 Codex 服务商标识");
+        return "[model_providers." + id + "]";
     }
 
     private static Optional<String> rootAssignment(String text, String key) {
@@ -206,7 +265,7 @@ final class CodexConfig {
         return current.substring(0, start) + managed + current.substring(end);
     }
 
-    private String managedBlock(String url, PricedModel model, PricedModel imageModel, Path catalog, String key, String actor, String current) throws IOException {
+    private String managedBlock(String url, PricedModel model, PricedModel imageModel, Path catalog, String key, String actor, String current, Collection<String> historicalProviderIds) throws IOException {
         StringBuilder out = new StringBuilder();
         out.append(START).append('\n');
         out.append("model = ").append(toml(model.name())).append('\n');
@@ -223,6 +282,8 @@ final class CodexConfig {
         out.append("model_auto_compact_token_limit = 372000\n\n");
         out.append("model_catalog_json = ").append(toml(catalog.toAbsolutePath().toString())).append("\n\n");
         out.append(providerConfiguration("custom", url, key, actor, imageModel));
+        historicalProviderIds.stream().filter(id -> !"custom".equals(id)).filter(CodexConfig::compatibleProviderId).sorted()
+            .forEach(id -> out.append(providerConfiguration(id, url, key, actor, imageModel)));
         // Codex reserves built-in provider IDs; never overwrite 'openai'.
         // Official threads may retain their provider; the UI must not claim
         // they have switched just because this default config was saved.
@@ -231,8 +292,7 @@ final class CodexConfig {
     }
 
     static String providerConfiguration(String id, String url, String key, String actor, PricedModel imageModel) {
-        if (!id.equals("custom")) throw new IllegalArgumentException("不能覆盖 Codex 内置服务商");
-        StringBuilder out = new StringBuilder("[model_providers." + id + "]\n");
+        StringBuilder out = new StringBuilder(providerHeader(id)).append('\n');
         out.append("name = ").append(toml(actor)).append('\n');
         // Keep /v1 in the provider URL. Codex appends /responses to this value;
         // dropping /v1 sends traffic through TokenPro's legacy generic endpoint,
