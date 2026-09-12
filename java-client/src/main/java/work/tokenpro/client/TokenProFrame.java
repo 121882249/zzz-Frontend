@@ -39,10 +39,15 @@ final class TokenProFrame extends JFrame {
     }
     private static final Color PURPLE = new Color(102, 82, 240);
     private static final Color STATUS_READY = new Color(114, 230, 210);
+    private static final Color STATUS_OFFICIAL = new Color(121, 181, 255);
     private static final Color STATUS_PENDING = new Color(242, 200, 121);
     private static final Color CANVAS = new Color(11, 20, 47);
     private static final Color TEXT = new Color(242, 245, 255);
     private static final Color MUTED = new Color(181, 191, 220);
+    // Lucide icons are embedded so the class-only online updater can ship the
+    // selected menu design without forcing users to download a full installer.
+    private static final String PRICE_MENU_ICON = "iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAAXNSR0IArs4c6QAAAERlWElmTU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAGKADAAQAAAABAAAAGAAAAADiNXWtAAAB50lEQVRIDc2VTy4EQRSHhQUrRIIFdpxAcAcRsRDiDuLfMQjnsDFOgAgLxEJE4gIsWIr4F8L3zXS1mtY9BhF+yTf1+r161VWvumoaGv6JxpjHFtwkaI/Cj9RB9jCswGsBy/hHwL51q5eeJXiGMLD2EjiQLMIjhPgL9ib0QE3Z4RJMfIAjOIEZyGoKh7FDuAdzzO2DQjlzOx5AV2Gvj4HuJMdcx8iVS3epzsaEr8oJuWrL6VhlNQaDdgB8PoUrCNrHOIbO4EhsfXuR7xrb3CboD/74BdZUNVea9LcFaxB2wJeItj5jsULuZOzUHgfr5xKzQQc8S+LntGJfffGqeCx/DOHr8+yk2sUyaTb1VBvxS4oGDxlLGPbxMKa6w9LZmnreDffAWB7xHoQMN9i+NzriPfD51xRKNPfJG8IqanXzlNuvqkQTidMNmoYiffYCv8RwhXy4DNcIOoDHP9ZX9sBcx/ASLCveg/XE95S032mcvdqoNNW/7r4l8ix47PNUq0ReL/fgdeNYuSrhdRAvOxOyslx5n6YTMsdcxyhUH5ELsKOz8Sq2rm5eVtM4jHmlu2pzzK3rP8FZuFSTxNrOQzu0wQKEK8G4tnXvhbplHUfALyK8KNuuEhuCwpoTq0teXNtwm7BDOw5/rzdHF5tbXbfP4QAAAABJRU5ErkJggg==";
+    private static final String REPAIR_MENU_ICON = "iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAAXNSR0IArs4c6QAAAERlWElmTU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAGKADAAQAAAABAAAAGAAAAADiNXWtAAABjElEQVRIDc2UvS4FURSFT1CRaHCjHIlEodRpjFbvvoROhER3wyt4BT1Rk1AqEELhDSQSEXR+1nftIzsnk5kxQ3JXsmafM7PP2n8zE8IAoqOcdsUr8c14KdsVW2NVCk/iZwEf26qT4YcJH8guiZl4KxLwTGyMjk4+iwhtmcqU7I3dw+LTGPQc8UNTGJctEifoqUi7qLg2GCIBcjuxbXufORXEoPhe4DvEpQZmzefcLAIRrBE/FufFOxHMfZt611e5ITRm7mmLYubYGfPlTG3EFi27E2lLEGcGufjTohFtqsChUXNakD2x9YPsorhm+z1Z3rR12x+ZLTWI+/InS71D2NRzsudjnK7w7Q/Oi9MSQJANMReZCdWx5uND/F3siqUg82uRAwSJ4r4inqUk80pxxIoy9/fv5eN/dqx7YmVbyjL3FeH3a/yr+ITS8RkW9Zy2NcqcUvfFdKC+563ECfBiATI2Apn6QTfOvK+mC18lFayImfin4tILO2L6TrduC8IRw1oQhEpoFzNh8IOPL+Uji4g/TJCWAAAAAElFTkSuQmCC";
     private final SecureStore store;
     private final ApiClient api = new ApiClient();
     private final CodexConfig codex;
@@ -277,20 +282,20 @@ final class TokenProFrame extends JFrame {
         JPanel words = transparent(); words.setLayout(new BoxLayout(words, BoxLayout.Y_AXIS)); JPanel nameLine = transparent(new FlowLayout(FlowLayout.LEFT, 10, 0)); nameLine.setAlignmentX(Component.LEFT_ALIGNMENT); nameLine.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26)); JLabel heading = new JLabel(title); heading.setFont(appFont(17, Font.BOLD)); JLabel installedLabel = installLabel(); String scanKey = iconName.equals("Codex") ? "codex-client" : "claude-client"; JButton scan = installScanButton(scanKey, iconName + " 客户端"); if (iconName.equals("Codex")) { codexClientInstallLabel = installedLabel; codexClientScanButton = scan; } else { claudeClientInstallLabel = installedLabel; claudeClientScanButton = scan; } nameLine.add(heading); nameLine.add(installedLabel); nameLine.add(scan); JLabel detail = new JLabel(subtitle); detail.setAlignmentX(Component.LEFT_ALIGNMENT); detail.setFont(appFont(11, Font.PLAIN)); detail.setForeground(MUTED); words.add(Box.createVerticalStrut(2)); words.add(nameLine); words.add(Box.createVerticalStrut(5)); words.add(detail); card.add(words, BorderLayout.CENTER);
         JPanel actions = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         actions.add(iconName.equals("Codex") ? homeCodexSupport : homeClaudeSupport);
-        JButton menu = soft("选择模型  ▾");
+        JButton menu = modelSelectorAnchor();
         menu.addActionListener(e -> {
             if (!desktopClientInstalled(iconName)) {
                 state.setText("请先安装应用");
                 status("请先安装 " + iconName + " 客户端");
                 return;
             }
-            showModelMenu(menu, iconName, chooseModel, () -> refreshDesktopConfiguration(iconName, restore, open), restore);
+            showModelMenu(menu, iconName, chooseModel, () -> repairDesktopConversation(iconName, restore, open), restore);
         });
         if (iconName.equals("Codex")) codexModelMenuButton = menu; else claudeModelMenuButton = menu;
-        JPanel modelControl = transparent(); modelControl.setLayout(new BoxLayout(modelControl, BoxLayout.Y_AXIS));
-        menu.setAlignmentX(Component.CENTER_ALIGNMENT); state.setFont(appFont(11, Font.BOLD)); state.setAlignmentX(Component.CENTER_ALIGNMENT); state.setHorizontalAlignment(SwingConstants.CENTER);
+        JPanel modelControl = new ModelSelectorControl(menu, state);
+        state.setFont(appFont(11, Font.BOLD)); state.setHorizontalAlignment(SwingConstants.LEFT);
         state.setText("正在检测应用…");
-        modelControl.add(menu); modelControl.add(Box.createVerticalStrut(7)); modelControl.add(state); actions.add(modelControl);
+        actions.add(modelControl);
         JButton launch = primary("正在检测…");
         launch.setEnabled(false);
         launch.addActionListener(e -> { if (desktopClientInstalled(iconName)) open.run(); else browse(downloadUrl); });
@@ -298,11 +303,11 @@ final class TokenProFrame extends JFrame {
         actions.add(launch); card.add(actions, BorderLayout.EAST); return card;
     }
 
-    private void showModelMenu(JButton anchor, String client, Runnable chooseModel, Runnable refresh, Runnable restore) {
-        showModelMenu(anchor, client, chooseModel, refresh, restore, false);
+    private void showModelMenu(JButton anchor, String client, Runnable chooseModel, Runnable repair, Runnable restore) {
+        showModelMenu(anchor, client, chooseModel, repair, restore, false);
     }
 
-    private void showModelMenu(JButton anchor, String client, Runnable chooseModel, Runnable refresh, Runnable restore, boolean cli) {
+    private void showModelMenu(JButton anchor, String client, Runnable chooseModel, Runnable repair, Runnable restore, boolean cli) {
         hideModelMenu();
         JLayeredPane layered = getLayeredPane();
         JPanel overlay = new JPanel(null);
@@ -314,22 +319,26 @@ final class TokenProFrame extends JFrame {
 
         CosmosMenuPanel menu = new CosmosMenuPanel();
         int itemCount = 0;
-        CosmosMenuButton choose = new CosmosMenuButton("选择模型", false);
+        CosmosMenuButton choose = new CosmosMenuButton("选择模型", "embedded:price",
+            new Color(241, 244, 255), new Color(93, 103, 220, 105));
         choose.addActionListener(event -> { hideModelMenu(); chooseModel.run(); });
         menu.add(choose);
         itemCount++;
-        CosmosMenuButton refreshConfig = new CosmosMenuButton("刷新配置", false);
-        refreshConfig.addActionListener(event -> { hideModelMenu(); refresh.run(); });
-        menu.add(refreshConfig);
-        itemCount++;
-        CosmosMenuButton official = new CosmosMenuButton(cli ? "恢复配置" : "恢复官方", true);
+        CosmosMenuButton official = new CosmosMenuButton("恢复官方", "RefreshCwLucide.png",
+            STATUS_OFFICIAL, new Color(53, 100, 176, 105));
         official.addActionListener(event -> { hideModelMenu(); restore.run(); });
         menu.add(official);
         itemCount++;
+        CosmosMenuButton repairConversation = new CosmosMenuButton("修复对话", "embedded:repair",
+            new Color(184, 142, 255), new Color(91, 70, 146, 120));
+        repairConversation.addActionListener(event -> { hideModelMenu(); repair.run(); });
+        menu.add(repairConversation);
+        itemCount++;
 
-        int width = 186;
+        int width = 210;
         int height = 8 + itemCount * 38;
-        Point point = SwingUtilities.convertPoint(anchor, 0, anchor.getHeight() + 6, layered);
+        Component visualAnchor = anchor.getParent() instanceof ModelSelectorControl ? anchor.getParent() : anchor;
+        Point point = SwingUtilities.convertPoint(visualAnchor, 0, visualAnchor.getHeight() + 6, layered);
         int x = Math.max(8, Math.min(point.x, layered.getWidth() - width - 8));
         int y = Math.max(8, Math.min(point.y, layered.getHeight() - height - 8));
         menu.setBounds(x, y, width, height);
@@ -344,12 +353,21 @@ final class TokenProFrame extends JFrame {
         overlay.repaint();
     }
 
-    private void refreshDesktopConfiguration(String client, Runnable restore, Runnable reconnect) {
-        if (("Codex".equals(client) && codexOfficialMode()) || ("Claude".equals(client) && !claudeTokenProConfigured())) {
+    private void repairDesktopConversation(String client, Runnable restore, Runnable reconnect) {
+        if (("Codex".equals(client) && !codexTokenProConfigured()) || ("Claude".equals(client) && !claudeTokenProConfigured())) {
             restore.run();
         } else {
             reconnect.run();
         }
+    }
+
+    private boolean codexTokenProConfigured() {
+        if (codexOfficialMode()) return false;
+        try {
+            Map<String, Object> saved = Json.object(Json.parse(store.read("codex-selected.json").orElse("{}")));
+            if (saved.get("models") instanceof List<?> models && !models.isEmpty()) return true;
+            return !string(saved.get("model")).isBlank();
+        } catch (Exception ignored) { return false; }
     }
 
     private boolean claudeTokenProConfigured() {
@@ -390,7 +408,7 @@ final class TokenProFrame extends JFrame {
         JPanel buttons = transparent(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         buttons.add(codexCli ? homeCodexCliSupport : homeClaudeCliSupport);
         JLabel state = codexCli ? homeCodexCliStatus : homeClaudeCliStatus;
-        JButton menu = soft("选择模型  ▾");
+        JButton menu = modelSelectorAnchor();
         menu.setName(command + "-cli-model-menu");
         menu.addActionListener(event -> {
             if(!(codexCli ? codexCliInstalled : claudeCliInstalled)) {
@@ -399,10 +417,8 @@ final class TokenProFrame extends JFrame {
             showModelMenu(menu, iconName, () -> chooseModels(iconName, true, false), () -> connectClient(iconName, true), () -> restoreCli(command), true);
         });
         if(codexCli) codexCliModelMenuButton = menu; else claudeCliModelMenuButton = menu;
-        JPanel modelControl = transparent(); modelControl.setLayout(new BoxLayout(modelControl, BoxLayout.Y_AXIS));
-        menu.setAlignmentX(Component.CENTER_ALIGNMENT); state.setAlignmentX(Component.CENTER_ALIGNMENT);
-        state.setFont(appFont(11, Font.BOLD)); state.setHorizontalAlignment(SwingConstants.CENTER);
-        modelControl.add(menu); modelControl.add(Box.createVerticalStrut(7)); modelControl.add(state);
+        JPanel modelControl = new ModelSelectorControl(menu, state);
+        state.setFont(appFont(11, Font.BOLD)); state.setHorizontalAlignment(SwingConstants.LEFT);
         buttons.add(modelControl);
         JButton terminal = primary("连接 " + iconName + " 命令行"); terminal.setEnabled(false);
         terminal.addActionListener(event -> {
@@ -593,7 +609,7 @@ final class TokenProFrame extends JFrame {
             // Codex config is official, so no TokenPro key or route remains in use.
             boolean changed = codex.restore();
             store.write("codex-official-mode.txt", "official");
-            setDesktopCardState("Codex", "官网 OpenAI 配置", true);
+            setDesktopCardState("Codex", officialStatus("Codex"), true);
             status(changed ? "Codex 已切回官方默认 GPT；历史对话保留" : "当前已是官方配置");
             restartOfficialCodex();
         }
@@ -702,7 +718,7 @@ final class TokenProFrame extends JFrame {
 
     private void updateBridgeStatus() {
         try { ClaudeBridgeConfig config = ClaudeBridgeConfig.load(store); boolean healthy = ClaudeBridgeManager.healthy(store); bridgeStatus.setText("桥接状态：" + (healthy ? "运行中" : "已配置") + " · " + config.routes().size() + " 个模型"); setDesktopCardState("Claude", selectionStatus(config.routes().size()), true); }
-        catch (Exception e) { bridgeStatus.setText("桥接状态：未配置"); setDesktopCardState("Claude", "请先选择模型", false); }
+        catch (Exception e) { bridgeStatus.setText("桥接状态：未配置"); setDesktopCardState("Claude", officialStatus("Claude"), true); }
     }
 
     private void restoreClaude() {
@@ -711,7 +727,7 @@ final class TokenProFrame extends JFrame {
             if (configured) ClaudeDesktopConfig.restoreOfficial(store);
             ClaudeBridgeManager.stop(store); store.delete(ClaudeBridgeConfig.FILE);
             bridgeStatus.setText("桥接状态：未配置");
-            setDesktopCardState("Claude", "请先选择模型", false);
+            setDesktopCardState("Claude", officialStatus("Claude"), true);
             status(configured ? "Claude 配置已恢复；重新启动该客户端后生效" : "当前没有需要恢复的 Claude 配置，无需重复恢复");
         }
         catch (Exception ex) { error(ex); }
@@ -784,7 +800,7 @@ final class TokenProFrame extends JFrame {
 
     private void updateCodexStatus() {
         if (codexOfficialMode()) {
-            setDesktopCardState("Codex", "官网 OpenAI 配置", true);
+            setDesktopCardState("Codex", officialStatus("Codex"), true);
             return;
         }
         try {
@@ -798,7 +814,7 @@ final class TokenProFrame extends JFrame {
                 String selected = string(saved.get("model")); if (selected.isBlank()) throw new IllegalStateException("未选择");
                 setDesktopCardState("Codex", selectionStatus(1), true);
             }
-        } catch (Exception ignored) { setDesktopCardState("Codex", "请先选择模型", false); }
+        } catch (Exception ignored) { setDesktopCardState("Codex", officialStatus("Codex"), true); }
     }
 
     private boolean codexOfficialMode() {
@@ -1057,7 +1073,10 @@ final class TokenProFrame extends JFrame {
         });
     }
 
-    private static String selectionStatus(int count) { return count > 0 ? "TokenPro 配置 " + count + " 个模型" : "请先选择模型"; }
+    private static String selectionStatus(int count) { return count > 0 ? "当前：TokenPro · 已选 " + count + " 个模型" : "请先选择模型"; }
+    private static String officialStatus(String client) {
+        return client.equals("Claude") ? "当前：Claude 官方线路" : "当前：官方 OpenAI 线路";
+    }
 
     private Set<String> selectedModelIds(String client) {
         return selectedModelIds(client, false);
@@ -1701,6 +1720,22 @@ final class TokenProFrame extends JFrame {
         button.setMaximumSize(button.getPreferredSize());
     }
 
+    private static JButton modelSelectorAnchor() {
+        JButton button = new JButton("模型选择                                      ▾");
+        button.setFont(appFont(13, Font.BOLD));
+        button.setForeground(new Color(244, 247, 255));
+        button.setOpaque(false);
+        button.setContentAreaFilled(false);
+        button.setBorderPainted(false);
+        button.setFocusPainted(false);
+        button.setHorizontalAlignment(SwingConstants.LEFT);
+        button.setBorder(new EmptyBorder(0, 10, 0, 10));
+        button.setPreferredSize(new Dimension(210, 31));
+        button.setMinimumSize(button.getPreferredSize());
+        button.setMaximumSize(button.getPreferredSize());
+        return button;
+    }
+
     private static JPanel transparent() { return transparent(new FlowLayout(FlowLayout.LEFT, 0, 0)); }
     private static JPanel transparent(LayoutManager layout) { JPanel panel = new JPanel(layout); panel.setOpaque(false); return panel; }
     private static Font appFont(float size, int style) { return new Font(Platform.OS_KIND == Platform.OS.MAC ? ".AppleSystemUIFont" : "SansSerif", style, Math.round(size)); }
@@ -1716,6 +1751,31 @@ final class TokenProFrame extends JFrame {
         if (tintWhite) source = tinted(source, new Color(244, 246, 255));
         double scale = Math.min(maxWidth / (double) source.getWidth(), maxHeight / (double) source.getHeight());
         int width = Math.max(1, (int) Math.round(source.getWidth() * scale)), height = Math.max(1, (int) Math.round(source.getHeight() * scale));
+        BufferedImage oneX = scaled(source, width, height);
+        BufferedImage twoX = scaled(source, width * 2, height * 2);
+        BufferedImage threeX = scaled(source, width * 3, height * 3);
+        return new ImageIcon(new BaseMultiResolutionImage(oneX, twoX, threeX));
+    }
+
+    private static ImageIcon resourceIconContained(String name, int maxWidth, int maxHeight, Color tint) {
+        BufferedImage source = resourceImage(name); if (source == null) return null;
+        return scaledIcon(tinted(source, tint), maxWidth, maxHeight);
+    }
+
+    private static ImageIcon menuIcon(String name, int maxWidth, int maxHeight, Color tint) {
+        if (!name.startsWith("embedded:")) return resourceIconContained(name, maxWidth, maxHeight, tint);
+        String encoded = name.endsWith("price") ? PRICE_MENU_ICON : REPAIR_MENU_ICON;
+        try {
+            byte[] bytes = Base64.getDecoder().decode(encoded);
+            BufferedImage source = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(bytes));
+            return source == null ? null : scaledIcon(tinted(source, tint), maxWidth, maxHeight);
+        } catch (Exception ignored) { return null; }
+    }
+
+    private static ImageIcon scaledIcon(BufferedImage source, int maxWidth, int maxHeight) {
+        double scale = Math.min(maxWidth / (double) source.getWidth(), maxHeight / (double) source.getHeight());
+        int width = Math.max(1, (int) Math.round(source.getWidth() * scale));
+        int height = Math.max(1, (int) Math.round(source.getHeight() * scale));
         BufferedImage oneX = scaled(source, width, height);
         BufferedImage twoX = scaled(source, width * 2, height * 2);
         BufferedImage threeX = scaled(source, width * 3, height * 3);
@@ -2041,7 +2101,7 @@ final class TokenProFrame extends JFrame {
             setOpaque(false);
             setDoubleBuffered(true);
             setBorder(new EmptyBorder(6, 6, 6, 6));
-            setLayout(new GridLayout(2, 1));
+            setLayout(new GridLayout(0, 1, 0, 2));
         }
 
         protected void paintComponent(Graphics graphics) {
@@ -2288,19 +2348,59 @@ final class TokenProFrame extends JFrame {
         }
     }
 
-    private static final class CosmosMenuButton extends JButton {
-        private final boolean restore;
+    private static final class ModelSelectorControl extends JPanel {
+        private final JButton anchor;
 
-        CosmosMenuButton(String text, boolean restore) {
+        ModelSelectorControl(JButton anchor, JLabel state) {
+            super();
+            this.anchor = anchor;
+            setOpaque(false);
+            setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
+            setBorder(new EmptyBorder(4, 0, 5, 0));
+            setPreferredSize(new Dimension(210, 60));
+            setMinimumSize(getPreferredSize());
+            setMaximumSize(getPreferredSize());
+            anchor.setAlignmentX(Component.LEFT_ALIGNMENT);
+            state.setAlignmentX(Component.LEFT_ALIGNMENT);
+            state.setBorder(new EmptyBorder(0, 10, 0, 8));
+            state.setPreferredSize(new Dimension(210, 20));
+            state.setMinimumSize(state.getPreferredSize());
+            state.setMaximumSize(state.getPreferredSize());
+            add(anchor);
+            add(state);
+            anchor.getModel().addChangeListener(event -> repaint());
+        }
+
+        @Override protected void paintComponent(Graphics graphics) {
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            ButtonModel model = anchor.getModel();
+            g.setPaint(new GradientPaint(0, 0,
+                model.isRollover() ? new Color(42, 61, 112, 232) : new Color(30, 47, 91, 224),
+                getWidth(), getHeight(), new Color(42, 47, 105, 224)));
+            g.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 16, 16);
+            g.setColor(model.isRollover() ? new Color(126, 153, 229, 170) : new Color(102, 128, 198, 120));
+            g.drawRoundRect(0, 0, getWidth() - 2, getHeight() - 2, 16, 16);
+            g.dispose();
+            super.paintComponent(graphics);
+        }
+    }
+
+    private static final class CosmosMenuButton extends JButton {
+        private final Color hover;
+
+        CosmosMenuButton(String text, String iconName, Color foreground, Color hover) {
             super(text);
-            this.restore = restore;
+            this.hover = hover;
             setOpaque(false);
             setContentAreaFilled(false);
             setBorderPainted(false);
             setFocusPainted(false);
             setDoubleBuffered(true);
             setFont(appFont(11, Font.BOLD));
-            setForeground(restore ? new Color(184, 194, 226) : new Color(241, 244, 255));
+            setForeground(foreground);
+            setIcon(menuIcon(iconName, 16, 16, foreground));
+            setIconTextGap(10);
             setBorder(new EmptyBorder(0, 14, 0, 14));
             setHorizontalAlignment(SwingConstants.LEFT);
         }
@@ -2310,7 +2410,7 @@ final class TokenProFrame extends JFrame {
             if (model.isArmed() || model.isSelected()) {
                 Graphics2D g = (Graphics2D) graphics.create();
                 g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g.setColor(restore ? new Color(91, 70, 104, 115) : new Color(93, 103, 220, 105));
+                g.setColor(hover);
                 g.fillRoundRect(2, 2, getWidth() - 4, getHeight() - 4, 10, 10);
                 g.dispose();
             }
@@ -2522,7 +2622,12 @@ final class TokenProFrame extends JFrame {
         ClientStatusLabel(String text) { super(); setText(text); }
         public void setText(String text) {
             super.setText(text);
-            setForeground(text != null && text.startsWith("请") ? STATUS_PENDING : STATUS_READY);
+            setForeground(statusColor(text));
+        }
+
+        private static Color statusColor(String text) {
+            if (text != null && text.startsWith("当前：") && text.contains("官方")) return STATUS_OFFICIAL;
+            return text != null && text.startsWith("当前：TokenPro") ? STATUS_READY : STATUS_PENDING;
         }
     }
 
