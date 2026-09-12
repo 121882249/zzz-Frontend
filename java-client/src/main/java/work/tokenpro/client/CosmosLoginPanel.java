@@ -16,7 +16,7 @@ final class CosmosLoginPanel extends JPanel {
     private static final Color TEXT = new Color(246, 248, 255);
     private static final Color MUTED = new Color(164, 175, 211);
     private final JButton loginButton = new GradientButton("登录 / 注册");
-    private final UpdateButton updateButton = new UpdateButton("检查更新");
+    private final JButton updateButton = TokenProFrame.headerControl("检查更新", 168);
     private final JLabel feedback = label("登录信息仅加密保存在当前设备", 11, Font.PLAIN, new Color(145, 156, 191));
 
     CosmosLoginPanel(JTextField email, JPasswordField password, ActionListener loginAction, ActionListener updateAction) {
@@ -24,7 +24,6 @@ final class CosmosLoginPanel extends JPanel {
         setOpaque(false);
         setBorder(new EmptyBorder(32, 44, 34, 44));
 
-        updateButton.setPreferredSize(new Dimension(178, 34));
         updateButton.addActionListener(updateAction);
         JPanel pageActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
         pageActions.setOpaque(false);
@@ -111,14 +110,19 @@ final class CosmosLoginPanel extends JPanel {
     }
 
     void setUpdateState(String state, String text, boolean enabled) {
-        updateButton.setState(state);
+        updateButton.putClientProperty("tokenpro.updateState", state);
+        updateButton.setIcon(TokenProFrame.headerUpdateIcon(state));
+        updateButton.setToolTipText("latest".equals(state) ? "当前已更新至最新版本" : "checking".equals(state) ? text : "点击检查或重试更新");
         updateButton.setText(text);
         updateButton.setEnabled(enabled);
         updateButton.setCursor(enabled ? Cursor.getPredefinedCursor(Cursor.HAND_CURSOR) : Cursor.getDefaultCursor());
-        if (!text.startsWith("正在更新")) updateButton.setProgress(-1);
+        if (!text.startsWith("正在更新")) setUpdateProgress(-1);
     }
 
-    void setUpdateProgress(int progress) { updateButton.setProgress(progress); }
+    void setUpdateProgress(int progress) {
+        updateButton.putClientProperty("tokenpro.updateProgress", progress < 0 ? -1 : Math.min(100, progress));
+        updateButton.repaint();
+    }
 
     private static JLabel label(String text, int size, int style, Color color) {
         JLabel label = new JLabel(text); label.setFont(font(size, style)); label.setForeground(color); return label;
@@ -198,74 +202,6 @@ final class CosmosLoginPanel extends JPanel {
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g.setPaint(new GradientPaint(0, 0, isEnabled() ? new Color(108, 92, 255) : new Color(72, 73, 122), getWidth(), 0, isEnabled() ? new Color(62, 155, 255) : new Color(73, 82, 126)));
             g.fillRoundRect(0, 0, getWidth(), getHeight(), 14, 14); g.dispose(); super.paintComponent(graphics);
-        }
-    }
-
-    private static final class UpdateButton extends JButton {
-        private int progress = -1;
-        private String state = "checking";
-
-        UpdateButton(String text) {
-            super(text);
-            setFont(font(11, Font.BOLD));
-            setForeground(new Color(226, 233, 255));
-            setFocusPainted(false); setBorderPainted(false); setContentAreaFilled(false); setOpaque(false);
-            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        }
-
-        void setProgress(int value) {
-            progress = value < 0 ? -1 : Math.min(100, value);
-            repaint();
-        }
-
-        void setState(String value) {
-            state = value == null ? "checking" : value;
-            setForeground("latest".equals(state) ? new Color(218, 248, 239)
-                : "check".equals(state) ? new Color(255, 235, 190) : new Color(226, 233, 255));
-            repaint();
-        }
-
-        protected void paintComponent(Graphics graphics) {
-            Graphics2D g = (Graphics2D) graphics.create();
-            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            int width = getWidth() - 1, height = getHeight() - 1;
-            Color stroke;
-            if ("latest".equals(state)) {
-                g.setPaint(new GradientPaint(0, 0, new Color(41, 102, 91, 205), width, 0, new Color(52, 125, 103, 205)));
-                stroke = new Color(132, 230, 196, 145);
-            } else if ("check".equals(state)) {
-                g.setPaint(new GradientPaint(0, 0, new Color(99, 72, 24, 235), width, 0, new Color(137, 99, 30, 235)));
-                stroke = new Color(242, 200, 121, 175);
-            } else {
-                g.setPaint(new GradientPaint(0, 0, new Color(34, 49, 99, 225), width, 0, new Color(47, 44, 111, 225)));
-                stroke = new Color(147, 172, 255, 125);
-            }
-            g.fillRoundRect(0, 0, width, height, 14, 14);
-            if (progress >= 0) {
-                Shape oldClip = g.getClip();
-                g.clip(new RoundRectangle2D.Double(0, 0, width, height, 14, 14));
-                int filled = (int) Math.round(width * progress / 100.0);
-                g.setPaint(new GradientPaint(0, 0, new Color(91, 101, 255, 220), width, 0, new Color(44, 178, 213, 220)));
-                g.fillRect(0, 0, filled, height);
-                g.setClip(oldClip);
-            }
-            g.setColor(stroke);
-            g.drawRoundRect(0, 0, width, height, 14, 14);
-            g.setFont(getFont());
-            FontMetrics metrics = g.getFontMetrics();
-            boolean warning = getText().endsWith("⚠");
-            String label = warning ? getText().substring(0, getText().length() - 1).stripTrailing() : getText();
-            int warningGap = warning ? 7 : 0;
-            int totalWidth = metrics.stringWidth(label) + warningGap + (warning ? metrics.stringWidth("⚠") : 0);
-            int x = (getWidth() - totalWidth) / 2;
-            int baseline = (getHeight() - metrics.getHeight()) / 2 + metrics.getAscent();
-            g.setColor(getForeground());
-            g.drawString(label, x, baseline);
-            if (warning) {
-                g.setColor(new Color(255, 204, 82));
-                g.drawString("⚠", x + metrics.stringWidth(label) + warningGap, baseline);
-            }
-            g.dispose();
         }
     }
 
