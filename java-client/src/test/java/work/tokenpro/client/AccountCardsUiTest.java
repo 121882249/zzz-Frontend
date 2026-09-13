@@ -29,6 +29,12 @@ public class AccountCardsUiTest {
  if(!stateLabel.getText().equals("当前：Anthropic 官方配置"))throw new AssertionError("restored CLI state does not show its official provider");
  TokenProFrame.AmountExplanationButton amountExplanation=new TokenProFrame.AmountExplanationButton();
  if(amountExplanation.isFocusPainted())throw new AssertionError("amount explanation retains a focus outline after release");
+ JComponent explanationCard=TokenProFrame.AmountExplanationButton.explanationContent();
+ explanationCard.setSize(explanationCard.getPreferredSize());
+ BufferedImage explanationImage=new BufferedImage(explanationCard.getWidth(),explanationCard.getHeight(),BufferedImage.TYPE_INT_ARGB);
+ Graphics2D explanationGraphics=explanationImage.createGraphics();explanationCard.printAll(explanationGraphics);explanationGraphics.dispose();
+ if((explanationImage.getRGB(0,0)>>>24)!=0 || (explanationImage.getRGB(explanationCard.getWidth()/2,explanationCard.getHeight()/2)>>>24)==0)
+   throw new AssertionError("amount explanation is not rendered as a rounded card");
  for(String n:List.of("codexClientInstallLabel","claudeClientInstallLabel","codexCliInstallLabel","claudeCliInstallLabel")){JLabel l=(JLabel)get(f,n);l.setText("已安装");l.setForeground(new Color(97,222,165));}
  for(String n:List.of("homeCodexStatus","homeClaudeStatus","homeCodexCliStatus","homeClaudeCliStatus"))((JLabel)get(f,n)).setText("当前：TokenPro·已选 4 款模型");
  for(String n:List.of("homeCodexSupport","homeClaudeSupport","homeCodexCliSupport","homeClaudeCliSupport"))call(get(f,n),"setCount",new Class[]{long.class},n.contains("Codex")?20L:17L);

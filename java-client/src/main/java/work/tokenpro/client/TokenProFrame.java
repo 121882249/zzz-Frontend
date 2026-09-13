@@ -2657,7 +2657,7 @@ final class TokenProFrame extends JFrame {
     }
 
     static final class AmountExplanationButton extends JButton {
-        private Popup explanation;
+        private JWindow explanation;
         AmountExplanationButton() {
             super("金额说明"); setFont(appFont(10, Font.PLAIN)); setForeground(MUTED);
             setIcon(new Icon() {
@@ -2689,15 +2689,30 @@ final class TokenProFrame extends JFrame {
         }
         private void reveal() {
             if (explanation != null || !isShowing()) return;
+            JComponent message = explanationContent();
+            Point point = getLocationOnScreen();
+            Window owner = SwingUtilities.getWindowAncestor(this);
+            JWindow popup = owner == null ? new JWindow() : new JWindow(owner);
+            popup.setType(Window.Type.POPUP);
+            popup.setFocusableWindowState(false);
+            popup.setBackground(new Color(0, 0, 0, 0));
+            popup.setContentPane(message);
+            popup.pack();
+            popup.setLocation(point.x, point.y + getHeight() + 6);
+            explanation = popup;
+            popup.setVisible(true);
+        }
+        static JComponent explanationContent() {
+            RoundedPanel card = new RoundedPanel(14, new Color(22, 34, 57), new Color(94, 128, 146));
+            card.setLayout(new BorderLayout());
+            card.setBorder(new EmptyBorder(10, 12, 10, 12));
             JLabel message = new JLabel("$ 为平台额度标记，$1 额度对应人民币 1 元");
             message.setFont(appFont(12, Font.PLAIN)); message.setForeground(new Color(231, 239, 250));
-            message.setOpaque(true); message.setBackground(new Color(22, 34, 57));
-            message.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(new Color(94, 128, 146)), new EmptyBorder(10, 12, 10, 12)));
-            Point point = getLocationOnScreen();
-            explanation = PopupFactory.getSharedInstance().getPopup(this, message, point.x, point.y + getHeight() + 6);
-            explanation.show();
+            message.setOpaque(false);
+            card.add(message, BorderLayout.CENTER);
+            return card;
         }
-        private void conceal() { if (explanation != null) { explanation.hide(); explanation = null; } }
+        private void conceal() { if (explanation != null) { explanation.dispose(); explanation = null; } }
         @Override public void removeNotify() { conceal(); super.removeNotify(); }
     }
 
