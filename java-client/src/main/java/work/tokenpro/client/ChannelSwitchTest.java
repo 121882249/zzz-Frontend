@@ -1,0 +1,52 @@
+package work.tokenpro.client;
+
+import java.nio.file.*;
+import java.net.Proxy;
+import java.util.*;
+
+final class ChannelSwitchTest {
+    static int run() throws Exception {
+        Path root = Files.createTempDirectory("tokenpro-switch-test-");
+        SecureStore store = new SecureStore(root.resolve("settings"));
+        Path config = root.resolve("profile/config.toml");
+        Files.createDirectories(config.getParent());
+        Files.writeString(config, "model_provider=\"openai\"\n");
+        Path message = root.resolve("profile/messages.jsonl");
+        Files.writeString(message, "old message\n");
+        ChannelSettingsBackup backup = new ChannelSettingsBackup(store, config);
+        Files.writeString(config, "changed\n");
+        Files.writeString(message, "new message\n", StandardOpenOption.APPEND);
+        store.write("codex-selected.json", "new setting");
+        backup.restore();
+        require(Files.readString(config).contains("openai"), "settings restored");
+        require(Files.readString(message).equals("old message\nnew message\n"), "new messages survive restoration");
+        require(store.read("codex-selected.json").isEmpty(), "new settings removed on rollback");
+        try (var paths = Files.walk(backup.location())) {
+            for (Path path : paths.filter(Files::isRegularFile).toList())
+                require(!Files.readString(path).contains("old message"), "backup excludes conversation content");
+        }
+        List<String> steps = new ArrayList<>();
+        try {
+            CodexChannelSwitch.run(store, config, "custom", List.of("model"), () -> steps.add("stop"), () -> {
+                steps.add("write"); Files.writeString(config, "partial"); throw new Exception("injected write failure");
+            }, () -> steps.add("start"), () -> steps.add("restartPrevious"));
+            throw new AssertionError("failure was hidden");
+        } catch (java.io.IOException expected) {
+            require(steps.equals(List.of("stop", "write", "stop", "restartPrevious")), "failed switch restores before restarting");
+            require(Files.readString(config).contains("openai"), "partial configuration rolled back");
+        }
+        steps.clear();
+        CodexChannelSwitch.run(store, config, "custom", List.of("model"), () -> steps.add("stop"),
+            () -> { steps.add("write"); Files.writeString(config, "complete"); }, () -> steps.add("start"), () -> steps.add("rollback"));
+        require(steps.equals(List.of("stop", "write", "start")), "exit before settings mutation");
+        List<CodexHistorySettings.Setting> settings = List.of(new CodexHistorySettings.Setting("synthetic", "openai", "gpt"));
+        require(CodexHistorySettings.decode(CodexHistorySettings.encode(settings)).equals(settings), "association snapshot roundtrip");
+        require(OfficialConnectionCheck.proxy(Map.of("HTTPS_PROXY", "http://127.0.0.1:9999")).type() == Proxy.Type.HTTP, "HTTP proxy recognized");
+        require(OfficialConnectionCheck.proxy(Map.of("ALL_PROXY", "socks5://127.0.0.1:9999")).type() == Proxy.Type.SOCKS, "SOCKS proxy recognized");
+        try { OfficialConnectionCheck.proxy(Map.of("HTTPS_PROXY", "invalid")); throw new AssertionError("bad proxy accepted"); }
+        catch (java.io.IOException expected) {}
+        require(ClientReconnect.managedCliMatches("codex", "/bin/codex", List.of("-c", "tokenpro_profile=/scope/catalog.json"), "/scope/catalog.json"), "official CLI profile remains identifiable");
+        return 12;
+    }
+    private static void require(boolean value, String message) { if (!value) throw new AssertionError(message); }
+}

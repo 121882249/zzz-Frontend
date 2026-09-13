@@ -17,7 +17,7 @@ final class LoginControlsTest {
                 TokenProFrame.applyCliActionState(action, menu, state, name, true, false, 99, false);
                 check(action.getText().equals("去下载") && action.isEnabled() && !menu.isEnabled(), "missing app uses the same single action");
                 TokenProFrame.applyCliActionState(action, menu, state, name, true, true, 0, false);
-                check(action.getText().equals("连接") && !action.isEnabled() && menu.isEnabled(), "installed app waits for model selection");
+                check(action.getText().equals("连接") && action.isEnabled() && menu.isEnabled(), "installed app can open official mode without TokenPro model selection");
                 TokenProFrame.applyCliActionState(action, menu, state, name, true, true, 2, false);
                 check(action.isEnabled() && state.getText().equals("当前：TokenPro·已选 2 款模型"), "resolved selection is applied together");
                 TokenProFrame.applyCliActionState(action, menu, state, name, true, true, 2, true);

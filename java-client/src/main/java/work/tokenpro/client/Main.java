@@ -4,7 +4,7 @@ import javax.swing.*;
 import java.awt.*;
 
 public final class Main {
-    public static final String VERSION = "1.2.87";
+    public static final String VERSION = "1.2.88";
     private Main() {}
 
     public static void main(String[] args) throws Exception {

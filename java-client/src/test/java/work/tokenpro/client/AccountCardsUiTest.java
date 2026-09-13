@@ -52,6 +52,12 @@ public class AccountCardsUiTest {
  capture(f,args[0]+"/preview-official-statuses.png",1280);
  for(String n:List.of("homeCodexStatus","homeClaudeStatus","homeCodexCliStatus","homeClaudeCliStatus"))((JLabel)get(f,n)).setText("当前：TokenPro·已选 4 款模型");
  capture(f,args[0]+"/preview-home.png",1280);
+ call(f,"showModelMenu",new Class[]{JButton.class,Runnable.class,Runnable.class},(JButton)get(f,"codexModelMenuButton"),(Runnable)()->{},(Runnable)()->{});
+ layout(f);
+ BufferedImage menuImage=new BufferedImage(1280,820,BufferedImage.TYPE_INT_ARGB);
+ Graphics2D menuGraphics=menuImage.createGraphics();f.getLayeredPane().printAll(menuGraphics);menuGraphics.dispose();
+ ImageIO.write(menuImage,"png",Path.of(args[0]+"/preview-channel-menu.png").toFile());
+ call(f,"hideModelMenu",new Class[]{});
  JButton accountAction=(JButton)get(f,"headerAccountButton");
  for(String accountName:List.of("121882249", "121882249@example.com", "long.account.name.for.layout@example.com")){
  ((JLabel)get(f,"headerUser")).setText(accountName);

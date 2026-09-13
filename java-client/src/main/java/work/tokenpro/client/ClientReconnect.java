@@ -28,6 +28,32 @@ final class ClientReconnect {
         for (ProcessHandle process : desktopProcesses(client)) stop(process, true);
     }
 
+    static void stopForSettings(SecureStore store, String client, boolean cli) throws Exception {
+        List<ProcessHandle> targets = cli ? cliProcesses(store, client.toLowerCase(Locale.ROOT)) : desktopProcesses(client);
+        for (ProcessHandle process : targets) {
+            if (!process.isAlive()) continue;
+            if (!cli && Platform.OS_KIND == Platform.OS.WINDOWS) {
+                Process request = new ProcessBuilder("powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+                    "$p=Get-Process -Id " + process.pid() + " -ErrorAction SilentlyContinue; if($p){[void]$p.CloseMainWindow()}")
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(ProcessBuilder.Redirect.DISCARD).start();
+                if (!request.waitFor(5, TimeUnit.SECONDS)) { request.destroy(); throw new IOException("无法请求客户端正常退出，设置未修改"); }
+            } else if (!cli && Platform.OS_KIND == Platform.OS.MAC) {
+                String command = process.info().command().orElse("");
+                int appEnd = command.indexOf(".app/");
+                if (appEnd < 0) throw new IOException("无法确认客户端应用路径，请手动退出后重试");
+                String app = command.substring(0, appEnd + 4).replace("\\", "\\\\").replace("\"", "\\\"");
+                Process request = new ProcessBuilder("osascript", "-e", "tell application \"" + app + "\" to quit")
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(ProcessBuilder.Redirect.DISCARD).start();
+                if (!request.waitFor(8, TimeUnit.SECONDS) || request.exitValue() != 0) {
+                    request.destroy(); throw new IOException("客户端未同意退出，请手动退出后重试；设置未修改");
+                }
+            } else process.destroy();
+            if (!waitForExit(process, 10)) throw new IOException("客户端尚未正常退出，请手动退出后重试；设置未修改");
+        }
+        if (!(cli ? cliProcesses(store, client.toLowerCase(Locale.ROOT)) : desktopProcesses(client)).isEmpty())
+            throw new IOException("客户端仍在运行，设置未修改");
+    }
+
     static String cliMarker(SecureStore root, String client) throws Exception {
         return root.cli(client).root().resolve(client.equals("claude") ? ClaudeCliConfig.FILE : "codex-model-catalog.json")
             .toAbsolutePath().normalize().toString();
@@ -49,6 +75,7 @@ final class ClientReconnect {
                 if (Set.of("-c", "--config").contains(arguments.get(i))) {
                     String arg = arguments.get(i + 1);
                     if (arg.startsWith("model_catalog_json=") && normalized(arg.substring(19)).equals(expected)) return true;
+                    if (arg.startsWith("tokenpro_profile=") && normalized(arg.substring(17)).equals(expected)) return true;
                 }
         }
         return false;

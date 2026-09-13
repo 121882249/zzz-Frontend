@@ -23,7 +23,7 @@ final class ClaudeDesktopConfig {
         if (tokenPro == null) tokenPro = UUID.randomUUID().toString();
         ensureEntry(meta, official, "Claude 官方配置");
         ensureEntry(meta, tokenPro, "TokenPro");
-        writeJson(library.resolve(official + ".json"), Map.of());
+        if (!Files.exists(library.resolve(official + ".json"))) writeJson(library.resolve(official + ".json"), Map.of());
         List<Map<String, Object>> models = bridge.routes().stream().map(route -> Map.<String, Object>of("name", route.alias(), "labelOverride", PricedModel.displayCase(route.name()))).toList();
         Map<String, Object> profile = new LinkedHashMap<>();
         profile.put("deploymentDisplayName", deploymentDisplayName(accountLabel)); profile.put("endUserAttribution", false);
@@ -56,7 +56,8 @@ final class ClaudeDesktopConfig {
         for (Path library : libraries()) {
             Files.createDirectories(library);
             Map<String, Object> meta = readMeta(library); ensureEntry(meta, official, "Claude 官方配置");
-            writeJson(library.resolve(official + ".json"), Map.of()); meta.put("appliedId", official); meta.remove("hybridPointer"); writeJson(library.resolve("_meta.json"), meta);
+            if (!Files.exists(library.resolve(official + ".json"))) writeJson(library.resolve(official + ".json"), Map.of());
+            meta.put("appliedId", official); meta.remove("hybridPointer"); writeJson(library.resolve("_meta.json"), meta);
         }
     }
 
