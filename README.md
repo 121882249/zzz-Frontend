@@ -4,6 +4,33 @@
 
 TokenPro 现在只有一套 Java 21/Swing 客户端源码，支持 Windows、macOS 和 Linux。macOS 的 Intel 与 Apple 芯片版本、Windows x64 版本和 Linux x64 版本由 GitHub Actions 分别在对应系统构建。
 
+## 使用指南
+
+最新版客户端提供 4 条彼此隔离的接入路径。面向最终用户的图文教程以 [TokenPro 使用文档](https://tokenpro.work/docs) 为准，包含安装检查、模型选择、连接验证、恢复官方配置和常见问题。
+
+| 接入方式 | 配置隔离 | 本地桥接 | 适用场景 |
+|---|---|---|---|
+| Codex 客户端 | 独立 Codex 配置与认证 | 图片桥接 `127.0.0.1:23180` | 桌面图形界面、对话与生图 |
+| Claude 客户端 | 独立 Claude 第三方账户 | `127.0.0.1:23179` | Claude Desktop 图形界面 |
+| Codex CLI | 独立 `CODEX_HOME` | 图片桥接 `127.0.0.1:23182` | 终端开发、脚本和 Agent 任务 |
+| Claude Code | 独立 `CLAUDE_CONFIG_DIR` | `127.0.0.1:23181` | Claude Code 终端工作流 |
+
+```mermaid
+flowchart LR
+  A[登录 TokenPro] --> B[选择客户端]
+  B --> C[选择可用模型]
+  C --> D[应用并连接]
+  D --> E[发送最小测试请求]
+  E --> F[在用量记录中核对模型与分组]
+  F --> G{是否正常}
+  G -- 是 --> H[开始正式使用]
+  G -- 否 --> I[重新登录、刷新余额并重新应用]
+```
+
+开始前请确认 TokenPro 已更新到 `v1.2.88` 或更高版本。Claude Code 需为 `2.1.242` 或更高版本；Windows 一键连接使用原生 CLI，WSL 环境需要单独配置。
+
+TokenPro 不修改系统全局 PATH，也不会用命令行配置覆盖桌面端配置。直接从普通终端运行原来的 `codex` 或 `claude`，仍使用各自的官方配置。
+
 ## 功能
 
 - TokenPro 邮箱密码登录与本机会话恢复。
