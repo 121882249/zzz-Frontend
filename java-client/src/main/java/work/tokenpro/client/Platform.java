@@ -371,9 +371,9 @@ final class Platform {
     static boolean desktopProcessMatches(OS os, String name, String value) {
         if (value == null || value.isBlank() || cliInstallPath(value)) return false;
         String path = value.replace('\\', '/').toLowerCase(Locale.ROOT);
-        String lower = name.toLowerCase(Locale.ROOT);
-        if (os == OS.MAC) return path.endsWith("/" + lower + ".app/contents/macos/" + lower)
-            || (name.equals("Codex") && path.endsWith("/codex.app/contents/macos/chatgpt"));
+        List<String> aliases = desktopAliases(name);
+        if (os == OS.MAC) return aliases.stream().anyMatch(bundle -> aliases.stream().anyMatch(executable ->
+            path.endsWith("/" + bundle + ".app/contents/macos/" + executable)));
         if (os == OS.WINDOWS) {
             if (name.equals("Claude")) return path.endsWith("/claude.exe")
                 && (path.contains("/windowsapps/claude_") || path.contains("/claude/")
@@ -382,8 +382,13 @@ final class Platform {
                 && (path.contains("/windowsapps/openai.codex_") || path.contains("/windowsapps/openai.chatgpt-desktop_")
                     || path.contains("/codex/") || path.contains("/chatgpt/"));
         }
-        return path.endsWith("/" + lower + ".appimage")
-            || path.endsWith("/opt/" + lower + "/" + lower);
+        return aliases.stream().anyMatch(alias -> path.endsWith("/" + alias + ".appimage"))
+            || aliases.stream().anyMatch(folder -> aliases.stream().anyMatch(executable ->
+                path.endsWith("/opt/" + folder + "/" + executable)));
+    }
+
+    private static List<String> desktopAliases(String name) {
+        return name.equals("Codex") ? List.of("codex", "chatgpt") : List.of(name.toLowerCase(Locale.ROOT));
     }
 
     static List<Path> windowsVersionedInstallRoots(String home, Map<String, String> environment, String name) {

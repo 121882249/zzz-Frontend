@@ -7,6 +7,8 @@ import java.util.concurrent.TimeUnit;
 
 /** Restarts only the explicitly confirmed target after configuration preflight succeeds. */
 final class ClientReconnect {
+    static final int DESKTOP_START_TIMEOUT_SECONDS = 8;
+    static final int CLI_START_TIMEOUT_SECONDS = 20;
     private ClientReconnect() {}
     interface Action { void run() throws Exception; }
 
@@ -146,12 +148,13 @@ final class ClientReconnect {
     }
 
     static void awaitStarted(SecureStore store, String app, boolean cli) throws Exception {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
+        int timeout = cli ? CLI_START_TIMEOUT_SECONDS : DESKTOP_START_TIMEOUT_SECONDS;
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeout);
         while (System.nanoTime() < deadline) {
             if (cli ? !cliProcesses(store, app.toLowerCase(Locale.ROOT)).isEmpty() : !desktopProcesses(app).isEmpty()) return;
-            Thread.sleep(400);
+            Thread.sleep(200);
         }
-        throw new IOException("尚未确认 " + app + " 启动完成，请检查新窗口；已忽略重复点击，请勿连续重试");
+        throw new IOException(timeout + " 秒内未检测到 " + app + " 进程");
     }
 
     static void stopCli(SecureStore root, String client) throws Exception {

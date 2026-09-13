@@ -24,6 +24,19 @@ final class ApplicationLaunchTest {
             "C:/Users/Test/AppData/Local/OpenAI/Codex/bin/hash/codex.exe"), "bundled Codex CLI process excluded"); passed++;
         check(Platform.desktopProcessMatches(Platform.OS.MAC, "Claude",
             "/Applications/Claude.app/Contents/MacOS/Claude"), "macOS desktop process"); passed++;
+        check(Platform.desktopProcessMatches(Platform.OS.MAC, "Codex",
+            "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT"), "macOS ChatGPT host process is Codex desktop"); passed++;
+        check(Platform.desktopProcessMatches(Platform.OS.MAC, "Codex",
+            "/Applications/Codex.app/Contents/MacOS/ChatGPT"), "macOS Codex bundle may retain ChatGPT executable"); passed++;
+        check(Platform.desktopProcessMatches(Platform.OS.LINUX, "Codex",
+            "/home/test/Applications/ChatGPT.AppImage"), "Linux ChatGPT AppImage is Codex desktop"); passed++;
+        check(Platform.desktopProcessMatches(Platform.OS.LINUX, "Codex",
+            "/opt/chatgpt/chatgpt"), "Linux ChatGPT host process is Codex desktop"); passed++;
+        check(!Platform.desktopProcessMatches(Platform.OS.MAC, "Codex",
+            "/Applications/Claude.app/Contents/MacOS/Claude"), "desktop aliases remain vendor isolated"); passed++;
+        check(ClientReconnect.DESKTOP_START_TIMEOUT_SECONDS == 8
+            && ClientReconnect.CLI_START_TIMEOUT_SECONDS > ClientReconnect.DESKTOP_START_TIMEOUT_SECONDS,
+            "desktop startup fails fast without narrowing CLI compatibility"); passed++;
         check(!Platform.desktopProcessMatches(Platform.OS.MAC, "Claude", "/Users/test/.local/bin/claude"),
             "macOS CLI does not keep desktop bridge alive"); passed++;
         check(Platform.desktopProcessMatches(Platform.OS.LINUX, "Claude", "/opt/claude/claude"),

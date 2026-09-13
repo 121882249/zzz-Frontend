@@ -12,6 +12,7 @@ final class CodexChannelSwitch {
         ChannelSettingsBackup backup = null;
         List<CodexHistorySettings.Setting> previous = List.of();
         boolean historyTouched = false;
+        boolean applied = false;
         try {
             backup = new ChannelSettingsBackup(store, config);
             Path home = config.toAbsolutePath().getParent();
@@ -29,9 +30,11 @@ final class CodexChannelSwitch {
                 historyTouched = true;
                 CodexHistorySettings.apply(home, targets);
             }
+            applied = true;
             start.run();
             return previous.size();
         } catch (Exception failure) {
+            if (applied) throw new ManualStartRequiredException("Codex", failure);
             try {
                 stop.run();
                 if (backup != null) backup.restore();
@@ -41,7 +44,7 @@ final class CodexChannelSwitch {
                 failure.addSuppressed(rollback);
                 throw new IOException("切换失败，自动恢复未完成；设置备份位于 " + (backup == null ? "未建立" : backup.location()), failure);
             }
-            throw new IOException("切换未完成，已恢复切换前的设置并重新打开原渠道", failure);
+            throw new IOException("切换未完成：" + failure.getMessage() + "；已恢复切换前的设置并重新打开原渠道", failure);
         }
     }
 }

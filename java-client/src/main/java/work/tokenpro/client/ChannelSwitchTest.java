@@ -1,5 +1,6 @@
 package work.tokenpro.client;
 
+import java.io.IOException;
 import java.nio.file.*;
 import java.net.Proxy;
 import java.util.*;
@@ -39,6 +40,28 @@ final class ChannelSwitchTest {
         CodexChannelSwitch.run(store, config, "custom", List.of("model"), () -> steps.add("stop"),
             () -> { steps.add("write"); Files.writeString(config, "complete"); }, () -> steps.add("start"), () -> steps.add("rollback"));
         require(steps.equals(List.of("stop", "write", "start")), "exit before settings mutation");
+        steps.clear();
+        try {
+            CodexChannelSwitch.run(store, config, "custom", List.of("model"), () -> steps.add("stop"),
+                () -> { steps.add("write"); Files.writeString(config, "new channel"); },
+                () -> { steps.add("start"); throw new IOException("launcher unavailable"); }, () -> steps.add("rollback"));
+            throw new AssertionError("startup failure was hidden");
+        } catch (ManualStartRequiredException expected) {
+            require(expected.getMessage().contains("不会回滚"), "manual startup guidance is explicit");
+        }
+        require(steps.equals(List.of("stop", "write", "start")), "startup failure does not run rollback");
+        require(Files.readString(config).equals("new channel"), "completed channel settings survive startup failure");
+        steps.clear();
+        try {
+            ChannelSettingsBackup.switchClaude(store, true, () -> steps.add("stop"),
+                () -> { steps.add("write"); store.write(ClaudeBridgeConfig.FILE, "new channel"); },
+                () -> { steps.add("start"); throw new IOException("terminal unavailable"); }, () -> steps.add("rollback"));
+            throw new AssertionError("Claude startup failure was hidden");
+        } catch (ManualStartRequiredException expected) {
+            require(expected.getMessage().contains("不会回滚"), "Claude manual startup guidance is explicit");
+        }
+        require(steps.equals(List.of("stop", "write", "start")), "Claude startup failure does not run rollback");
+        require(store.read(ClaudeBridgeConfig.FILE).orElse("").equals("new channel"), "Claude channel survives startup failure");
         List<CodexHistorySettings.Setting> settings = List.of(new CodexHistorySettings.Setting("synthetic", "openai", "gpt"));
         require(CodexHistorySettings.decode(CodexHistorySettings.encode(settings)).equals(settings), "association snapshot roundtrip");
         require(OfficialConnectionCheck.proxy(Map.of("HTTPS_PROXY", "http://127.0.0.1:9999")).type() == Proxy.Type.HTTP, "HTTP proxy recognized");
@@ -46,7 +69,7 @@ final class ChannelSwitchTest {
         try { OfficialConnectionCheck.proxy(Map.of("HTTPS_PROXY", "invalid")); throw new AssertionError("bad proxy accepted"); }
         catch (java.io.IOException expected) {}
         require(ClientReconnect.managedCliMatches("codex", "/bin/codex", List.of("-c", "tokenpro_profile=/scope/catalog.json"), "/scope/catalog.json"), "official CLI profile remains identifiable");
-        return 12;
+        return 19;
     }
     private static void require(boolean value, String message) { if (!value) throw new AssertionError(message); }
 }

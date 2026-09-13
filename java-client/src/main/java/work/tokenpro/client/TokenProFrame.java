@@ -659,12 +659,7 @@ final class TokenProFrame extends JFrame {
                 }, () -> {
                     codex.restore();
                     store.write("codex-official-mode.txt", "official");
-                }, () -> {
-                    if (!Platform.openApplication("Codex")) throw new IllegalStateException("无法启动 Codex");
-                    ClientReconnect.awaitStarted(store, "Codex", false);
-                }, () -> {
-                    if (!Platform.openApplication("Codex")) throw new IllegalStateException("无法重新打开原渠道");
-                });
+                }, () -> startAndAwaitProfile("Codex", false), () -> startAndAwaitProfile("Codex", false));
                 return true;
             }
             protected void done() {
@@ -673,7 +668,7 @@ final class TokenProFrame extends JFrame {
                     get();
                     updateCodexStatus();
                     status("官方配置已应用，未归档旧对话设置已同步；网络连接尚未验证，断网请检查代理后重试");
-                } catch (Exception failure) { error(failure.getCause() == null ? failure : failure.getCause()); }
+                } catch (Exception failure) { connectionFailure("Codex", false, failure); }
             }
         }.execute();
     }
@@ -1002,6 +997,23 @@ final class TokenProFrame extends JFrame {
         }
     }
 
+    private void startAndAwaitProfile(String app, boolean cli) throws Exception {
+        startProfile(app, cli);
+        ClientReconnect.awaitStarted(store, app, cli);
+    }
+
+    private void connectionFailure(String app, boolean cli, Throwable wrapped) {
+        Throwable failure = wrapped.getCause() == null ? wrapped : wrapped.getCause();
+        if (failure instanceof ManualStartRequiredException) {
+            if (cli) updateCommandControls(app.toLowerCase(Locale.ROOT), true);
+            else updateBridgeStatus();
+            status(failure.getMessage());
+            TokenProDialogs.info(this, "配置已完成，请手动启动", failure.getMessage());
+            return;
+        }
+        error(failure);
+    }
+
     private void switchOfficialProfile(String app, boolean cli) {
         String label = app + (cli ? " 命令行" : " 客户端");
         if (!TokenProDialogs.confirm(this, "切换官方配置", "将正常退出并重启 " + label + "。\n只备份设置，聊天内容保持不变。", "切换并重启")) return;
@@ -1016,19 +1028,19 @@ final class TokenProFrame extends JFrame {
                     ClientReconnect.stopForSettings(store, app, cli);
                     if (!app.equals("Codex")) ClaudeBridgeManager.stop(target);
                 };
-                ClientReconnect.Action start = () -> { startProfile(app, cli); ClientReconnect.awaitStarted(store, app, cli); };
+                ClientReconnect.Action start = () -> startAndAwaitProfile(app, cli);
                 if (app.equals("Codex")) {
                     Path config = target.root().resolve("home/config.toml");
                     CodexChannelSwitch.run(target, config, "openai", List.of(), stop, () -> {
                         new CodexConfig(target, config).restore();
                         target.write("codex-official-mode.txt", "official");
-                    }, start, () -> startProfile(app, cli));
+                    }, start, start);
                 } else {
                     ChannelSettingsBackup.switchClaude(target, cli, stop, () -> {
                         if (!cli) ClaudeDesktopConfig.restoreOfficial(target);
                         else target.write(ClaudeCliConfig.FILE, "{}");
                         target.delete(ClaudeBridgeConfig.FILE);
-                    }, start, () -> startProfile(app, cli));
+                    }, start, start);
                 }
                 return null;
             }
@@ -1038,7 +1050,7 @@ final class TokenProFrame extends JFrame {
                     get();
                     if (cli) updateCommandControls(app.toLowerCase(Locale.ROOT), true); else updateBridgeStatus();
                     status(label + " 官方配置已应用；请确认官方登录。网络中断时请检查代理后重试，不会自动更换渠道。");
-                } catch (Exception e) { error(e.getCause() == null ? e : e.getCause()); }
+                } catch (Exception e) { connectionFailure(app, cli, e); }
             }
         }.execute();
     }
@@ -2071,11 +2083,7 @@ final class TokenProFrame extends JFrame {
                         config.apply("https://tokenpro.work/v1", selected, key.key(), accountLabel);
                         saveCodexSelection(target, selected, key, owner);
                         if (cli) CliLauncher.install(store, command);
-                    }, () -> {
-                        if (cli) Platform.openTerminalProgram(CliLauncher.install(store, command), List.of(), Map.of());
-                        else if (!Platform.openApplication(app)) throw new IllegalStateException("无法启动 Codex");
-                        ClientReconnect.awaitStarted(store, app, cli);
-                    }, () -> startProfile(app, cli));
+                    }, () -> startAndAwaitProfile(app, cli), () -> startAndAwaitProfile(app, cli));
                     return selected.size();
                 }
                 ChannelSettingsBackup.switchClaude(target, cli, () -> {
@@ -2087,10 +2095,7 @@ final class TokenProFrame extends JFrame {
                     config.save(target);
                     if (cli) ClaudeCliConfig.install(target, selected, config);
                     else ClaudeDesktopConfig.install(target, config, accountLabel);
-                }, () -> {
-                    startProfile(app, cli);
-                    ClientReconnect.awaitStarted(store, app, cli);
-                }, () -> startProfile(app, cli));
+                }, () -> startAndAwaitProfile(app, cli), () -> startAndAwaitProfile(app, cli));
                 return selected.size();
             }
             protected void done() {
@@ -2103,7 +2108,7 @@ final class TokenProFrame extends JFrame {
                     if (app.equals("Codex") && !cli) TokenProDialogs.info(TokenProFrame.this, "连接完成",
                         "TokenPro 配置已启用，客户端已重启。\n未归档旧对话的服务商设置已同步，聊天正文保持不变。\n实际网络连接以发送请求后的结果为准。");
                     lastAccountRefresh = 0; refreshAccountSilently();
-                } catch (Exception e) { error(e.getCause() == null ? e : e.getCause()); }
+                } catch (Exception e) { connectionFailure(app, cli, e); }
             }
         }.execute();
     }

@@ -62,10 +62,14 @@ final class ChannelSettingsBackup {
                              ClientReconnect.Action restartPrevious) throws Exception {
         stop.run();
         ChannelSettingsBackup backup = null;
+        boolean applied = false;
         try {
             backup = new ChannelSettingsBackup(store, claudePaths(store, cli));
-            write.run(); start.run();
+            write.run();
+            applied = true;
+            start.run();
         } catch (Exception failure) {
+            if (applied) throw new ManualStartRequiredException(cli ? "Claude 命令行" : "Claude", failure);
             try {
                 stop.run();
                 if (backup != null) backup.restore();
@@ -74,7 +78,7 @@ final class ChannelSettingsBackup {
                 failure.addSuppressed(rollback);
                 throw new IOException("切换失败，自动恢复未完成；设置备份位于 " + (backup == null ? "未建立" : backup.location()), failure);
             }
-            throw new IOException("切换失败，已恢复原设置并重新打开原渠道", failure);
+            throw new IOException("切换失败：" + failure.getMessage() + "；已恢复原设置并重新打开原渠道", failure);
         }
     }
 }
