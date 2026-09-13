@@ -346,12 +346,12 @@ final class TokenProFrame extends JFrame {
 
         CosmosMenuPanel menu = new CosmosMenuPanel();
         int itemCount = 0;
-        CosmosMenuButton choose = new CosmosMenuButton("选择可用模型", "embedded:price",
+        CosmosMenuButton choose = new CosmosMenuButton("选择可用模型", "vector:sliders",
             new Color(105, 220, 194), new Color(53, 120, 108, 105));
         choose.addActionListener(event -> { hideModelMenu(); chooseModel.run(); });
         menu.add(choose);
         itemCount++;
-        CosmosMenuButton official = new CosmosMenuButton("恢复官方配置", "RefreshCwLucide.png",
+        CosmosMenuButton official = new CosmosMenuButton("切换官方配置", "vector:switch",
             STATUS_OFFICIAL, new Color(91, 70, 146, 120));
         official.addActionListener(event -> { hideModelMenu(); restore.run(); });
         menu.add(official);
@@ -644,9 +644,9 @@ final class TokenProFrame extends JFrame {
     private void restoreCodex() {
         try {
             boolean running = !ClientReconnect.desktopProcesses("Codex").isEmpty();
-            if (running && !TokenProDialogs.confirm(this, "恢复官方配置",
+            if (running && !TokenProDialogs.confirm(this, "切换官方配置",
                 "将退出并重启 Codex，切换至官方配置。\n进行中的请求会终止，请先保存。",
-                "恢复并重启")) return;
+                "切换并重启")) return;
             // Keep the last TokenPro selection as a preference only. The live
             // Codex config is official, so no TokenPro key or route remains in use.
             boolean changed = codex.restore();
@@ -1804,7 +1804,7 @@ final class TokenProFrame extends JFrame {
         button.setFocusPainted(false);
         button.setIcon(resourceIconContained("WebCog.png", 15, 15, true));
         button.setIconTextGap(7);
-        button.setToolTipText("选择模型、恢复官方配置或修复历史对话");
+        button.setToolTipText("选择模型、切换官方配置或修复历史对话");
         button.setHorizontalAlignment(SwingConstants.CENTER);
         button.setBorder(new EmptyBorder(0, 12, 0, 12));
         sizeComponent(button, 112, 42);
@@ -2455,6 +2455,33 @@ final class TokenProFrame extends JFrame {
         }
     }
 
+    private static final class MenuLineIcon implements Icon {
+        private final String name;
+        private final Color color;
+        MenuLineIcon(String name, Color color) { this.name = name; this.color = color; }
+        public int getIconWidth() { return 16; }
+        public int getIconHeight() { return 16; }
+        public void paintIcon(Component c, Graphics graphics, int x, int y) {
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.translate(x, y);
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(color);
+            g.setStroke(new BasicStroke(1.4f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            if (name.equals("vector:sliders")) {
+                g.drawLine(2, 4, 4, 4); g.drawLine(8, 4, 14, 4);
+                g.drawOval(4, 2, 4, 4);
+                g.drawLine(2, 12, 8, 12); g.drawLine(12, 12, 14, 12);
+                g.drawOval(8, 10, 4, 4);
+            } else {
+                g.drawLine(2, 5, 14, 5);
+                g.drawLine(11, 2, 14, 5); g.drawLine(14, 5, 11, 8);
+                g.drawLine(14, 11, 2, 11);
+                g.drawLine(5, 8, 2, 11); g.drawLine(2, 11, 5, 14);
+            }
+            g.dispose();
+        }
+    }
+
     private static final class CosmosMenuButton extends JButton {
         private final Color hover;
 
@@ -2468,7 +2495,7 @@ final class TokenProFrame extends JFrame {
             setDoubleBuffered(true);
             setFont(appFont(11, Font.BOLD));
             setForeground(foreground);
-            setIcon(menuIcon(iconName, 16, 16, foreground));
+            setIcon(iconName.startsWith("vector:") ? new MenuLineIcon(iconName, foreground) : menuIcon(iconName, 16, 16, foreground));
             setIconTextGap(10);
             setBorder(new EmptyBorder(0, 14, 0, 14));
             setHorizontalAlignment(SwingConstants.LEFT);
