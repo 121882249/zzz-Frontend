@@ -9,6 +9,8 @@ import java.util.*;
 final class SelfTest {
     static void run() throws Exception {
         int passed = 0;
+        String manifestVersion = Main.class.getPackage().getImplementationVersion();
+        check(manifestVersion == null || Main.VERSION.equals(manifestVersion), "JAR manifest version matches the application version"); passed++;
         passed += ChannelSwitchTest.run();
         passed += CodexHistoryRepairTest.run();
         Map<String, Object> value = Json.object(Json.parse("{\"name\":\"TokenPro\",\"items\":[1,true,null],\"n\":12}"));

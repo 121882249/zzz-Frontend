@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")"
+VERSION="$(bash version.sh)"
 if [ -z "${JAVA_HOME:-}" ]; then
   JAVA_HOME="$(/usr/libexec/java_home -v 21 2>/dev/null || true)"
 fi
@@ -33,10 +34,10 @@ cp ../Resources/WebCog.png build/classes/assets/WebCog.png
 cp ../Resources/WebBook.png build/classes/assets/WebBook.png
 cp ../Resources/RefreshCwLucide.png build/classes/assets/RefreshCwLucide.png
 cp ../Resources/PlusLucide.png build/classes/assets/PlusLucide.png
-cat > build/manifest.mf <<'EOF'
+cat > build/manifest.mf <<EOF
 Main-Class: work.tokenpro.client.Main
 Implementation-Title: TokenPro
-Implementation-Version: 1.2.97
+Implementation-Version: $VERSION
 
 EOF
 "$JAVA_HOME/bin/jar" --create --file build/TokenPro.jar --manifest build/manifest.mf -C build/classes .

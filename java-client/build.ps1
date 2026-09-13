@@ -1,5 +1,6 @@
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
+$Version = & (Join-Path $PSScriptRoot 'version.ps1')
 if (-not $env:JAVA_HOME) { throw "JDK 21 is required. Set JAVA_HOME first." }
 Remove-Item -Recurse -Force build/classes -ErrorAction SilentlyContinue
 Remove-Item -Force build/TokenPro.jar -ErrorAction SilentlyContinue
@@ -30,7 +31,7 @@ Copy-Item ../Resources/PlusLucide.png build/classes/assets/PlusLucide.png
 @"
 Main-Class: work.tokenpro.client.Main
 Implementation-Title: TokenPro
-Implementation-Version: 1.2.96
+Implementation-Version: $Version
 
 "@ | Set-Content -Encoding ascii build/manifest.mf
 & "$env:JAVA_HOME/bin/jar.exe" --create --file build/TokenPro.jar --manifest build/manifest.mf -C build/classes .
