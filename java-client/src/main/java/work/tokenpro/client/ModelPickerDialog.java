@@ -5,8 +5,6 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.event.ComponentAdapter;
-import java.awt.event.ComponentEvent;
 import java.util.List;
 import java.util.*;
 import java.util.function.Consumer;
@@ -21,15 +19,17 @@ final class ModelPickerDialog extends JDialog {
                       Set<String> selectedIds, Consumer<List<PricedModel>> onApply) {
         super(owner, "选择 " + client + " 模型", true);
         setUndecorated(true);
-        setBackground(new Color(15, 26, 58));
+        boolean transparent = false;
+        try {
+            setBackground(new Color(0, 0, 0, 0));
+            transparent = getBackground().getAlpha() == 0;
+        } catch (UnsupportedOperationException | IllegalComponentStateException ignored) {}
+        if (!transparent) setBackground(new Color(15, 26, 58));
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
         setContentPane(content(client, models, selectedIds, onApply));
         setSize(760, 680);
         setMinimumSize(new Dimension(560, 480));
-        applyShape();
-        addComponentListener(new ComponentAdapter() {
-            public void componentResized(ComponentEvent event) { applyShape(); }
-        });
+        if (!transparent) applyShape();
         getRootPane().registerKeyboardAction(event -> dispose(),
             KeyStroke.getKeyStroke("ESCAPE"), JComponent.WHEN_IN_FOCUSED_WINDOW);
         setLocationRelativeTo(owner);
@@ -56,7 +56,7 @@ final class ModelPickerDialog extends JDialog {
         titleLine.add(title, BorderLayout.WEST);
         titleLine.add(closeControl(), BorderLayout.EAST);
         boolean codex = "Codex".equals(client);
-        JLabel detail = new JLabel(codex ? "生图默认使用首个已选生图模型；未选生图模型时使用默认主模型分组" : "LLM Model 至少选择 1 个，可同时选择多个");
+        JLabel detail = new JLabel(codex ? "文本模型可多选；生图模型只能选择 1 个，模型与图片路由严格对应" : "LLM Model 至少选择 1 个，可同时选择多个");
         detail.setFont(font(12, Font.PLAIN));
         detail.setForeground(MUTED);
         header.add(titleLine);
@@ -112,6 +112,7 @@ final class ModelPickerDialog extends JDialog {
             }
         }
         if (codex && !imageGroupAdded) addImageChoices(groups, models, selectedIds);
+        if (codex) normalizeSelectedImageChoices();
         if (!codex && choices.stream().noneMatch(AbstractButton::isSelected)) {
             choices.stream().findFirst().ifPresent(choice -> choice.setSelected(true));
         }
@@ -152,7 +153,12 @@ final class ModelPickerDialog extends JDialog {
             long imageCount = selected.stream().filter(PricedModel::isImageGeneration).count();
             if (selected.isEmpty()) {
                 TokenProDialogs.warning(this, "请选择模型",
-                    codex ? "请至少选择 1 款模型；生图模型可多选。" : "请至少选择 1 款模型。");
+                    "请至少选择 1 款模型。");
+                return;
+            }
+            if (codex && imageCount > 1) {
+                TokenProDialogs.warning(this, "生图模型必须一一对应",
+                    "一次只能应用 1 款生图模型。请保留要在 Codex 中使用的那一款。");
                 return;
             }
             dispose();
@@ -204,6 +210,11 @@ final class ModelPickerDialog extends JDialog {
             for (PricedModel model : groupModels) {
                 ModelCheckBox choice = new ModelCheckBox(model);
                 choice.setSelected(matchesSelectedImage(model, selectedIds));
+                choice.addActionListener(event -> {
+                    if (!choice.isSelected()) return;
+                    choices.stream().filter(other -> other != choice && other.model().isImageGeneration())
+                        .forEach(other -> other.setSelected(false));
+                });
                 choices.add(choice);
                 imageGroup.add(choice);
             }
@@ -220,6 +231,25 @@ final class ModelPickerDialog extends JDialog {
 
     private List<PricedModel> selected() {
         return choices.stream().filter(AbstractButton::isSelected).map(ModelCheckBox::model).toList();
+    }
+
+    private void normalizeSelectedImageChoices() {
+        boolean kept = false;
+        for (ModelCheckBox choice : choices) {
+            if (!choice.isSelected() || !choice.model().isImageGeneration()) continue;
+            if (!kept) kept = true;
+            else choice.setSelected(false);
+        }
+    }
+
+    static List<PricedModel> singleImageSelection(List<PricedModel> models) {
+        boolean kept = false;
+        List<PricedModel> result = new ArrayList<>();
+        for (PricedModel model : models) {
+            if (!model.isImageGeneration()) result.add(model);
+            else if (!kept) { result.add(model); kept = true; }
+        }
+        return List.copyOf(result);
     }
 
     static String id(PricedModel model) { return model.groupId() + "\u0000" + model.name(); }
@@ -398,15 +428,18 @@ final class ModelPickerDialog extends JDialog {
     }
 
     private static final class CosmosPanel extends JPanel {
-        CosmosPanel() { setOpaque(true); setBackground(new Color(15, 26, 58)); }
+        CosmosPanel() { setOpaque(false); }
         protected void paintComponent(Graphics graphics) {
-            super.paintComponent(graphics);
             Graphics2D g = (Graphics2D) graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            java.awt.geom.RoundRectangle2D surface = new java.awt.geom.RoundRectangle2D.Double(
+                0, 0, Math.max(0, getWidth() - 1), Math.max(0, getHeight() - 1), 24, 24);
+            g.clip(surface);
             g.setPaint(new GradientPaint(0, 0, new Color(24, 43, 89), getWidth(), getHeight(), new Color(24, 24, 76)));
-            g.fillRect(0, 0, getWidth(), getHeight());
+            g.fill(surface);
             g.setPaint(new RadialGradientPaint(getWidth() * .78f, getHeight() * .08f, Math.max(180, getWidth() * .52f),
                 new float[]{0f, 1f}, new Color[]{new Color(106, 89, 242, 105), new Color(31, 30, 92, 0)}));
-            g.fillRect(0, 0, getWidth(), getHeight());
+            g.fill(surface);
             g.setColor(new Color(198, 218, 255, 105));
             for (int i = 0; i < 28; i++) {
                 int x = Math.floorMod(i * 83 + 31, Math.max(1, getWidth()));
@@ -415,9 +448,20 @@ final class ModelPickerDialog extends JDialog {
                 g.fillOval(x, y, size, size);
             }
             g.setColor(new Color(184, 199, 255, 45));
-            g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 24, 24);
+            g.draw(surface);
             g.dispose();
         }
+    }
+
+    static int[] cosmosBackgroundAlphaPixels(int width, int height) {
+        CosmosPanel panel = new CosmosPanel();
+        panel.setSize(width, height);
+        java.awt.image.BufferedImage image = new java.awt.image.BufferedImage(width, height,
+            java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = image.createGraphics();
+        panel.paint(graphics);
+        graphics.dispose();
+        return new int[]{image.getRGB(0, 0) >>> 24, image.getRGB(width / 2, height / 2) >>> 24};
     }
 
     private static final class PickerButton extends JButton {

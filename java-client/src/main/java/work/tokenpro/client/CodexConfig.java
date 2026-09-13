@@ -30,6 +30,7 @@ final class CodexConfig {
 
     void apply(String baseUrl, List<PricedModel> models, String key, String accountEmail) throws Exception {
         models = ModelPickerDialog.orderedModels(models, "Codex");
+        models = ModelPickerDialog.singleImageSelection(models);
         String url = validateUrl(baseUrl);
         String actor = required(accountEmail, "账户邮箱");
         if (models.isEmpty()) throw new IllegalArgumentException("请至少选择一个 Codex 模型");
@@ -57,8 +58,8 @@ final class CodexConfig {
         catch (IOException failure) { /* The active config already names its immutable catalog. */ }
     }
 
-    // Without a separately selected image model, use the native image tool in
-    // the selected primary model's group. Never silently select another group.
+    // The picker and this defensive normalization permit at most one image
+    // model, so every catalog image selection has exactly one matching route.
     static String nativeImageRoute(PricedModel primary, PricedModel image) {
         if (image != null) return routedModelId(image);
         return routedModelId(primary);

@@ -94,6 +94,12 @@ final class SelfTest {
             "same model name in different groups cannot share a direct route"); passed++;
         PricedModel nativeChat = new PricedModel("gpt-5.6-sol", "openai", "GPT", 16);
         PricedModel nativeImage = new PricedModel("gpt-image-2.5-flare", "openai", "Images", 65);
+        PricedModel otherImage = new PricedModel("gpt-image-2.5-sunburst", "openai", "Images", 65);
+        List<PricedModel> oneImage = ModelPickerDialog.singleImageSelection(List.of(nativeChat, nativeImage, otherImage));
+        check(oneImage.equals(List.of(nativeChat, nativeImage)), "Codex retains every text model and exactly one image model"); passed++;
+        int[] pickerPixels = ModelPickerDialog.cosmosBackgroundAlphaPixels(200, 160);
+        check(pickerPixels[0] == 0 && pickerPixels[1] == 255,
+            "model picker paints transparent rounded corners without black edge pixels"); passed++;
         check(CodexConfig.nativeImageRoute(nativeChat, null).equals(CodexConfig.routedModelId(nativeChat)),
             "text-only native images keep the selected text model's tool capability and group"); passed++;
         check(CodexConfig.nativeImageRoute(nativeChat, nativeImage).equals(CodexConfig.routedModelId(nativeImage)),

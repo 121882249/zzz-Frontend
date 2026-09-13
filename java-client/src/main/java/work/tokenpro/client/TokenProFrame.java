@@ -620,6 +620,7 @@ final class TokenProFrame extends JFrame {
     }
 
     private void saveCodexSelection(SecureStore targetStore, List<PricedModel> chosen, ApiClient.ManagedKey managed, String owner) throws Exception {
+        chosen = ModelPickerDialog.singleImageSelection(ModelPickerDialog.orderedModels(chosen, "Codex"));
         List<PricedModel> chatModels = chosen.stream().filter(model -> !model.isImageGeneration()).toList();
         List<PricedModel> imageModels = chosen.stream().filter(PricedModel::isImageGeneration).toList();
         PricedModel imageModel = imageModels.isEmpty() ? null : imageModels.getFirst();
