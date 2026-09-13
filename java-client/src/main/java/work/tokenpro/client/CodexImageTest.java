@@ -47,6 +47,8 @@ final class CodexImageTest {
             adapter.transform(Json.object(Json.parse(imageEvent)));
             String valid = "![cat](https://example.com/cat.jpg)";
             if (!adapter.rewrite(valid).equals(valid) || !new CodexImageResponse(root).rewrite(placeholder).equals(placeholder)) throw new AssertionError("unrelated/missing image rewriting");
+            String linked = adapter.rewrite("画好了，一只橘猫测试图。");
+            if (!linked.startsWith("![生成图片](<") || !linked.contains(".jpg>)\n\n画好了")) throw new AssertionError("missing generated image fallback link");
             Map<String,Object> terminal = Json.object(Json.parse(Json.stringify(Map.of("type", "response.completed", "response", Map.of("output", List.of(Map.of("type", "message", "content", List.of(Map.of("type", "output_text", "text", placeholder)))))))));
             adapter.transform(terminal);
             if (Json.stringify(terminal).contains("base64,...") || expected == null) throw new AssertionError("terminal response repair");

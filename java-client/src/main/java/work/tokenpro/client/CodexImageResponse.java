@@ -12,6 +12,7 @@ import javax.imageio.stream.ImageInputStream;
 /** Per-response adapter. Image bytes stay on this computer; no server changes. */
 final class CodexImageResponse {
     private static final Pattern PLACEHOLDER = Pattern.compile("data:image/[a-zA-Z0-9.+-]+;base64,(?:\\.\\.\\.|…)(?=[)\\s\"'<>]|$)");
+    private static final Pattern MARKDOWN_IMAGE = Pattern.compile("!\\[[^\\]]*]\\(");
     private final Path directory;
     private final Set<String> results = new LinkedHashSet<>();
     private String imagePath;
@@ -53,7 +54,12 @@ final class CodexImageResponse {
     }
 
     String rewrite(String text) {
-        return imagePath == null ? text : PLACEHOLDER.matcher(text).replaceAll(Matcher.quoteReplacement(imagePath));
+        if (imagePath == null) return text;
+        Matcher placeholder = PLACEHOLDER.matcher(text);
+        if (placeholder.find()) return placeholder.replaceAll(Matcher.quoteReplacement(imagePath));
+        if (MARKDOWN_IMAGE.matcher(text).find()) return text;
+        String image = "![生成图片](" + imagePath + ")";
+        return text.isBlank() ? image : image + "\n\n" + text;
     }
 
     Map<String, Object> transform(Map<String, Object> event) throws Exception {
