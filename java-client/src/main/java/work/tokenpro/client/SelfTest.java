@@ -10,6 +10,7 @@ final class SelfTest {
     static void run() throws Exception {
         int passed = 0;
         passed += ChannelSwitchTest.run();
+        passed += CodexHistoryRepairTest.run();
         Map<String, Object> value = Json.object(Json.parse("{\"name\":\"TokenPro\",\"items\":[1,true,null],\"n\":12}"));
         check("TokenPro".equals(value.get("name")), "JSON string"); passed++;
         check(value.get("items") instanceof List<?> list && list.size() == 3, "JSON array"); passed++;
@@ -23,6 +24,32 @@ final class SelfTest {
             "obsolete Codex helper process is identified by its exact retired flag"); passed++;
         check(!BridgeLifecycle.legacyCodexAdapterProcess(new String[]{"--codex-image-bridge-worker"}, "--codex-image-bridge"),
             "similar process arguments are never terminated as an obsolete Codex helper"); passed++;
+        Path officialRoot = Files.createTempDirectory("tokenpro-official-cleanup-");
+        try {
+            SecureStore officialStore = new SecureStore(officialRoot.resolve("store"));
+            Path officialConfig = officialRoot.resolve("home/config.toml");
+            Files.createDirectories(officialConfig.getParent()); Files.writeString(officialConfig, "model_provider=\"custom\"\n");
+            Files.writeString(officialConfig.getParent().resolve("auth.json"), "fixture-official-auth");
+            officialStore.write("java-session.json", "fixture-tokenpro-login");
+            officialStore.write("codex-selected.json", "selected");
+            officialStore.write("codex-model-catalog.json", "catalog");
+            officialStore.write("codex-image-bridge.json", "legacy");
+            new CodexConfig(officialStore, officialConfig).deleteForOfficial();
+            BridgeLifecycle.finishLegacyCodexCleanup(officialStore, true);
+            check(officialStore.read("codex-image-bridge.json").isPresent() && officialStore.read("codex-cleanup-warning.txt").isPresent(),
+                "failed helper shutdown is reported with state retained"); passed++;
+            BridgeLifecycle.finishLegacyCodexCleanup(officialStore, false);
+            check(!Files.exists(officialConfig) && officialStore.read("codex-selected.json").isEmpty()
+                && officialStore.read("codex-model-catalog.json").isEmpty(), "official switch deletes Codex config and generated mapping"); passed++;
+            check(officialStore.read("codex-image-bridge.json").isEmpty(), "official switch removes legacy bridge file"); passed++;
+            check(officialStore.read("codex-cleanup-warning.txt").isEmpty(), "successful cleanup clears prior warning"); passed++;
+            check(Files.readString(officialConfig.getParent().resolve("auth.json")).equals("fixture-official-auth")
+                && officialStore.read("java-session.json").orElseThrow().equals("fixture-tokenpro-login"), "switching keeps official auth and global-key login"); passed++;
+        } finally {
+            try (var paths = Files.walk(officialRoot)) {
+                for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path);
+            }
+        }
         String sample = "before\n# >>> TokenPro managed >>>\nmanaged\n# <<< TokenPro managed <<<\nafter\n";
         check(CodexConfig.stripManaged(sample).equals("before\nafter\n"), "managed config removal"); passed++;
         String config = "model = \"old\"\nmodel_provider = \"openai\"\n[features]\napps = true\n";
@@ -63,6 +90,9 @@ final class SelfTest {
         check(!CodexConfig.routedModelId(new PricedModel("same-model", "openai", "A", 16)).equals(
             CodexConfig.routedModelId(new PricedModel("same-model", "openai", "B", 65))),
             "same model name in different groups cannot share a direct route"); passed++;
+        String releasedProvider = CodexConfig.providerConfiguration("custom", "https://tokenpro.work/v1", "fixture", "user@example.com", 65L);
+        check(releasedProvider.contains("\"x-tokenpro-group-id\" = \"65\"") && !releasedProvider.contains("native-v1")
+            && !releasedProvider.contains("x-tokenpro-image-route"), "release preserves existing routing without pending native-image protocol"); passed++;
         String managedActor = "# >>> TokenPro managed >>>\n[model_providers.custom]\nname = \"Codex\"\nhttp_headers = { \"x-openai-actor-authorization\" = \"Codex\" }\n# <<< TokenPro managed <<<\n";
         String emailActor = CodexConfig.withActor(managedActor, "user@example.com");
         check(emailActor.contains("name = \"user@example.com\"") && emailActor.contains("\"x-openai-actor-authorization\" = \"user@example.com\""), "existing Codex actor migrates to account email"); passed++;

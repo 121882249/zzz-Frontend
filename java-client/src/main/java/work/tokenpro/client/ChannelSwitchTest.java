@@ -32,24 +32,24 @@ final class ChannelSwitchTest {
                 steps.add("write"); Files.writeString(config, "partial"); throw new Exception("injected write failure");
             }, () -> steps.add("start"), () -> steps.add("restartPrevious"));
             throw new AssertionError("failure was hidden");
-        } catch (java.io.IOException expected) {
-            require(steps.equals(List.of("stop", "write", "stop", "restartPrevious")), "failed switch restores before restarting");
-            require(Files.readString(config).contains("openai"), "partial configuration rolled back");
+        } catch (Exception expected) {
+            require(steps.equals(List.of("stop", "write")), "failed write never restores or starts a different channel");
+            require(Files.readString(config).equals("partial"), "no implicit rollback after write failure");
         }
         steps.clear();
         CodexChannelSwitch.run(store, config, "custom", List.of("model"), () -> steps.add("stop"),
-            () -> { steps.add("write"); Files.writeString(config, "complete"); }, () -> steps.add("start"), () -> steps.add("rollback"));
-        require(steps.equals(List.of("stop", "write", "start")), "exit before settings mutation");
+            () -> { steps.add("write"); Files.writeString(config, "complete"); }, () -> steps.add("start"), () -> steps.add("repair"));
+        require(steps.equals(List.of("stop", "write", "start", "repair")), "restart precedes background repair");
         steps.clear();
         try {
             CodexChannelSwitch.run(store, config, "custom", List.of("model"), () -> steps.add("stop"),
                 () -> { steps.add("write"); Files.writeString(config, "new channel"); },
-                () -> { steps.add("start"); throw new IOException("launcher unavailable"); }, () -> steps.add("rollback"));
+                () -> { steps.add("start"); throw new IOException("launcher unavailable"); }, () -> steps.add("repair"));
             throw new AssertionError("startup failure was hidden");
         } catch (ManualStartRequiredException expected) {
             require(expected.getMessage().contains("不会回滚"), "manual startup guidance is explicit");
         }
-        require(steps.equals(List.of("stop", "write", "start")), "startup failure does not run rollback");
+        require(steps.equals(List.of("stop", "write", "start", "repair")), "startup failure still schedules repair without rollback");
         require(Files.readString(config).equals("new channel"), "completed channel settings survive startup failure");
         steps.clear();
         try {

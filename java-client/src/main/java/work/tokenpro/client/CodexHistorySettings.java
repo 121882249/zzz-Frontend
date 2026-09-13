@@ -20,7 +20,7 @@ final class CodexHistorySettings {
             String cursor = null;
             Set<String> seen = new HashSet<>();
             do {
-                Map<String,Object> params = new LinkedHashMap<>(Map.of("limit", 100, "modelProviders", List.of("openai", "custom")));
+                Map<String,Object> params = new LinkedHashMap<>(Map.of("limit", 100, "modelProviders", List.of()));
                 if (cursor != null) params.put("cursor", cursor);
                 Map<String,Object> page = rpc.call("thread/list", params);
                 for (Object value : ClaudeAdapter.list(page.get("data"))) {
@@ -34,8 +34,7 @@ final class CodexHistorySettings {
             for (String id : ids) {
                 Map<String,Object> current = rpc.call("thread/resume", Map.of("threadId", id, "excludeTurns", true));
                 String provider = Objects.toString(current.get("modelProvider"), "");
-                if (Set.of("openai", "custom").contains(provider))
-                    result.add(new Setting(id, provider, Objects.toString(current.get("model"), "")));
+                result.add(new Setting(id, provider, Objects.toString(current.get("model"), "")));
                 rpc.call("thread/unsubscribe", Map.of("threadId", id));
             }
             return result;
@@ -52,8 +51,7 @@ final class CodexHistorySettings {
                 try {
                     Map<String,Object> current = rpc.call("thread/resume", Map.of("threadId", id, "excludeTurns", true));
                     String provider = Objects.toString(current.get("modelProvider"), "");
-                    if (Set.of("openai", "custom").contains(provider))
-                        result.add(new Setting(id, provider, Objects.toString(current.get("model"), "")));
+                    result.add(new Setting(id, provider, Objects.toString(current.get("model"), "")));
                     try { rpc.call("thread/unsubscribe", Map.of("threadId", id)); } catch (Exception ignored) {}
                 } catch (Exception unavailable) { skipped++; }
             }
@@ -66,7 +64,7 @@ final class CodexHistorySettings {
         String cursor = null;
         Set<String> seen = new HashSet<>();
         do {
-            Map<String,Object> params = new LinkedHashMap<>(Map.of("limit", 100, "modelProviders", List.of("openai", "custom")));
+            Map<String,Object> params = new LinkedHashMap<>(Map.of("limit", 100, "modelProviders", List.of()));
             if (cursor != null) params.put("cursor", cursor);
             Map<String,Object> page = rpc.call("thread/list", params);
             for (Object value : ClaudeAdapter.list(page.get("data"))) {
@@ -78,6 +76,7 @@ final class CodexHistorySettings {
         } while (cursor != null);
         return ids;
     }
+
 
     static List<Setting> targets(Path home, List<Setting> before, String provider, List<String> models,
                                  List<Setting> saved) throws Exception {
@@ -166,13 +165,16 @@ final class CodexHistorySettings {
             Objects.toString(r.get("id")), Objects.toString(r.get("provider")), Objects.toString(r.get("model")))).toList();
     }
 
-    static final class Rpc implements AutoCloseable {
+    static final class Rpc implements CodexHistoryRepair.Session {
+        interface Register { void accept(Rpc rpc) throws IOException; }
         private final Process process;
         private final BufferedWriter writer;
         private final BufferedReader reader;
         private final ExecutorService reads = Executors.newSingleThreadExecutor(r -> { Thread t = new Thread(r, "codex-settings-rpc"); t.setDaemon(true); return t; });
         private int sequence;
-        Rpc(Path home) throws Exception {
+        Rpc(Path home) throws Exception { this(home, rpc -> {}); }
+        Rpc(Path home, Register register) throws Exception {
+            if (Thread.currentThread().isInterrupted()) throw new IOException("修复已取消");
             Path executable = Platform.codexExecutable().orElseThrow(() -> new IOException("找不到 Codex，无法安全切换对话设置"));
             ProcessBuilder builder = new ProcessBuilder(executable.toString(), "app-server").redirectError(ProcessBuilder.Redirect.DISCARD);
             builder.environment().put("CODEX_HOME", home.toAbsolutePath().toString());
@@ -181,13 +183,15 @@ final class CodexHistorySettings {
             writer = process.outputWriter(StandardCharsets.UTF_8);
             reader = process.inputReader(StandardCharsets.UTF_8);
             try {
+                register.accept(this);
                 call("initialize", Map.of("clientInfo", Map.of("name", "tokenpro_channel_settings", "version", "1"),
                     "capabilities", Map.of("experimentalApi", true)));
                 send(Map.of("method", "initialized"));
             } catch (Exception failure) { close(); throw failure; }
         }
         private void send(Map<String,Object> message) throws IOException { writer.write(Json.stringify(message)); writer.newLine(); writer.flush(); }
-        Map<String,Object> call(String method, Map<String,Object> params) throws Exception {
+        public Map<String,Object> call(String method, Map<String,Object> params) throws Exception {
+            if (Thread.currentThread().isInterrupted()) throw new IOException("修复已取消");
             int id = ++sequence;
             send(Map.of("id", id, "method", method, "params", params));
             Future<Map<String,Object>> response = reads.submit(() -> {
@@ -219,12 +223,22 @@ final class CodexHistorySettings {
                 throw new IOException("对话设置操作失败（" + method + "）", cause);
             } catch (TimeoutException e) {
                 response.cancel(true);
+                abort();
                 throw new IOException("对话设置操作超时（" + method + "）", e);
             } catch (InterruptedException e) {
                 response.cancel(true);
+                abort();
                 Thread.currentThread().interrupt();
                 throw new IOException("对话设置操作被中断（" + method + "）", e);
             }
+        }
+        void abort() {
+            boolean interrupted = Thread.interrupted();
+            process.destroyForcibly();
+            try { process.waitFor(2, TimeUnit.SECONDS); }
+            catch (InterruptedException e) { interrupted = true; }
+            finally { if (interrupted) Thread.currentThread().interrupt(); }
+            reads.shutdownNow();
         }
         public void close() throws IOException {
             try { writer.close(); } catch (IOException ignored) {}

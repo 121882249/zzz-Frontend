@@ -41,27 +41,20 @@ final class CodexConfig {
         Path target = configPath;
         Files.createDirectories(target.getParent());
         String current = Files.exists(target) ? Files.readString(target) : "";
-        if (store.read("codex-original.toml").isEmpty()) store.write("codex-original.toml", current);
         // Image models stay in their own picker group and are also written to
         // Codex's catalog so they can run directly without a selected LLM.
-        Optional<String> previousCatalog = store.read("codex-model-catalog.json");
-        try {
         Path catalog = writeModelCatalog(models);
-        // Codex connects to TokenPro directly. Every catalog slug carries its
-        // exact group; a static header is added only when all selections share
-        // one group, for compatibility with older plain-model conversations.
-        String block = managedBlock(url, primaryModel, catalog, key.trim(), actor, current, historicalProviderIds(), commonGroup(models));
-        validate(block);
-        // TokenPro owns the active Codex config while connected. Replacing the
-        // file avoids ambiguous TOML merges and duplicate keys; restore() puts
-        // the original defaults back while retaining an OpenAI-backed alias for
-        // conversations whose persisted provider id is still `custom`.
+        // Preserve the released direct-routing contract. Native image delivery
+        // is not enabled until the server-side protocol has passed acceptance.
+        String block = managedBlock(url, primaryModel, catalog, key.trim(), actor, current, Set.of("custom"),
+            commonGroup(models));
+        // Replace the active config; official switching deletes it. Availability
+        // is validated by the gateway when a request is actually submitted.
         writeAtomic(target, block);
-        } catch (Exception failure) {
-            if (previousCatalog.isPresent()) store.write("codex-model-catalog.json", previousCatalog.get());
-            else store.delete("codex-model-catalog.json");
-            throw failure;
-        }
+        // Retire only our old generated catalogs after the new config is committed.
+        // Failure is housekeeping, not a reason to restore a previous channel.
+        try { pruneModelCatalogs(catalog); store.delete("codex-model-catalog.json"); }
+        catch (IOException failure) { /* The active config already names its immutable catalog. */ }
     }
 
     boolean restore() throws Exception {
@@ -87,6 +80,24 @@ final class CodexConfig {
         store.delete("codex-original.toml");
         store.delete("codex-model-catalog.json");
         return changed;
+    }
+
+    /** Official mode is intentionally a clean slate: Codex recreates config.toml itself. */
+    void deleteForOfficial() throws IOException {
+        Files.deleteIfExists(configPath);
+        store.delete("codex-original.toml");
+        store.delete("codex-model-catalog.json");
+        store.delete("codex-selected.json");
+        store.delete("codex-official-mode.txt");
+        pruneModelCatalogs(null);
+    }
+
+    private void pruneModelCatalogs(Path keep) throws IOException {
+        Path mappings = store.root().resolve("codex-models");
+        if (Files.isDirectory(mappings, LinkOption.NOFOLLOW_LINKS)) try (var files = Files.list(mappings)) {
+            for (Path path : files.filter(p -> p.getFileName().toString().matches("[a-f0-9-]{36}\\.json")).toList())
+                if (!path.equals(keep)) Files.deleteIfExists(path);
+        }
     }
 
     static String restoreContent(String current, Optional<String> original, boolean preserveDesktopHistoryProvider) {
@@ -263,6 +274,7 @@ final class CodexConfig {
         out.append("model = ").append(toml(routedModel)).append('\n');
         out.append("model_provider = \"custom\"\n");
         out.append("review_model = ").append(toml(routedModel)).append("\n\n");
+        out.append("model_context_window = 372000\nmodel_auto_compact_token_limit = 372000\n");
         // Keep the TokenPro route on the Responses API without invoking Codex's
         // first-party OpenAI login path. That path replaces the supplied key and
         // loses the account's model-group routing, which especially breaks Gemini.
@@ -315,11 +327,11 @@ final class CodexConfig {
     }
 
     private Path writeModelCatalog(List<PricedModel> models) throws Exception {
-        Path executable = Platform.codexExecutable().orElseThrow(() -> new IllegalStateException("没有找到 Codex 程序，无法生成兼容的模型列表"));
         Path output = Files.createTempFile("tokenpro-codex-models-", ".json");
         Path cleanHome = Files.createTempDirectory("tokenpro-codex-home-");
         Map<String, Object> bundled;
         try {
+            Path executable = Platform.codexExecutable().orElseThrow(() -> new IllegalStateException("Codex 未安装"));
             ProcessBuilder builder = new ProcessBuilder(executable.toString(), "debug", "models", "--bundled")
                 .redirectOutput(output.toFile()).redirectError(ProcessBuilder.Redirect.DISCARD);
             builder.environment().put("CODEX_HOME", cleanHome.toString());
@@ -330,6 +342,11 @@ final class CodexConfig {
             }
             if (process.exitValue() != 0) throw new IllegalStateException("Codex 无法提供本机模型格式");
             bundled = Json.object(Json.parse(Files.readString(output, StandardCharsets.UTF_8)));
+            if (!(bundled.get("models") instanceof List<?> list) || list.isEmpty()) throw new IOException("空模型模板");
+        } catch (Exception unavailable) {
+            // Local schema discovery is optional. It must not test model access or
+            // prevent selected model/group pairs from being written on a fresh install.
+            bundled = Map.of("models", List.of(fallbackTemplate()));
         } finally {
             Files.deleteIfExists(output);
             deleteTree(cleanHome);
@@ -368,7 +385,9 @@ final class CodexConfig {
             applyNativeCapabilities(entry, model, exact);
             entries.add(entry);
         }
-        Path target = store.root().resolve("codex-model-catalog.json");
+        // Immutable catalogs keep the previous config internally consistent until
+        // the new config's atomic rename completes, without rolling back a channel.
+        Path target = store.root().resolve("codex-models").resolve(UUID.randomUUID() + ".json");
         Files.createDirectories(target.getParent());
         Path temp = Files.createTempFile(target.getParent(), ".tokenpro-models-", ".json");
         Files.writeString(temp, Json.stringify(Map.of("models", entries)), StandardCharsets.UTF_8, StandardOpenOption.TRUNCATE_EXISTING);
@@ -377,6 +396,19 @@ final class CodexConfig {
         catch (AtomicMoveNotSupportedException e) { Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING); }
         Platform.privateFile(target);
         return target;
+    }
+
+    static Map<String,Object> fallbackTemplate() {
+        return Json.object(Json.parse("""
+            {"slug":"tokenpro-template","display_name":"TokenPro","description":"",
+             "default_reasoning_level":"high","supported_reasoning_levels":[],"shell_type":"unified_exec",
+             "visibility":"list","supported_in_api":true,"priority":1,"base_instructions":"You are a coding assistant.",
+             "supports_reasoning_summaries":false,"support_verbosity":false,"default_verbosity":null,
+             "apply_patch_tool_type":"freeform","web_search_tool_type":"text_and_image",
+             "truncation_policy":{"mode":"tokens","limit":10000},"context_window":372000,
+             "effective_context_window_percent":95,"experimental_supported_tools":[],
+             "input_modalities":["text","image"],"use_responses_lite":false}
+            """));
     }
 
     static void disableResponsesLite(Map<String, Object> entry) {

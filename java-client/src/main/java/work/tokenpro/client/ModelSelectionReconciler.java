@@ -8,9 +8,9 @@ final class ModelSelectionReconciler {
 
     static int reconcileAll(SecureStore root, String account, List<PricedModel> catalog) throws Exception {
         if(account == null || account.isBlank() || catalog == null || catalog.isEmpty()) return 0;
-        int removed = reconcile(root, "codex-selected.json", "Codex", account, catalog);
-        removed += reconcile(root, ClaudeBridgeConfig.FILE, "Claude", account, catalog);
-        removed += reconcile(root.cli("codex"), "codex-selected.json", "Codex", account, catalog);
+        // Codex selections are explicit user choices. Catalog refreshes must not
+        // prune their model/group mapping; callability is decided by the backend.
+        int removed = reconcile(root, ClaudeBridgeConfig.FILE, "Claude", account, catalog);
         return removed + reconcile(root.cli("claude"), ClaudeBridgeConfig.FILE, "Claude", account, catalog);
     }
 

@@ -41,7 +41,7 @@ final class BridgeLifecycle {
     }
 
     /** Stops and forgets the removed Codex loopback adapter after an upgrade. */
-    private static void removeLegacyCodexAdapter(SecureStore store) {
+    static void removeLegacyCodexAdapter(SecureStore store) {
         String file = "codex-image-bridge.json";
         String flag = store.isCodexCli() ? "--codex-cli-image-bridge" : "--codex-image-bridge";
         try {
@@ -58,12 +58,29 @@ final class BridgeLifecycle {
         } catch (Exception ignored) {
             // Fall through to terminating the obsolete helper process itself.
         }
-        stopLegacyCodexAdapterProcesses(flag);
-        int port = store.isCodexCli() ? 23182 : 23180;
-        if (!legacyCodexAdapterRunning(flag) && !loopbackPortOpen(port)) {
-            try { store.delete(file); } catch (Exception ignored) {}
-            try { store.delete("codex-connection-state.json"); } catch (Exception ignored) {}
+        try {
+            stopLegacyCodexAdapterProcesses(flag);
+            finishLegacyCodexCleanup(store, legacyCodexAdapterRunning(flag));
+        } catch (RuntimeException denied) {
+            try { store.write("codex-cleanup-warning.txt", "无法检查旧 Codex 图片辅助进程；请关闭旧版 TokenPro 后重试清理"); }
+            catch (Exception ignored) {}
         }
+    }
+
+    static void finishLegacyCodexCleanup(SecureStore store, boolean stillRunning) {
+        List<String> failures = new ArrayList<>();
+        if (stillRunning) {
+            failures.add("旧 Codex 图片辅助进程尚未退出");
+        } else {
+            // A different program occupying the retired port is not the old helper.
+            for (String name : List.of("codex-image-bridge.json", "codex-connection-state.json")) {
+                try { store.delete(name); } catch (Exception failure) { failures.add("无法删除 " + name); }
+            }
+        }
+        try {
+            if (failures.isEmpty()) store.delete("codex-cleanup-warning.txt");
+            else store.write("codex-cleanup-warning.txt", String.join("；", failures));
+        } catch (Exception ignored) {}
     }
 
     private static void stopLegacyCodexAdapterProcesses(String flag) {

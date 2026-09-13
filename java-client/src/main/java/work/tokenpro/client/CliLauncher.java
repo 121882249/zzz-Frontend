@@ -65,8 +65,7 @@ final class CliLauncher {
         if(client.equals("claude")) result.addAll(List.of("--settings", root.cli(client).root().resolve(ClaudeCliConfig.FILE).toAbsolutePath().toString()));
         // Codex -c accepts a raw string when the value is not valid TOML.
         // Absolute slash paths avoid nested quotes inside a Windows batch arg.
-        else result.addAll(List.of("-c", "model_catalog_json=" + ClientReconnect.cliMarker(root, client).replace('\\', '/'),
-            "-c", "model_provider=custom"));
+        else result.addAll(List.of("-c", "tokenpro_profile=" + ClientReconnect.cliMarker(root, client).replace('\\', '/')));
         result.addAll(extra);
         return result;
     }
@@ -78,7 +77,8 @@ final class CliLauncher {
         validate(client);
         SecureStore store = root.cli(client);
         if(client.equals("codex")) {
-            if(!Files.isRegularFile(store.root().resolve("home/config.toml"))) throw new IllegalStateException("请先在 TokenPro 的 Codex 命令行卡片选择模型");
+            if(store.read("codex-official-mode.txt").isEmpty() && !Files.isRegularFile(store.root().resolve("home/config.toml")))
+                throw new IllegalStateException("请先在 TokenPro 的 Codex 命令行卡片选择模型");
         } else {
             if(store.read(ClaudeCliConfig.FILE).isEmpty()) throw new IllegalStateException("请先在 TokenPro 的 Claude 命令行卡片选择模型");
             ClaudeBridgeManager.ensureRunning(store);
