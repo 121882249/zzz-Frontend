@@ -6,33 +6,42 @@ import java.util.stream.Collectors;
 
 record PricedModel(String name, String platform, String groupName, long groupId, String billingMode,
                    Double inputPrice, Double officialOutputPrice, List<ImagePrice> imagePrices,
-                   boolean subscription, double subscriptionRemaining, String subscriptionExpiresAt) {
+                   boolean subscription, double subscriptionRemaining, String subscriptionExpiresAt,
+                   String groupDescription) {
     record ImagePrice(String label, double perImage) {}
 
     PricedModel {
         imagePrices = imagePrices == null ? List.of() : List.copyOf(imagePrices);
         subscriptionExpiresAt = subscriptionExpiresAt == null ? "" : subscriptionExpiresAt;
+        groupDescription = groupDescription == null ? "" : groupDescription;
     }
 
     PricedModel(String name, String platform, String groupName, long groupId) {
-        this(name, platform, groupName, groupId, "token", null, null, List.of(), false, 0d, "");
+        this(name, platform, groupName, groupId, "token", null, null, List.of(), false, 0d, "", "");
     }
 
     PricedModel(String name, String platform, String groupName, long groupId,
                 String billingMode, Double officialOutputPrice) {
-        this(name, platform, groupName, groupId, billingMode, null, officialOutputPrice, List.of(), false, 0d, "");
+        this(name, platform, groupName, groupId, billingMode, null, officialOutputPrice, List.of(), false, 0d, "", "");
     }
 
     PricedModel(String name, String platform, String groupName, long groupId, String billingMode,
                 Double inputPrice, Double officialOutputPrice, List<ImagePrice> imagePrices) {
-        this(name, platform, groupName, groupId, billingMode, inputPrice, officialOutputPrice, imagePrices, false, 0d, "");
+        this(name, platform, groupName, groupId, billingMode, inputPrice, officialOutputPrice, imagePrices, false, 0d, "", "");
     }
 
     PricedModel(String name, String platform, String groupName, long groupId, String billingMode,
                 Double inputPrice, Double officialOutputPrice, List<ImagePrice> imagePrices,
                 boolean subscription, double subscriptionRemaining) {
         this(name, platform, groupName, groupId, billingMode, inputPrice, officialOutputPrice,
-            imagePrices, subscription, subscriptionRemaining, "");
+            imagePrices, subscription, subscriptionRemaining, "", "");
+    }
+
+    PricedModel(String name, String platform, String groupName, long groupId, String billingMode,
+                Double inputPrice, Double officialOutputPrice, List<ImagePrice> imagePrices,
+                boolean subscription, double subscriptionRemaining, String subscriptionExpiresAt) {
+        this(name, platform, groupName, groupId, billingMode, inputPrice, officialOutputPrice,
+            imagePrices, subscription, subscriptionRemaining, subscriptionExpiresAt, "");
     }
 
     boolean tokenBilled() { return billingMode == null || billingMode.isBlank() || "token".equalsIgnoreCase(billingMode); }

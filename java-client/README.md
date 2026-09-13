@@ -6,11 +6,11 @@
 
 - TokenPro 邮箱密码登录和登录状态恢复。
 - 在首页弹窗按可用分组多选 Codex / Claude 模型，使用账户的 TokenPro 全局 Key 应用配置并打开客户端。
-- 安全地保存 API Key，通过 Codex command-backed authentication 提供凭据。
+- Codex 直连配置使用 TokenPro API Key；Claude 的上游凭据仍由本机安全桥接隔离。
 - 备份、接入和一键恢复 Codex 官方配置。
 - 读取模型广场，并将选择的模型接入 Claude Desktop。
 - 登录后的“我的账户”仅显示账户余额和退出账户操作。
-- 纯 Java 本地桥接仅监听 `127.0.0.1`，支持 Anthropic Messages、OpenAI Responses、工具调用和 SSE 流式响应。
+- Claude 的纯 Java 本地桥接仅监听 `127.0.0.1`，支持 Anthropic Messages、工具调用和 SSE 流式响应；Codex 直接连接 TokenPro 后端。
 - Claude 桥接复用 TokenPro 全局 Key，并按当前选中的模型动态路由，无需切换 Key 分组。
 - 四个应用的菜单统一只有“选择模型 / 恢复配置”；连接按钮独立，未安装时提供下载入口。
 - 使用系统默认浏览器打开后台管理、使用文档、充值页和 GitHub 版本页。
@@ -37,16 +37,18 @@ Windows 上该连接流程要求原生 CLI；WSL 环境需要单独配置。
 命令行配置位于 TokenPro 数据目录的 `cli/codex` 和 `cli/claude` 子目录，选择记录和备份也独立保存。
 从 TokenPro 启动时，Codex CLI 的 `CODEX_HOME` 指向 `cli/codex/home`，Claude CLI 的
 `CLAUDE_CONFIG_DIR` 指向 `cli/claude/home`。仅向新终端传入变量，不修改系统环境。
-Claude Desktop、Codex Desktop 生图、Claude CLI、Codex CLI 生图分别使用 23179、23180、23181、23182，拥有独立路由、令牌和 helper。
-桌面端重新选模型、恢复配置或关闭桥接，不会覆盖命令行配置，反之亦然。
+Codex Desktop 与 Codex CLI 直接连接 TokenPro 后端，不启动本机代理。Claude Desktop 与 Claude CLI
+仍分别使用 23179、23181，并拥有独立路由、令牌和 helper。
+Codex 模型目录使用不展示给用户的分组限定 slug 携带模型选择时取得的 `group_id`；后端恢复公开模型名并再次校验分组权限，因此不同分组中的同名模型不会串组。
+桌面端重新选模型、恢复配置或关闭 Claude 桥接，不会覆盖命令行配置，反之亦然。
 普通终端也可以直接运行 TokenPro 数据目录下的
-`bin/tokenpro-codex` 或 `bin/tokenpro-claude`（Windows 为 .cmd）。该入口在运行前恢复对应桥接并加载独立配置。
+`bin/tokenpro-codex` 或 `bin/tokenpro-claude`（Windows 为 .cmd）。该入口在运行前加载独立配置；Claude 入口还会恢复对应桥接。
 直接输入系统原来的 `codex`/`claude` 仍采用原生配置；TokenPro 不覆盖它们，也不修改全局 PATH。
 
 ### 接入状态、图片与模型同步
 
 连接时重新核验当前账户、读取其全局 Key，并迁移已保存的配置。
-所有 Codex TokenPro 请求通过本机认证桥接，完整图片结果保存为本地文件并修复错误的 Base64 占位链接。
+所有 Codex TokenPro 请求直接发送到后端；图片结果不再由桌面客户端截获、落盘或改写。
 “已保存模型”不等于已经发生 TokenPro 请求；连接按钮提示仅在观察到当前配置的实际成功请求后显示通道已验证。
 官方通道创建的旧 Codex 任务可能保留原服务商；新建 TokenPro 对话并核对用量记录，不补扣官方请求。
 余额每 30 秒及窗口重新获得焦点时刷新；刷新失败保留原值并标明状态，不伪造扣费。
@@ -60,7 +62,7 @@ Claude 请求使用 API Key 鉴权计费，不依赖已经过期的登录页访�
 
 Codex 的桌面端和 CLI 共用模型目录导出逻辑，保留本机原生模型声明的 Ultra 及快速服务档位。
 重新应用模型时保留该模型仍支持的思考强度和服务档位；不为新配置默认开启付费加速。
-更新前暂停已运行的四类本地桥接，立即更新失败则恢复原有连接；程序重新启动时分别恢复已配置桥接。
+更新前暂停已运行的 Claude Desktop 与 Claude CLI 桥接，立即更新失败则恢复原有连接；程序重新启动时恢复已配置桥接。
 模型推理参数和快速档位是否生效仍由实际客户端版本、上游模型及账户权限决定。
 
 安装 JDK 21 后：

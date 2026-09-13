@@ -656,7 +656,6 @@ final class TokenProFrame extends JFrame {
                 OfficialConnectionCheck.check("Codex");
                 CodexChannelSwitch.run(store, Platform.codexConfig(), "openai", List.of(), () -> {
                     ClientReconnect.stopForSettings(store, "Codex", false);
-                    CodexImageBridge.stop(store);
                 }, () -> {
                     codex.restore();
                     store.write("codex-official-mode.txt", "official");
@@ -664,7 +663,6 @@ final class TokenProFrame extends JFrame {
                     if (!Platform.openApplication("Codex")) throw new IllegalStateException("无法启动 Codex");
                     ClientReconnect.awaitStarted(store, "Codex", false);
                 }, () -> {
-                    CodexImageBridge.resumeIfConfigured(store);
                     if (!Platform.openApplication("Codex")) throw new IllegalStateException("无法重新打开原渠道");
                 });
                 return true;
@@ -985,10 +983,10 @@ final class TokenProFrame extends JFrame {
 
     private void startProfile(String app, boolean cli) throws Exception {
         SecureStore target = cli ? store.cli(app.toLowerCase(Locale.ROOT)) : store;
-        boolean official = app.equals("Codex") ? target.read("codex-official-mode.txt").isPresent() || target.read(CodexImageBridge.FILE).isEmpty()
+        boolean official = app.equals("Codex") ? target.read("codex-official-mode.txt").isPresent()
             : target.read(ClaudeBridgeConfig.FILE).isEmpty();
         if (!official) {
-            if (app.equals("Codex")) CodexImageBridge.ensureRunning(target); else ClaudeBridgeManager.ensureRunning(target);
+            if (!app.equals("Codex")) ClaudeBridgeManager.ensureRunning(target);
         }
         if (cli) {
             String command = app.toLowerCase(Locale.ROOT);
@@ -1016,7 +1014,7 @@ final class TokenProFrame extends JFrame {
                 SecureStore target = cli ? store.cli(app.toLowerCase(Locale.ROOT)) : store;
                 ClientReconnect.Action stop = () -> {
                     ClientReconnect.stopForSettings(store, app, cli);
-                    if (app.equals("Codex")) CodexImageBridge.stop(target); else ClaudeBridgeManager.stop(target);
+                    if (!app.equals("Codex")) ClaudeBridgeManager.stop(target);
                 };
                 ClientReconnect.Action start = () -> { startProfile(app, cli); ClientReconnect.awaitStarted(store, app, cli); };
                 if (app.equals("Codex")) {
@@ -1089,13 +1087,14 @@ final class TokenProFrame extends JFrame {
             row.put("platform", model.platform());
             row.put("group_name", model.groupName());
             row.put("group_id", model.groupId());
+            row.put("group_description", model.groupDescription());
             return row;
         }).toList();
     }
 
     private static List<PricedModel> uniqueModels(List<PricedModel> models) {
         Map<String, PricedModel> unique = new LinkedHashMap<>();
-        for (PricedModel model : models) unique.putIfAbsent(model.name(), model);
+        for (PricedModel model : models) unique.putIfAbsent(model.groupId() + "\u0000" + model.name(), model);
         return List.copyOf(unique.values());
     }
 
@@ -1166,9 +1165,8 @@ final class TokenProFrame extends JFrame {
                     showBalance(user); saveSession(user);
                     String tooltip = "余额自动刷新于 " + java.time.LocalTime.now().withNano(0);
                     headerBalance.setToolTipText(tooltip); accountBalance.setToolTipText(tooltip);
-                    if (codexLaunch != null) codexLaunch.setToolTipText(ConnectionEvidence.verified(store)
-                        ? "已观察到当前配置的 TokenPro 请求；实际费用请查用量记录"
-                        : "尚未观察到当前配置的 TokenPro 请求；仅模型名称不能证明已接入");
+                    if (codexLaunch != null) codexLaunch.setToolTipText(
+                        "Codex 直连 TokenPro；实际请求与费用请查用量记录");
                 } catch (Exception ignored) {
                     headerBalance.setToolTipText("余额刷新失败，当前显示上次结果，请点击刷新重试");
                     accountBalance.setToolTipText(headerBalance.getToolTipText());
@@ -1998,7 +1996,6 @@ final class TokenProFrame extends JFrame {
             // older history snapshot. `openApplication` raises the existing
             // single-instance app or starts it when it is not running.
             protected Boolean doInBackground() throws Exception {
-                if ("Codex".equals(app)) CodexImageBridge.resumeIfConfigured(store);
                 return Platform.openApplication(app);
             }
             protected void done() {
@@ -2067,16 +2064,14 @@ final class TokenProFrame extends JFrame {
                 if (!Objects.equals(token, accessToken)) throw new IllegalStateException("账户已变化，连接已取消；设置未修改");
                 if (app.equals("Codex")) {
                     Path configPath = cli ? target.root().resolve("home/config.toml") : Platform.codexConfig();
-                    CodexChannelSwitch.run(target, configPath, "custom", selected.stream().map(PricedModel::name).toList(), () -> {
+                    CodexChannelSwitch.run(target, configPath, "custom", selected.stream().map(CodexConfig::routedModelId).toList(), () -> {
                         ClientReconnect.stopForSettings(store, app, cli);
-                        CodexImageBridge.stop(target);
                     }, () -> {
                         CodexConfig config = cli ? new CodexConfig(target, configPath) : codex;
                         config.apply("https://tokenpro.work/v1", selected, key.key(), accountLabel);
                         saveCodexSelection(target, selected, key, owner);
                         if (cli) CliLauncher.install(store, command);
                     }, () -> {
-                        CodexImageBridge.ensureRunning(target);
                         if (cli) Platform.openTerminalProgram(CliLauncher.install(store, command), List.of(), Map.of());
                         else if (!Platform.openApplication(app)) throw new IllegalStateException("无法启动 Codex");
                         ClientReconnect.awaitStarted(store, app, cli);
@@ -2133,7 +2128,9 @@ final class TokenProFrame extends JFrame {
         for (Object raw : ClaudeAdapter.list(saved.get("models"))) {
             Map<String,Object> row = Json.object(raw);
             if (row.get("group_id") instanceof Number group && row.get("name") instanceof String name && !name.isBlank())
-                models.add(new PricedModel(name, string(row.get("platform")), string(row.get("group_name")), group.longValue()));
+                models.add(new PricedModel(name, string(row.get("platform")), string(row.get("group_name")), group.longValue(),
+                    "token", null, null, List.of(), false, 0d, "",
+                    string(row.get("group_description"))));
         }
         return uniqueModels(models);
     }

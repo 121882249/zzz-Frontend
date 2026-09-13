@@ -128,9 +128,10 @@ final class ConnectionRegressionTest {
             check(Platform.desktopProcessMatches(os, "Codex", codex) && !Platform.desktopProcessMatches(os, "Claude", codex), os + " Codex isolation"); passed++;
             check(Platform.desktopProcessMatches(os, "Claude", claude) && !Platform.desktopProcessMatches(os, "Codex", claude), os + " Claude isolation"); passed++;
         }
-        String provider = CodexConfig.providerConfiguration("custom", "http://127.0.0.1:23180/v1", "fixture", "test", null);
-        check(provider.contains("requires_openai_auth = false") && provider.contains("/v1\""), "API-key route stays on authenticated adapter"); passed++;
-        try { CodexConfig.providerConfiguration("openai", "http://127.0.0.1:23180/v1", "fixture", "test", null); throw new AssertionError("reserved provider overwritten"); }
+        String provider = CodexConfig.providerConfiguration("custom", "https://tokenpro.work/v1", "fixture", "test", 16L);
+        check(provider.contains("requires_openai_auth = false") && provider.contains("base_url = \"https://tokenpro.work/v1\"")
+            && provider.contains("x-tokenpro-group-id\" = \"16\""), "Codex connects directly with a same-group routing hint"); passed++;
+        try { CodexConfig.providerConfiguration("openai", "https://tokenpro.work/v1", "fixture", "test", null); throw new AssertionError("reserved provider overwritten"); }
         catch (IllegalArgumentException expected) { passed++; }
         for (Object content : List.of(List.of(), List.of(Map.of("type", "text", "text", "  ")),
             List.of(Map.of("type", "thinking", "thinking", "not a final answer")))) {
@@ -179,14 +180,6 @@ final class ConnectionRegressionTest {
                 check(!ClientReconnect.managedCliMatches(client, "/native/" + client, List.of(), marker), "ordinary " + client + " is never closed"); passed++;
                 check(!ClientReconnect.managedCliMatches(client, "/native/" + client, args, marker + "-other"), "other " + client + " profile is never closed"); passed++;
             }
-            store.write(CodexImageBridge.FILE, Json.stringify(Map.of("revision", "new", "token", "fixture", "key", "unused")));
-            check(!ConnectionEvidence.verified(store), "saved configuration is not connection evidence"); passed++;
-            ConnectionEvidence.received(store, "old", "gpt-test", 200, "fixture-request");
-            check(!ConnectionEvidence.verified(store), "previous account/config request is not evidence for this config"); passed++;
-            ConnectionEvidence.received(store, "new", "gpt-test", 401, "fixture-request");
-            check(!ConnectionEvidence.verified(store), "authentication error is not a verified connection"); passed++;
-            ConnectionEvidence.received(store, "new", "gpt-test", 200, "fixture-request");
-            check(ConnectionEvidence.verified(store), "actual current successful upstream request verifies route, not cost"); passed++;
             String image = "gpt-image-2.5-flare";
             store.write("codex-selected.json", Json.stringify(Map.of("models", List.of(Map.of("name", image, "group_id", 65, "platform", "openai", "group_name", "images")))));
             check(TokenProFrame.savedCodexModels(store).getFirst().isImageGeneration(), "old saved image selection is migrated on Connect"); passed++;

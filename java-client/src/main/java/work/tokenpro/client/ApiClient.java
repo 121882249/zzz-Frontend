@@ -123,6 +123,7 @@ final class ApiClient {
             Double userRate = decimal(group.get("user_rate_multiplier"));
             Double groupRate = decimal(group.get("rate_multiplier"));
             double effectiveRate = validRate(userRate) ? userRate : validRate(groupRate) ? groupRate : 1d;
+            String groupDescription = text(group.getOrDefault("description", allowed.getOrDefault("description", "")));
             for (Object rawModel : models) {
                 Map<String, Object> model = Json.object(rawModel);
                 String modelName = text(model.get("name"));
@@ -143,7 +144,8 @@ final class ApiClient {
                     imagePrices(pricing),
                     subscription,
                     subscriptionBalances.getOrDefault(groupId, 0d),
-                    subscriptionExpiries.getOrDefault(groupId, "")
+                    subscriptionExpiries.getOrDefault(groupId, ""),
+                    groupDescription
                 ));
             }
         }

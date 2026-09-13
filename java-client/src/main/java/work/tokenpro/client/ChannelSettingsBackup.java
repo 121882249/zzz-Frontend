@@ -15,7 +15,7 @@ final class ChannelSettingsBackup {
         List<Path> paths = new ArrayList<>();
         paths.add(config);
         for (String name : List.of("codex-original.toml", "codex-selected.json", "codex-model-catalog.json",
-                "codex-official-mode.txt", CodexImageBridge.FILE, ConnectionEvidence.FILE)) paths.add(store.root().resolve(name));
+                "codex-official-mode.txt")) paths.add(store.root().resolve(name));
         return paths;
     }
     static List<Path> claudePaths(SecureStore store, boolean cli) throws Exception {

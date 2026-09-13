@@ -8,11 +8,11 @@ TokenPro 现在只有一套 Java 21/Swing 客户端源码，支持 Windows、mac
 
 最新版客户端提供 4 条彼此隔离的接入路径。面向最终用户的图文教程以 [TokenPro 使用文档](https://tokenpro.work/docs) 为准，包含安装检查、模型选择、连接验证、恢复官方配置和常见问题。
 
-| 接入方式 | 配置隔离 | 本地桥接 | 适用场景 |
+| 接入方式 | 配置隔离 | 网络路径 | 适用场景 |
 |---|---|---|---|
-| Codex 客户端 | 独立 Codex 配置与认证 | 图片桥接 `127.0.0.1:23180` | 桌面图形界面、对话与生图 |
+| Codex 客户端 | 独立 Codex 配置与认证 | 直连 `tokenpro.work` | 桌面图形界面、对话与生图 |
 | Claude 客户端 | 独立 Claude 第三方账户 | `127.0.0.1:23179` | Claude Desktop 图形界面 |
-| Codex CLI | 独立 `CODEX_HOME` | 图片桥接 `127.0.0.1:23182` | 终端开发、脚本和 Agent 任务 |
+| Codex CLI | 独立 `CODEX_HOME` | 直连 `tokenpro.work` | 终端开发、脚本和 Agent 任务 |
 | Claude Code | 独立 `CLAUDE_CONFIG_DIR` | `127.0.0.1:23181` | Claude Code 终端工作流 |
 
 ```mermaid
@@ -37,7 +37,7 @@ TokenPro 不修改系统全局 PATH，也不会用命令行配置覆盖桌面端
 - 登录后的“我的账户”仅显示账户余额和退出账户操作。
 - 从模型广场选择 Codex 模型，自动创建专用 Key、应用配置，并可一键恢复官方配置。
 - 通过纯 Java 本地桥接把 TokenPro 模型接入 Claude Desktop，支持模型分组自动切换、工具调用和流式响应。
-- API Key 保存在当前系统用户的 TokenPro 私有配置目录，不写入 `config.toml`。
+- Codex 直连时将 TokenPro API Key 写入其独立配置；Claude 的上游 Key 仍只保存在 TokenPro 私有目录。
 - “我的应用”提供“选择模型 / 恢复官方配置 / 连接客户端”；命令行工具提供下载入口和连接命令行。
 - 在 TokenPro 内置浏览器中打开后台管理、使用文档、充值页和版本下载页。
 - 启动后自动检查更新并提醒，也可手动检查；支持启动 Codex、Claude、Codex CLI 与 Claude Code。

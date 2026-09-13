@@ -1,5 +1,8 @@
 package work.tokenpro.client;
 
+import java.net.URI;
+import java.net.http.*;
+import java.time.Duration;
 import java.util.*;
 
 final class BridgeLifecycle {
@@ -9,8 +12,6 @@ final class BridgeLifecycle {
 
     static List<Bridge> running(SecureStore root) throws Exception {
         List<Bridge> bridges = new ArrayList<>();
-        for(SecureStore store : List.of(root, root.cli("codex"))) if(CodexImageBridge.healthy(store))
-            bridges.add(new Bridge(store.isCodexCli() ? "Codex CLI" : "Codex", () -> CodexImageBridge.stop(store), () -> CodexImageBridge.ensureRunning(store)));
         for(SecureStore store : List.of(root, root.cli("claude"))) if(ClaudeBridgeManager.healthy(store))
             bridges.add(new Bridge(store.isClaudeCli() ? "Claude CLI" : "Claude", () -> ClaudeBridgeManager.stop(store), () -> ClaudeBridgeManager.ensureRunning(store)));
         return bridges;
@@ -28,14 +29,35 @@ final class BridgeLifecycle {
     }
 
     static void resumeConfigured(SecureStore root) throws Exception {
+        removeLegacyCodexAdapter(root);
+        removeLegacyCodexAdapter(root.cli("codex"));
         List<Bridge> configured = new ArrayList<>();
-        for(SecureStore store : List.of(root, root.cli("codex"))) if(store.read(CodexImageBridge.FILE).isPresent())
-            configured.add(new Bridge("Codex", () -> {}, () -> CodexImageBridge.ensureRunning(store)));
         for(SecureStore store : List.of(root, root.cli("claude"))) if(store.read(ClaudeBridgeConfig.FILE).isPresent())
             configured.add(new Bridge("Claude", () -> {}, () -> ClaudeBridgeManager.ensureRunning(store)));
         Exception failure = null;
         for(Bridge bridge : configured) try { bridge.resume().run(); }
         catch(Exception e) { if(failure == null) failure = e; else failure.addSuppressed(e); }
         if(failure != null) throw failure;
+    }
+
+    /** Stops and forgets the removed Codex loopback adapter after an upgrade. */
+    private static void removeLegacyCodexAdapter(SecureStore store) {
+        String file = "codex-image-bridge.json";
+        try {
+            Map<String,Object> legacy = Json.object(Json.parse(store.read(file).orElse("{}")));
+            String token = Objects.toString(legacy.get("token"), "").trim();
+            if (!token.isEmpty()) {
+                int port = store.isCodexCli() ? 23182 : 23180;
+                HttpRequest request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/v1/shutdown"))
+                    .timeout(Duration.ofSeconds(2)).header("Authorization", "Bearer " + token)
+                    .POST(HttpRequest.BodyPublishers.noBody()).build();
+                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(1)).build()
+                    .send(request, HttpResponse.BodyHandlers.discarding());
+            }
+        } catch (Exception ignored) {
+            // Cleanup must never prevent the direct client from starting.
+        }
+        try { store.delete(file); } catch (Exception ignored) {}
+        try { store.delete("codex-connection-state.json"); } catch (Exception ignored) {}
     }
 }

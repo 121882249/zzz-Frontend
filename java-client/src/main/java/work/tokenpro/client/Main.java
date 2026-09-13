@@ -19,14 +19,6 @@ public final class Main {
             }
             return;
         }
-        if (args.length == 1 && "--codex-cli-image-bridge".equals(args[0])) {
-            try (CodexImageBridge bridge = new CodexImageBridge(store.cli("codex"))) { bridge.await(); }
-            return;
-        }
-        if (args.length == 1 && "--codex-image-bridge".equals(args[0])) {
-            try (CodexImageBridge bridge = new CodexImageBridge(store)) { bridge.await(); }
-            return;
-        }
         if (claudeTokenRequest(args, System.getenv().containsKey("CLAUDE_HELPER_CONTEXT"))) {
             ClaudeBridgeManager.ensureRunning(store);
             System.out.print(ClaudeBridgeConfig.load(store).localToken());

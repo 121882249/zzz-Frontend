@@ -59,9 +59,7 @@ final class ApplicationLaunchTest {
             PricedModel model = new PricedModel("claude-test", "anthropic", "Claude", 1);
             int desktopPort = ClaudeBridgeConfig.create("1", "unused", key, List.of(model)).port();
             int cliPort = ClaudeBridgeConfig.createCli("1", "unused", key, List.of(model)).port();
-            check(Set.of(desktopPort, cliPort, java.net.URI.create(CodexImageBridge.baseUrl(store)).getPort(),
-                java.net.URI.create(CodexImageBridge.baseUrl(store.cli("codex"))).getPort()).size() == 4,
-                "all four connection ports are distinct"); passed++;
+            check(desktopPort != cliPort, "Claude desktop and CLI connection ports are distinct"); passed++;
         } finally {
             try (var paths = Files.walk(root)) {
                 for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path);

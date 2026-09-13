@@ -10,7 +10,6 @@ final class SelfTest {
     static void run() throws Exception {
         int passed = 0;
         passed += ChannelSwitchTest.run();
-        passed += CodexImageTest.run();
         Map<String, Object> value = Json.object(Json.parse("{\"name\":\"TokenPro\",\"items\":[1,true,null],\"n\":12}"));
         check("TokenPro".equals(value.get("name")), "JSON string"); passed++;
         check(value.get("items") instanceof List<?> list && list.size() == 3, "JSON array"); passed++;
@@ -55,7 +54,12 @@ final class SelfTest {
         String preservedCustom = CodexConfig.restoreWithHistoryCompatibility(userCustom);
         check(preservedCustom.indexOf("[model_providers.custom]") == preservedCustom.lastIndexOf("[model_providers.custom]") && preservedCustom.contains("name = \"Private\""), "existing custom provider is not duplicated"); passed++;
         check("https://tokenpro.work/v1".equals(CodexConfig.providerBaseUrl("https://tokenpro.work/v1")), "Codex provider keeps v1 route"); passed++;
-        String managedActor = "# >>> TokenPro managed >>>\n[model_providers.custom]\nname = \"Codex\"\nhttp_headers = { \"x-openai-actor-authorization\" = \"Codex\", \"x-tokenpro-image-model\" = \"gpt-image\" }\n# <<< TokenPro managed <<<\n";
+        check("tp-g16-Z3B0LTUuNi1zb2w".equals(CodexConfig.routedModelId(
+            new PricedModel("gpt-5.6-sol", "openai", "GPT", 16))), "direct Codex model slug pins its exact group"); passed++;
+        check(!CodexConfig.routedModelId(new PricedModel("same-model", "openai", "A", 16)).equals(
+            CodexConfig.routedModelId(new PricedModel("same-model", "openai", "B", 65))),
+            "same model name in different groups cannot share a direct route"); passed++;
+        String managedActor = "# >>> TokenPro managed >>>\n[model_providers.custom]\nname = \"Codex\"\nhttp_headers = { \"x-openai-actor-authorization\" = \"Codex\" }\n# <<< TokenPro managed <<<\n";
         String emailActor = CodexConfig.withActor(managedActor, "user@example.com");
         check(emailActor.contains("name = \"user@example.com\"") && emailActor.contains("\"x-openai-actor-authorization\" = \"user@example.com\""), "existing Codex actor migrates to account email"); passed++;
         check(Platform.dataDirectory().endsWith("TokenPro"), "platform data directory"); passed++;
@@ -189,6 +193,9 @@ final class SelfTest {
         check(((List<?>) nativeExport.get("supported_reasoning_levels")).isEmpty(), "image models never inherit reasoning levels"); passed++;
         check("GPT⁠-Image-2.5-Sunburst".equals(CodexConfig.catalogDisplayName(new PricedModel("gpt-image-2.5-sunburst", "openai", "GPT", 17))), "catalog omits model category"); passed++;
         check("Claude-Sonnet-5".equals(CodexConfig.catalogDisplayName(new PricedModel("claude-sonnet-5", "anthropic", "Claude", 17))), "LLM catalog uses model name only"); passed++;
+        check("GPT⁠-5.6-Sol「专业分组 稳定高速」".equals(CodexConfig.catalogDisplayName(new PricedModel(
+            "gpt-5.6-sol", "openai", "专业组", 65, "token", null, null, List.of(), false, 0d, "", "专业分组\n稳定高速"), true)),
+            "duplicate Codex model names show their group description"); passed++;
         Map<String, Object> customModel = new LinkedHashMap<>(Map.of("use_responses_lite", true));
         CodexConfig.disableResponsesLite(customModel);
         check(Boolean.FALSE.equals(customModel.get("use_responses_lite")), "custom provider disables Responses Lite"); passed++;

@@ -79,7 +79,6 @@ final class CliLauncher {
         SecureStore store = root.cli(client);
         if(client.equals("codex")) {
             if(!Files.isRegularFile(store.root().resolve("home/config.toml"))) throw new IllegalStateException("请先在 TokenPro 的 Codex 命令行卡片选择模型");
-            CodexImageBridge.resumeIfConfigured(store);
         } else {
             if(store.read(ClaudeCliConfig.FILE).isEmpty()) throw new IllegalStateException("请先在 TokenPro 的 Claude 命令行卡片选择模型");
             ClaudeBridgeManager.ensureRunning(store);

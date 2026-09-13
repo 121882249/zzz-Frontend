@@ -45,14 +45,12 @@ final class CodexConfig {
         // Image models stay in their own picker group and are also written to
         // Codex's catalog so they can run directly without a selected LLM.
         Optional<String> previousCatalog = store.read("codex-model-catalog.json");
-        Optional<String> previousBridge = store.read(CodexImageBridge.FILE);
         try {
         Path catalog = writeModelCatalog(models);
-        // Every TokenPro connection uses the authenticated adapter, including
-        // an older chat whose model is changed to an image model inside Codex.
-        boolean bridged = url.equals("https://tokenpro.work/v1");
-        String localToken = bridged ? CodexImageBridge.configure(store, url, key.trim(), models) : key.trim();
-        String block = managedBlock(bridged ? CodexImageBridge.baseUrl(store) : url, primaryModel, imageModel, catalog, localToken, actor, current, historicalProviderIds());
+        // Codex connects to TokenPro directly. Every catalog slug carries its
+        // exact group; a static header is added only when all selections share
+        // one group, for compatibility with older plain-model conversations.
+        String block = managedBlock(url, primaryModel, catalog, key.trim(), actor, current, historicalProviderIds(), commonGroup(models));
         validate(block);
         // TokenPro owns the active Codex config while connected. Replacing the
         // file avoids ambiguous TOML merges and duplicate keys; restore() puts
@@ -62,10 +60,6 @@ final class CodexConfig {
         } catch (Exception failure) {
             if (previousCatalog.isPresent()) store.write("codex-model-catalog.json", previousCatalog.get());
             else store.delete("codex-model-catalog.json");
-            if (url.equals("https://tokenpro.work/v1")) {
-                if (previousBridge.isPresent()) store.write(CodexImageBridge.FILE, previousBridge.get());
-                else { try { CodexImageBridge.stop(store); } catch (Exception ignored) {} store.delete(CodexImageBridge.FILE); }
-            }
             throw failure;
         }
     }
@@ -92,9 +86,6 @@ final class CodexConfig {
         }
         store.delete("codex-original.toml");
         store.delete("codex-model-catalog.json");
-        CodexImageBridge.stop(store);
-        store.delete(CodexImageBridge.FILE);
-        store.delete(ConnectionEvidence.FILE);
         return changed;
     }
 
@@ -265,25 +256,26 @@ final class CodexConfig {
         return current.substring(0, start) + managed + current.substring(end);
     }
 
-    private String managedBlock(String url, PricedModel model, PricedModel imageModel, Path catalog, String key, String actor, String current, Collection<String> historicalProviderIds) throws IOException {
+    private String managedBlock(String url, PricedModel model, Path catalog, String key, String actor, String current, Collection<String> historicalProviderIds, Long groupId) throws IOException {
         StringBuilder out = new StringBuilder();
+        String routedModel = routedModelId(model);
         out.append(START).append('\n');
-        out.append("model = ").append(toml(model.name())).append('\n');
+        out.append("model = ").append(toml(routedModel)).append('\n');
         out.append("model_provider = \"custom\"\n");
-        out.append("review_model = ").append(toml(model.name())).append("\n\n");
+        out.append("review_model = ").append(toml(routedModel)).append("\n\n");
         // Keep the TokenPro route on the Responses API without invoking Codex's
         // first-party OpenAI login path. That path replaces the supplied key and
         // loses the account's model-group routing, which especially breaks Gemini.
         Map<String, Object> catalogRoot = Json.object(Json.parse(Files.readString(catalog)));
         Map<String, Object> profile = ((List<?>) catalogRoot.get("models")).stream().map(Json::object)
-            .filter(entry -> model.name().equals(entry.get("slug"))).findFirst().orElseThrow();
+            .filter(entry -> routedModel.equals(entry.get("slug"))).findFirst().orElseThrow();
         out.append(CodexPreferences.retainedLines(current, profile));
         out.append("model_context_window = 372000\n");
         out.append("model_auto_compact_token_limit = 372000\n\n");
         out.append("model_catalog_json = ").append(toml(catalog.toAbsolutePath().toString())).append("\n\n");
-        out.append(providerConfiguration("custom", url, key, actor, imageModel));
+        out.append(providerConfiguration("custom", url, key, actor, groupId));
         historicalProviderIds.stream().filter(id -> !"custom".equals(id)).filter(CodexConfig::compatibleProviderId).sorted()
-            .forEach(id -> out.append(providerConfiguration(id, url, key, actor, imageModel)));
+            .forEach(id -> out.append(providerConfiguration(id, url, key, actor, groupId)));
         // Codex reserves built-in provider IDs; never overwrite 'openai'.
         // Official threads may retain their provider; the UI must not claim
         // they have switched just because this default config was saved.
@@ -291,7 +283,7 @@ final class CodexConfig {
         return out.toString();
     }
 
-    static String providerConfiguration(String id, String url, String key, String actor, PricedModel imageModel) {
+    static String providerConfiguration(String id, String url, String key, String actor, Long groupId) {
         StringBuilder out = new StringBuilder(providerHeader(id)).append('\n');
         out.append("name = ").append(toml(actor)).append('\n');
         // Keep /v1 in the provider URL. Codex appends /responses to this value;
@@ -302,7 +294,7 @@ final class CodexConfig {
         out.append("requires_openai_auth = false\n");
         out.append("experimental_bearer_token = ").append(toml(key)).append('\n');
         out.append("http_headers = { \"x-openai-actor-authorization\" = ").append(toml(actor));
-        if (imageModel != null) out.append(", \"x-tokenpro-image-model\" = ").append(toml(imageModel.name()));
+        if (groupId != null) out.append(", \"x-tokenpro-group-id\" = ").append(toml(Long.toString(groupId)));
         out.append(" }\n");
         out.append("supports_websockets = false\n\n");
         return out.toString();
@@ -310,6 +302,18 @@ final class CodexConfig {
 
     static String providerBaseUrl(String url) {
         return url;
+    }
+
+    private static Long commonGroup(List<PricedModel> models) {
+        if (models.isEmpty()) return null;
+        long group = models.getFirst().groupId();
+        return models.stream().allMatch(model -> model.groupId() == group) ? group : null;
+    }
+
+    static String routedModelId(PricedModel model) {
+        String encoded = Base64.getUrlEncoder().withoutPadding()
+            .encodeToString(model.name().getBytes(StandardCharsets.UTF_8));
+        return "tp-g" + model.groupId() + "-" + encoded;
     }
 
     private Path writeModelCatalog(List<PricedModel> models) throws Exception {
@@ -340,6 +344,8 @@ final class CodexConfig {
             bySlug.put(String.valueOf(template.getOrDefault("slug", "")), template);
         }
         List<Map<String, Object>> entries = new ArrayList<>();
+        Map<String, Long> nameCounts = new HashMap<>();
+        for (PricedModel model : models) nameCounts.merge(model.name().toLowerCase(Locale.ROOT), 1L, Long::sum);
         int priority = 1;
         for (PricedModel model : models) {
             Map<String, Object> exact = bySlug.get(model.name());
@@ -347,8 +353,9 @@ final class CodexConfig {
             if (closest == null) closest = bySlug.get("gpt-5.6-sol");
             if (closest == null) closest = bySlug.values().stream().min(Comparator.comparing(item -> String.valueOf(item.get("slug")))).orElseThrow();
             Map<String, Object> entry = deepCopy(closest);
-            entry.put("slug", model.name());
-            entry.put("display_name", catalogDisplayName(model));
+            entry.put("slug", routedModelId(model));
+            entry.put("display_name", catalogDisplayName(model,
+                nameCounts.getOrDefault(model.name().toLowerCase(Locale.ROOT), 0L) > 1));
             entry.put("description", model.groupName() + " · TokenPro");
             entry.put("visibility", "list");
             entry.put("supported_in_api", true);
@@ -432,6 +439,13 @@ final class CodexConfig {
 
     static String catalogDisplayName(PricedModel model) {
         return model.codexDisplayName();
+    }
+
+    static String catalogDisplayName(PricedModel model, boolean duplicateName) {
+        if (!duplicateName) return catalogDisplayName(model);
+        String description = model.groupDescription().replaceAll("\\s+", " ").trim();
+        if (description.isEmpty()) description = model.displayGroupName();
+        return catalogDisplayName(model) + "「" + description + "」";
     }
 
     private static Map<String, Object> reasoningLevel(String effort) {

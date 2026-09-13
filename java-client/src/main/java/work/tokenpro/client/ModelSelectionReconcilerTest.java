@@ -28,6 +28,13 @@ final class ModelSelectionReconcilerTest {
             List<PricedModel> selected = ModelSelectionReconciler.currentModels(List.of(old, live, live), catalog, "Codex");
             check(selected.equals(List.of(live)), "connection preflight prunes duplicates and cannot choose another group's same-name model"); passed++;
             check(ModelSelectionReconciler.currentModels(List.of(image), List.of(image, fresh), "Claude").isEmpty(), "Claude never retains image-only models"); passed++;
+            PricedModel sameNameGroup7 = new PricedModel("GPT-Same", "openai", "Group 7", 7);
+            PricedModel sameNameGroup8 = new PricedModel("GPT-Same", "openai", "Group 8", 8);
+            String selectionBeforeDuplicateTest = store.read("codex-selected.json").orElseThrow();
+            store.write("codex-selected.json", Json.stringify(Map.of("models", rows(List.of(sameNameGroup7, sameNameGroup8)))));
+            check(TokenProFrame.savedCodexModels(store).equals(List.of(sameNameGroup7, sameNameGroup8)),
+                "saved Codex selections retain the same model name in different groups"); passed++;
+            store.write("codex-selected.json", selectionBeforeDuplicateTest);
             ClaudeBridgeConfig bridge = ClaudeBridgeConfig.create("18", "fixture-access", new ApiClient.ManagedKey(91, "fixture-upstream"), List.of(old, live));
             bridge.save(store);
             String alias = bridge.routes().get(1).alias();

@@ -149,20 +149,20 @@ internal static class IncrementalBootstrap {
                 if(String.IsNullOrEmpty(executable)) throw new IOException("无法确认某个 TokenPro 进程的安装位置，未关闭任何程序");
                 if(!String.Equals(Path.GetFullPath(executable), launcher, StringComparison.OrdinalIgnoreCase)) continue;
                 string command = Convert.ToString(process["CommandLine"]).Trim();
-                Match flag = Regex.Match(command, @"(?:^|\s)(--(?:claude(?:-cli)?-bridge|codex(?:-cli)?-image-bridge))\s*$");
+                Match flag = Regex.Match(command, @"(?:^|\s)(--claude(?:-cli)?-bridge)\s*$");
                 if(!flag.Success) throw new IOException("请先退出所选位置的 TokenPro 窗口，再重试；无需关闭 Codex 或 Claude");
-                bool codex = flag.Groups[1].Value.StartsWith("--codex", StringComparison.Ordinal), cli = flag.Groups[1].Value.Contains("-cli-");
+                bool cli = flag.Groups[1].Value.Contains("-cli-");
                 string profile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TokenPro");
-                if(cli) profile = Path.Combine(profile, "cli", codex ? "codex" : "claude");
-                string file = Path.Combine(profile, codex ? "codex-image-bridge.json" : "claude-bridge.json");
+                if(cli) profile = Path.Combine(profile, "cli", "claude");
+                string file = Path.Combine(profile, "claude-bridge.json");
                 PlainPath(file);
                 var config = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(File.ReadAllText(file));
-                string token = Convert.ToString(config[codex ? "token" : "local_token"]);
+                string token = Convert.ToString(config["local_token"]);
                 if(!Regex.IsMatch(token, @"^[A-Za-z0-9_-]{20,200}$")) throw new IOException("本机连接凭据无效，未停止连接");
-                int port = codex ? (cli ? 23182 : 23180) : Convert.ToInt32(config["port"]);
+                int port = Convert.ToInt32(config["port"]);
                 if(port <= 1024 || port > 65535) throw new IOException("本机连接端口无效");
                 found.Add(new Bridge { Pid = Convert.ToInt32(process["ProcessId"]), Flag = flag.Groups[1].Value, Token = token,
-                    Url = "http://127.0.0.1:" + port + (codex ? "/v1" : ""), Service = codex ? "tokenpro-codex-images-v1" : "tokenpro-claude-bridge-v1" });
+                    Url = "http://127.0.0.1:" + port, Service = "tokenpro-claude-bridge-v1" });
             }
         }
         return found;
