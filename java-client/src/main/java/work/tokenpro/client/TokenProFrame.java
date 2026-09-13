@@ -783,6 +783,7 @@ final class TokenProFrame extends JFrame {
 
     private void restoreSession() {
         status("正在恢复登录…");
+        loginView.setRestoringSession();
         new SwingWorker<Map<String, Object>, Void>() {
             protected Map<String, Object> doInBackground() throws Exception {
                 Optional<String> raw = store.read("java-session.json");
@@ -810,7 +811,8 @@ final class TokenProFrame extends JFrame {
                     accessToken = null; refreshToken = ""; tokenExpiresAt = 0; sessionUser = Map.of(); accountId = "";
                     restoreRememberedEmail();
                     status("请重新登录"); showLoginScreen();
-                    loginView.setLoading(false, ApiClient.isUnauthorized(cause) ? "登录已失效，请重新登录" : "暂时无法恢复登录，可重试或检查更新");
+                    loginView.setLoading(false, ApiClient.isUnauthorized(cause) ? "登录已失效，请重新输入密码" : "暂时无法恢复登录，请输入密码重试");
+                    loginView.focusPassword();
                 }
             }
         }.execute();

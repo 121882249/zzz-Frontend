@@ -4,6 +4,7 @@ import javax.swing.*;
 
 final class LoginControlsTest {
     static int run() throws Exception {
+        java.util.concurrent.atomic.AtomicInteger loginChecks = new java.util.concurrent.atomic.AtomicInteger();
         SwingUtilities.invokeAndWait(() -> {
             JButton fixed = TokenProFrame.connectionActionButton();
             java.awt.Dimension fixedSize = fixed.getPreferredSize();
@@ -26,8 +27,22 @@ final class LoginControlsTest {
             TokenProFrame.applyCliActionState(fixed, new JButton(), new JLabel(), "Claude", true, true, 2, true);
             check(fixedSize.equals(fixed.getPreferredSize()) && fixedSize.equals(fixed.getMinimumSize())
                 && fixedSize.equals(fixed.getMaximumSize()), "connection label changes never resize or shift the action row");
+
+            JTextField email = new JTextField("saved@example.com");
+            JPasswordField password = new JPasswordField();
+            CosmosLoginPanel login = new CosmosLoginPanel(email, password, event -> {}, event -> {}, event -> {}, event -> {});
+            login.setRestoringSession();
+            check(!email.isEnabled() && !password.isEnabled() && !login.registerButton().isEnabled()
+                && !login.forgotPasswordButton().isEnabled() && !login.loginButton().isEnabled()
+                && login.loginButton().getText().equals("正在登录"), "session restore is visibly busy and does not ask for a password");
+            loginChecks.incrementAndGet();
+            login.setLoading(false, "登录已失效，请重新输入密码");
+            check(email.isEnabled() && password.isEnabled() && login.registerButton().isEnabled()
+                && login.forgotPasswordButton().isEnabled() && login.loginButton().isEnabled()
+                && login.loginButton().getText().equals("登录"), "failed restore returns the login form to an interactive state");
+            loginChecks.incrementAndGet();
         });
-        return 11;
+        return 11 + loginChecks.get();
     }
     private static void check(boolean value, String message) { if (!value) throw new AssertionError(message); }
 }

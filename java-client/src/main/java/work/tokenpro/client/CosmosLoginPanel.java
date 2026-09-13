@@ -21,11 +21,17 @@ final class CosmosLoginPanel extends JPanel {
     private final JButton updateButton = TokenProFrame.headerControl("检查更新", 168);
     private final JLabel feedback = label("邮箱保存在当前设备，密码不会保存", 11, Font.PLAIN, new Color(145, 156, 191));
     private final ServerStatusIndicator serverStatus = new ServerStatusIndicator(false);
+    private final JTextField emailField;
+    private final JPasswordField passwordField;
+    private RoundedInput emailInput;
+    private RoundedInput passwordInput;
 
     CosmosLoginPanel(JTextField email, JPasswordField password, ActionListener loginAction,
                      ActionListener registerAction, ActionListener forgotPasswordAction,
                      ActionListener updateAction) {
         super(new BorderLayout());
+        this.emailField = email;
+        this.passwordField = password;
         setOpaque(false);
         setBorder(new EmptyBorder(32, 44, 34, 44));
 
@@ -111,7 +117,9 @@ final class CosmosLoginPanel extends JPanel {
         field.setSelectedTextColor(TEXT);
         field.setOpaque(false);
         field.setBorder(new EmptyBorder(0, 14, 0, 14));
-        RoundedInput input = new RoundedInput(field);
+        RoundedInput input = new RoundedInput(field, field == passwordField ? "••••••••" : "");
+        if (field == emailField) emailInput = input;
+        if (field == passwordField) passwordInput = input;
         input.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
         input.setPreferredSize(new Dimension(352, 40));
         input.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -119,11 +127,28 @@ final class CosmosLoginPanel extends JPanel {
     }
 
     void setLoading(boolean loading, String text) {
+        setLoading(loading, text, "正在登录");
+    }
+
+    void setRestoringSession() {
+        setLoading(true, "正在登录", "正在登录");
+    }
+
+    private void setLoading(boolean loading, String text, String loadingButtonText) {
+        ((GradientButton) loginButton).setLoading(loading);
         loginButton.setEnabled(!loading);
-        loginButton.setText(loading ? "正在登录…" : "登录");
+        loginButton.setText(loading ? loadingButtonText : "登录");
+        emailField.setEnabled(!loading);
+        passwordField.setEnabled(!loading);
+        if (emailInput != null) emailInput.setLoading(loading);
+        if (passwordInput != null) passwordInput.setLoading(loading);
+        registerButton.setEnabled(!loading);
+        forgotPasswordButton.setEnabled(!loading);
         feedback.setText(text == null || text.isBlank() ? "邮箱保存在当前设备，密码不会保存" : text);
         feedback.setForeground(loading ? new Color(150, 168, 255) : new Color(145, 156, 191));
     }
+
+    void focusPassword() { passwordField.requestFocusInWindow(); }
 
     void setUpdateState(String state, String text, boolean enabled) {
         updateButton.putClientProperty("tokenpro.updateState", state);
@@ -142,6 +167,7 @@ final class CosmosLoginPanel extends JPanel {
 
     JButton registerButton() { return registerButton; }
     JButton forgotPasswordButton() { return forgotPasswordButton; }
+    JButton loginButton() { return loginButton; }
 
     void setServerHealth(ApiClient.HealthResult health) { serverStatus.setHealth(health); }
     void setServerConnected(boolean connected) { serverStatus.setHealth(new ApiClient.HealthResult(connected, connected ? 0L : -1L)); }
@@ -316,10 +342,42 @@ final class CosmosLoginPanel extends JPanel {
     }
 
     private static final class RoundedInput extends JPanel {
-        RoundedInput(JTextField field) {
-            super(new BorderLayout());
+        private final CardLayout views = new CardLayout();
+        private final Timer animation = new Timer(32, event -> repaint());
+        private final boolean showLoadingText;
+        private boolean loading;
+
+        RoundedInput(JTextField field, String loadingText) {
+            super();
+            setLayout(views);
             setOpaque(false);
-            add(field, BorderLayout.CENTER);
+            showLoadingText = loadingText != null && !loadingText.isBlank();
+            add(field, "field");
+            if (showLoadingText) {
+                JLabel busy = label(loadingText, 12, Font.PLAIN, new Color(183, 195, 255));
+                busy.setBorder(new EmptyBorder(0, 14, 0, 14));
+                add(busy, "loading");
+            }
+            views.show(this, "field");
+            animation.setCoalesce(true);
+        }
+
+        void setLoading(boolean value) {
+            loading = value;
+            views.show(this, loading && showLoadingText ? "loading" : "field");
+            if (loading && isDisplayable()) animation.start();
+            else if (!loading) animation.stop();
+            repaint();
+        }
+
+        @Override public void addNotify() {
+            super.addNotify();
+            if (loading) animation.start();
+        }
+
+        @Override public void removeNotify() {
+            animation.stop();
+            super.removeNotify();
         }
 
         protected void paintComponent(Graphics graphics) {
@@ -327,7 +385,17 @@ final class CosmosLoginPanel extends JPanel {
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g.setColor(new Color(4, 8, 25, 225));
             g.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 12, 12);
-            g.setColor(new Color(72, 84, 132));
+            if (loading) {
+                long elapsed = System.nanoTime() / 1_000_000L;
+                int sweep = (int) (elapsed / 6L % (getWidth() + 100)) - 70;
+                g.setClip(new RoundRectangle2D.Float(1, 1, getWidth() - 2, getHeight() - 2, 11, 11));
+                g.setPaint(new LinearGradientPaint(sweep, 0, sweep + 82, 0,
+                    new float[]{0f, .5f, 1f}, new Color[]{new Color(104, 91, 255, 0), new Color(115, 206, 255, 48), new Color(104, 91, 255, 0)}));
+                g.fillRect(sweep, 1, 82, getHeight() - 2);
+                g.setClip(null);
+                double pulse = (Math.sin(elapsed / 260d) + 1d) / 2d;
+                g.setColor(new Color(115, 167, 255, 115 + (int) Math.round(pulse * 90d)));
+            } else g.setColor(new Color(72, 84, 132));
             g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 12, 12);
             g.dispose();
             super.paintComponent(graphics);
@@ -335,12 +403,60 @@ final class CosmosLoginPanel extends JPanel {
     }
 
     private static final class GradientButton extends JButton {
-        GradientButton(String text) { super(text); setFont(font(14, Font.BOLD)); setForeground(Color.WHITE); setFocusPainted(false); setBorderPainted(false); setContentAreaFilled(false); setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)); }
+        private final Timer animation = new Timer(32, event -> repaint());
+        private boolean loading;
+
+        GradientButton(String text) {
+            super(text);
+            setFont(font(14, Font.BOLD)); setForeground(Color.WHITE); setFocusPainted(false); setBorderPainted(false); setContentAreaFilled(false); setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            animation.setCoalesce(true);
+        }
+
+        void setLoading(boolean value) {
+            loading = value;
+            if (loading && isDisplayable()) animation.start();
+            else if (!loading) animation.stop();
+            repaint();
+        }
+
+        @Override public void addNotify() {
+            super.addNotify();
+            if (loading) animation.start();
+        }
+
+        @Override public void removeNotify() {
+            animation.stop();
+            super.removeNotify();
+        }
+
         protected void paintComponent(Graphics graphics) {
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g.setPaint(new GradientPaint(0, 0, isEnabled() ? new Color(108, 92, 255) : new Color(72, 73, 122), getWidth(), 0, isEnabled() ? new Color(62, 155, 255) : new Color(73, 82, 126)));
-            g.fillRoundRect(0, 0, getWidth(), getHeight(), 14, 14); g.dispose(); super.paintComponent(graphics);
+            Color left = loading ? new Color(83, 76, 190) : isEnabled() ? new Color(108, 92, 255) : new Color(72, 73, 122);
+            Color right = loading ? new Color(57, 122, 210) : isEnabled() ? new Color(62, 155, 255) : new Color(73, 82, 126);
+            g.setPaint(new GradientPaint(0, 0, left, getWidth(), 0, right));
+            g.fillRoundRect(0, 0, getWidth(), getHeight(), 14, 14);
+            if (loading) {
+                long elapsed = System.nanoTime() / 1_000_000L;
+                int shimmerX = (int) (elapsed / 5L % (getWidth() + 100)) - 100;
+                g.setClip(new RoundRectangle2D.Float(0, 0, getWidth(), getHeight(), 14, 14));
+                g.setPaint(new GradientPaint(shimmerX, 0, new Color(255, 255, 255, 0), shimmerX + 74, 0, new Color(255, 255, 255, 58), true));
+                g.fillRect(shimmerX, 0, 74, getHeight());
+                g.setClip(null);
+            }
+            g.dispose();
+            super.paintComponent(graphics);
+            if (loading) {
+                Graphics2D spinner = (Graphics2D) graphics.create();
+                spinner.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                spinner.setStroke(new BasicStroke(2.2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                spinner.setColor(new Color(255, 255, 255, 220));
+                int textWidth = spinner.getFontMetrics(getFont()).stringWidth(getText());
+                int x = Math.max(16, (getWidth() - textWidth) / 2 - 24);
+                int angle = (int) (System.nanoTime() / 2_000_000L % 360L);
+                spinner.drawArc(x, (getHeight() - 14) / 2, 14, 14, angle, 255);
+                spinner.dispose();
+            }
         }
     }
 
@@ -408,11 +524,12 @@ final class CosmosLoginPanel extends JPanel {
         private long lastTick = System.nanoTime();
         private BufferedImage cachedScene;
         private String cachedSceneKey = "";
+        private final Timer animation;
 
         VortexCanvas() {
             setOpaque(true);
             setDoubleBuffered(true);
-            Timer timer = new Timer(16, e -> {
+            animation = new Timer(16, e -> {
                 long now = System.nanoTime();
                 if (!isShowing()) { lastTick = now; return; }
                 double elapsed = Math.min((now - lastTick) / 1_000_000_000.0, .25);
@@ -421,10 +538,12 @@ final class CosmosLoginPanel extends JPanel {
                 strip += elapsed * 24;
                 repaint();
             });
-            timer.setCoalesce(true);
-            timer.setInitialDelay(0);
-            timer.start();
+            animation.setCoalesce(true);
+            animation.setInitialDelay(0);
         }
+
+        @Override public void addNotify() { super.addNotify(); lastTick = System.nanoTime(); animation.start(); }
+        @Override public void removeNotify() { animation.stop(); super.removeNotify(); }
 
         protected void paintComponent(Graphics graphics) {
             Graphics2D g = (Graphics2D) graphics.create();
