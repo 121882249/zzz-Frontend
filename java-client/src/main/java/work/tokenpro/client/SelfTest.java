@@ -106,7 +106,7 @@ final class SelfTest {
         check(Platform.windowsPackageNames("Claude").contains("Claude"), "Windows Claude MSIX package identity"); passed++;
         check(Platform.windowsPackageNames("Codex").equals(List.of("OpenAI.Codex", "OpenAI.ChatGPT-Desktop")), "Windows Codex MSIX identities stay exact"); passed++;
         check(Platform.windowsPackageNames("Claude").equals(List.of("Claude")), "Windows Claude MSIX identity stays exact"); passed++;
-        check(Platform.windowsApplicationIds("Codex").getFirst().equals("OpenAI.Codex_2p2nqsd0c76g0!App"), "Windows Codex MSIX launch identity"); passed++;
+        check(Platform.windowsApplicationIds("Codex").getFirst().equals("OpenAI.Codex_2p2nqsd0c76g0!Codex"), "Windows Codex MSIX launch identity"); passed++;
         check(Platform.windowsApplicationIds("Claude").isEmpty(), "Claude does not guess a publisher-specific launch identity"); passed++;
         Platform.InstallationSnapshot knownInstalled = new Platform.InstallationSnapshot(true, true, true, true);
         check(knownInstalled.equals(Platform.installationSnapshot(knownInstalled)), "installed application state is cached within a run"); passed++;

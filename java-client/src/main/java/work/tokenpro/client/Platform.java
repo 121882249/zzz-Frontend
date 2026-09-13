@@ -7,6 +7,7 @@ import java.nio.file.*;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -491,15 +492,23 @@ final class Platform {
 
     static List<String> windowsApplicationIds(String name) {
         return name.equals("Codex")
-            ? List.of("OpenAI.Codex_2p2nqsd0c76g0!App", "OpenAI.ChatGPT-Desktop_2p2nqsd0c76g0!App")
+            ? List.of("OpenAI.Codex_2p2nqsd0c76g0!Codex", "OpenAI.Codex_2p2nqsd0c76g0!App",
+                "OpenAI.ChatGPT-Desktop_2p2nqsd0c76g0!ChatGPT", "OpenAI.ChatGPT-Desktop_2p2nqsd0c76g0!App")
             : List.of();
     }
 
     static boolean windowsApplicationIdMatches(String name, String id) {
         if (id == null) return false;
         return name.equals("Codex")
-            ? id.matches("(?i)^OpenAI\\.(Codex|ChatGPT-Desktop)_[a-z0-9]+!App$")
+            ? id.matches("(?i)^OpenAI\\.(Codex|ChatGPT-Desktop)_[a-z0-9]+!(App|Codex|ChatGPT)$")
             : name.equals("Claude") && id.matches("(?i)^Claude_[a-z0-9]+!Claude$");
+    }
+
+    static Optional<String> preferredWindowsApplicationId(String name, Collection<String> ids) {
+        return ids.stream().map(String::trim).filter(id -> windowsApplicationIdMatches(name, id))
+            .min(Comparator.comparingInt(id -> name.equals("Codex")
+                ? id.matches("(?i).*!Codex$") ? 0 : id.matches("(?i).*!App$") ? 1 : 2
+                : 0));
     }
 
     static Optional<String> registeredWindowsApplicationId(String name) {
@@ -512,7 +521,7 @@ final class Platform {
             + "$manifest.Package.Applications.Application | ForEach-Object {$pkg.PackageFamilyName+'!'+$_.Id}}}";
         String output = commandOutput(List.of(windowsSystemExecutable("WindowsPowerShell\\v1.0\\powershell.exe"),
             "-NoProfile", "-NonInteractive", "-Command", script), 10);
-        return output.lines().map(String::trim).filter(id -> windowsApplicationIdMatches(name, id)).findFirst();
+        return preferredWindowsApplicationId(name, output.lines().toList());
     }
 
     static List<String> windowsPackagedLaunchCommand(String name, String id, String systemRoot) {

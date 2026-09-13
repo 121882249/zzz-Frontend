@@ -22,8 +22,36 @@ final class ClientReconnect {
         if (!Set.of("Codex", "Claude").contains(client)) throw new IllegalArgumentException("未知客户端");
         List<ProcessHandle> matched = ProcessHandle.allProcesses().filter(p ->
             Platform.desktopProcessMatches(Platform.OS_KIND, client, p.info().command().orElse(""))).toList();
+        if (Platform.OS_KIND == Platform.OS.WINDOWS && client.equals("Codex")) {
+            boolean nativeAvailable = matched.stream().anyMatch(p -> windowsCodexExecutable(p).equals("codex.exe"))
+                || matched.stream().filter(p -> windowsCodexExecutable(p).equals("chatgpt.exe"))
+                    .anyMatch(ClientReconnect::windowsCodexSiblingExists);
+            matched = matched.stream().filter(p -> manageWindowsCodexProcess(p.info().command().orElse(""), nativeAvailable)).toList();
+        }
         Set<Long> ids = new HashSet<>(); matched.forEach(p -> ids.add(p.pid()));
         return matched.stream().filter(p -> p.parent().map(parent -> !ids.contains(parent.pid())).orElse(true)).toList();
+    }
+
+    static boolean manageWindowsCodexProcess(String command, boolean nativeCodexAvailable) {
+        if (!Platform.desktopProcessMatches(Platform.OS.WINDOWS, "Codex", command)) return false;
+        return windowsCodexExecutable(command).equals("codex.exe") || !nativeCodexAvailable;
+    }
+
+    private static String windowsCodexExecutable(ProcessHandle process) {
+        return windowsCodexExecutable(process.info().command().orElse(""));
+    }
+
+    private static String windowsCodexExecutable(String command) {
+        String normalized = command.replace('\\', '/');
+        int slash = normalized.lastIndexOf('/');
+        return (slash < 0 ? normalized : normalized.substring(slash + 1)).toLowerCase(Locale.ROOT);
+    }
+
+    private static boolean windowsCodexSiblingExists(ProcessHandle process) {
+        try {
+            Path executable = Path.of(process.info().command().orElse(""));
+            return executable.getParent() != null && Files.isRegularFile(executable.getParent().resolve("Codex.exe"));
+        } catch (InvalidPathException ignored) { return false; }
     }
 
     static void stopDesktop(String client) throws Exception {

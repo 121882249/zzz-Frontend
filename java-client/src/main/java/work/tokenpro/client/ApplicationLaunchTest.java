@@ -22,6 +22,19 @@ final class ApplicationLaunchTest {
             "C:/Users/Test/AppData/Local/Microsoft/WinGet/Packages/Anthropic.ClaudeCode_source/claude.exe"), "WinGet CLI process excluded"); passed++;
         check(!Platform.desktopProcessMatches(Platform.OS.WINDOWS, "Codex",
             "C:/Users/Test/AppData/Local/OpenAI/Codex/bin/hash/codex.exe"), "bundled Codex CLI process excluded"); passed++;
+        String packagedCodex = "C:/Program Files/WindowsApps/OpenAI.Codex_26.908.4834.0_x64__2p2nqsd0c76g0/app/Codex.exe";
+        String packagedChatGPT = "C:/Program Files/WindowsApps/OpenAI.Codex_26.908.4834.0_x64__2p2nqsd0c76g0/app/ChatGPT.exe";
+        check(ClientReconnect.manageWindowsCodexProcess(packagedCodex, true), "native packaged Codex is managed"); passed++;
+        check(!ClientReconnect.manageWindowsCodexProcess(packagedChatGPT, true), "ChatGPT is not closed when packaged Codex exists"); passed++;
+        check(ClientReconnect.manageWindowsCodexProcess(packagedChatGPT, false), "legacy ChatGPT-only Codex host remains compatible"); passed++;
+        check(!ClientReconnect.manageWindowsCodexProcess(
+            "C:/Users/Administrator/AppData/Local/OpenAI/Codex/bin/7ac07f4ce733f89a/codex.exe", false), "runtime CLI is never managed as desktop"); passed++;
+        String codexAumid = "OpenAI.Codex_2p2nqsd0c76g0!Codex";
+        String chatGPTAumid = "OpenAI.Codex_2p2nqsd0c76g0!ChatGPT";
+        check(Platform.windowsApplicationIdMatches("Codex", codexAumid)
+            && Platform.windowsApplicationIdMatches("Codex", chatGPTAumid), "multi-app Codex package identities are accepted"); passed++;
+        check(Platform.preferredWindowsApplicationId("Codex", List.of(chatGPTAumid, codexAumid)).orElseThrow().equals(codexAumid),
+            "native Codex activation is preferred over ChatGPT host"); passed++;
         check(Platform.desktopProcessMatches(Platform.OS.MAC, "Claude",
             "/Applications/Claude.app/Contents/MacOS/Claude"), "macOS desktop process"); passed++;
         check(Platform.desktopProcessMatches(Platform.OS.MAC, "Codex",
