@@ -42,6 +42,9 @@ for attempt in $(seq 1 36); do
 done
 [[ "$healthy" == true ]]
 [[ "$(docker inspect sub2api --format '{{.Image}}')" == "$new_id" ]]
+binary_version="$(docker exec sub2api /app/sub2api -version 2>&1)"
+[[ "$binary_version" == *"Sub2API $version (commit:"* ]]
 trap - ERR
 echo "Deployed $version; healthy; image=$new_id; backup=$directory/$backup"
+printf '%s\n' "$binary_version"
 docker ps --format '{{.Names}} | {{.Image}} | {{.Status}}'
