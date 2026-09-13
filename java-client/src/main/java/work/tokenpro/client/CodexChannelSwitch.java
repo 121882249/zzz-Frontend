@@ -11,13 +11,25 @@ final class CodexChannelSwitch {
         stop.run();
         ChannelSettingsBackup backup = null;
         List<CodexHistorySettings.Setting> previous = List.of();
-        boolean historyTouched = false;
         boolean applied = false;
+        int skipped = 0;
+        Exception historyWarning = null;
         try {
             backup = new ChannelSettingsBackup(store, config);
             Path home = config.toAbsolutePath().getParent();
             Files.createDirectories(home);
-            if (Files.isDirectory(home.resolve("sessions"))) previous = CodexHistorySettings.capture(home);
+            if (Files.isDirectory(home.resolve("sessions"))) {
+                try {
+                    CodexHistorySettings.Capture captured = CodexHistorySettings.captureAvailable(home);
+                    previous = captured.settings();
+                    skipped += captured.skipped();
+                } catch (Exception unavailable) {
+                    // Existing conversations are optional compatibility data. A changed or
+                    // damaged app-server history must not prevent the selected channel from
+                    // becoming active for new conversations.
+                    historyWarning = unavailable;
+                }
+            }
             backup.history(previous);
             for (String mode : List.of("openai", "custom")) {
                 List<CodexHistorySettings.Setting> group = previous.stream().filter(s -> mode.equals(s.provider())).toList();
@@ -25,20 +37,26 @@ final class CodexChannelSwitch {
             }
             List<CodexHistorySettings.Setting> preferences = CodexHistorySettings.decode(store.read("channel-" + provider + "-threads.json").orElse("[]"));
             write.run();
-            if (!previous.isEmpty()) {
-                List<CodexHistorySettings.Setting> targets = CodexHistorySettings.targets(home, previous, provider, models, preferences);
-                historyTouched = true;
-                CodexHistorySettings.apply(home, targets);
-            }
             applied = true;
+            if (!previous.isEmpty()) {
+                try {
+                    List<CodexHistorySettings.Setting> targets = CodexHistorySettings.targets(home, previous, provider, models, preferences);
+                    CodexHistorySettings.Migration migration = CodexHistorySettings.applyAvailable(home, targets);
+                    skipped += migration.skipped();
+                } catch (Exception unavailable) {
+                    historyWarning = unavailable;
+                }
+            }
             start.run();
+            if (skipped > 0 || historyWarning != null)
+                throw new ChannelSwitchCompletedWarningException(skipped, historyWarning);
             return previous.size();
         } catch (Exception failure) {
+            if (failure instanceof ChannelSwitchCompletedWarningException) throw failure;
             if (applied) throw new ManualStartRequiredException("Codex", failure);
             try {
                 stop.run();
                 if (backup != null) backup.restore();
-                if (historyTouched) CodexHistorySettings.apply(config.toAbsolutePath().getParent(), previous);
                 restartPrevious.run();
             } catch (Exception rollback) {
                 failure.addSuppressed(rollback);

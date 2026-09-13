@@ -22,6 +22,7 @@ final class WindowsUpdaterTest {
             check(command.getLast().contains("中文 '' 引号"), "job path quoted"); passed++;
             check(!WindowsUpdater.script().contains("RunAs") && !WindowsUpdater.script().contains("taskkill") && !WindowsUpdater.script().contains("timeout /T"), "no elevation, process killing or stdin-dependent waits"); passed++;
             check(WindowsUpdater.script().contains("[IO.File]::Replace") && WindowsUpdater.script().contains("baseSha256") && WindowsUpdater.script().contains("rollback-"), "atomic replacement with verification and backup"); passed++;
+            check(WindowsUpdater.script().contains("$acknowledged") && WindowsUpdater.script().contains("$job.showErrors -and $acknowledged"), "pre-readiness failures stay in the live application instead of showing a second dialog"); passed++;
             check(!WindowsUpdater.script().contains("CreateShortcut") && !WindowsUpdater.script().contains("migrated"), "in-place update neither migrates nor changes shortcuts"); passed++;
             check(Arrays.stream(WindowsUpdater.class.getDeclaredMethods()).noneMatch(m -> m.getName().equals("migrateImage")), "legacy migration implementation removed"); passed++;
             check(Arrays.stream(Updater.class.getDeclaredMethods()).noneMatch(m -> m.getName().equals("installWindowsIncremental") || m.getName().equals("installWindows")), "legacy Windows batch implementations removed"); passed++;

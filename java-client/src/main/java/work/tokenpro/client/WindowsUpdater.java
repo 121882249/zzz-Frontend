@@ -43,12 +43,16 @@ final class WindowsUpdater {
         Process process = new ProcessBuilder(elevationRequired ? elevationCommand(jobFile, job) : command(jobFile))
             .redirectErrorStream(true).redirectOutput(jobRoot.resolve("helper.log").toFile()).start();
         Path ready = jobRoot.resolve("ready.json");
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(elevationRequired ? 180 : 15);
+        // Defender, slow disks and first-time PowerShell startup can spend well over
+        // 15 seconds hashing and staging the core while the helper is still healthy.
+        // Keep the application open until the helper explicitly acknowledges that it
+        // owns a verified replacement, and use a bounded compatibility window.
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(elevationRequired ? 300 : 120);
         while (!Files.isRegularFile(ready)) {
             if (!process.isAlive() || System.nanoTime() >= deadline) {
                 // Cancellation is observed before any replacement if startup did not acknowledge readiness.
                 Files.writeString(jobRoot.resolve("cancel"), "cancel", StandardOpenOption.CREATE);
-                throw new IOException("更新准备未完成，程序保持打开。请查看：" + jobRoot.resolve("helper.log"));
+                throw new IOException("更新辅助进程未能在兼容等待时间内完成准备，已安全取消；程序保持打开。请查看：" + jobRoot.resolve("helper.log"));
             }
             Thread.sleep(50);
         }
@@ -201,7 +205,7 @@ final class WindowsUpdater {
             $jobRoot=[IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($JobFile))
             $ready=Join-Path $jobRoot 'ready.json'
             $cancel=Join-Path $jobRoot 'cancel'
-            $lock=$null; $sourceLock=$null; $changed=$false; $job=$null; $next=$null; $backup=$null
+            $lock=$null; $sourceLock=$null; $changed=$false; $acknowledged=$false; $job=$null; $next=$null; $backup=$null
             function Save-Json($path,$value) {
                 Plain-Path $path
                 $temp=$path+'.'+[Guid]::NewGuid().ToString('N')
@@ -238,8 +242,9 @@ final class WindowsUpdater {
                 $backup=$job.target+'.rollback-'+$suffix
                 [IO.File]::Copy($job.source,$next,$false)
                 if((Hash $next) -ne $job.sourceSha256){throw '待替换文件校验失败'}
-                if(Test-Path -LiteralPath $cancel){throw '更新准备已取消'}
+                if(Test-Path -LiteralPath $cancel){throw '更新准备等待超时，已安全取消'}
                 Save-Json $ready @{ready=$true}
+                $acknowledged=$true
                 $deadline=[DateTime]::UtcNow.AddSeconds(90)
                 while([long]$job.parentPid -gt 0) {
                     $parent=Get-Process -Id ([int]$job.parentPid) -ErrorAction SilentlyContinue
@@ -269,7 +274,10 @@ final class WindowsUpdater {
                 Save-Json $ready @{ready=$false;message=$failure}
                 if($job) {
                     Save-Json $job.result @{status='failed';message=$failure;restored=$restored;backup=$backup;administrator=[bool]$job.administrator}
-                    if($job.showErrors) {
+                    # Before readiness the TokenPro window is still alive and already
+                    # reports the failure. Only show a native dialog after the app has
+                    # exited and can no longer explain a replacement/rollback failure.
+                    if($job.showErrors -and $acknowledged) {
                         Add-Type -AssemblyName System.Windows.Forms
                         [void][System.Windows.Forms.MessageBox]::Show(('更新失败：'+$failure+[Environment]::NewLine+'原程序和配置未更改。'),'TokenPro 更新')
                     }

@@ -64,12 +64,14 @@ final class ChannelSwitchTest {
         require(store.read(ClaudeBridgeConfig.FILE).orElse("").equals("new channel"), "Claude channel survives startup failure");
         List<CodexHistorySettings.Setting> settings = List.of(new CodexHistorySettings.Setting("synthetic", "openai", "gpt"));
         require(CodexHistorySettings.decode(CodexHistorySettings.encode(settings)).equals(settings), "association snapshot roundtrip");
+        ChannelSwitchCompletedWarningException warning = new ChannelSwitchCompletedWarningException(2, new IOException("stale thread"));
+        require(warning.getMessage().contains("渠道配置已生效") && warning.getMessage().contains("不会回滚") && warning.getMessage().contains("2 个旧对话"), "partial history migration is a completed switch warning");
         require(OfficialConnectionCheck.proxy(Map.of("HTTPS_PROXY", "http://127.0.0.1:9999")).type() == Proxy.Type.HTTP, "HTTP proxy recognized");
         require(OfficialConnectionCheck.proxy(Map.of("ALL_PROXY", "socks5://127.0.0.1:9999")).type() == Proxy.Type.SOCKS, "SOCKS proxy recognized");
         try { OfficialConnectionCheck.proxy(Map.of("HTTPS_PROXY", "invalid")); throw new AssertionError("bad proxy accepted"); }
         catch (java.io.IOException expected) {}
         require(ClientReconnect.managedCliMatches("codex", "/bin/codex", List.of("-c", "tokenpro_profile=/scope/catalog.json"), "/scope/catalog.json"), "official CLI profile remains identifiable");
-        return 19;
+        return 20;
     }
     private static void require(boolean value, String message) { if (!value) throw new AssertionError(message); }
 }

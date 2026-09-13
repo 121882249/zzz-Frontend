@@ -1011,6 +1011,13 @@ final class TokenProFrame extends JFrame {
             TokenProDialogs.info(this, "配置已完成，请手动启动", failure.getMessage());
             return;
         }
+        if (failure instanceof ChannelSwitchCompletedWarningException) {
+            if (cli) updateCommandControls(app.toLowerCase(Locale.ROOT), true);
+            else updateBridgeStatus();
+            status(failure.getMessage());
+            TokenProDialogs.info(this, "渠道已切换，部分旧对话未同步", failure.getMessage());
+            return;
+        }
         error(failure);
     }
 

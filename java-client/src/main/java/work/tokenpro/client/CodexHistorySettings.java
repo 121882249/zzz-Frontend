@@ -11,6 +11,8 @@ final class CodexHistorySettings {
     record Setting(String id, String provider, String model) {
         Map<String,Object> json() { return Map.of("id", id, "provider", provider, "model", model); }
     }
+    record Capture(List<Setting> settings, int skipped) {}
+    record Migration(int migrated, int skipped) {}
 
     static List<Setting> capture(Path home) throws Exception {
         try (Rpc rpc = new Rpc(home)) {
@@ -38,6 +40,43 @@ final class CodexHistorySettings {
             }
             return result;
         }
+    }
+
+    /** Captures every usable thread without letting one stale list entry abort a channel switch. */
+    static Capture captureAvailable(Path home) throws Exception {
+        try (Rpc rpc = new Rpc(home)) {
+            List<String> ids = listThreadIds(rpc);
+            List<Setting> result = new ArrayList<>();
+            int skipped = 0;
+            for (String id : ids) {
+                try {
+                    Map<String,Object> current = rpc.call("thread/resume", Map.of("threadId", id, "excludeTurns", true));
+                    String provider = Objects.toString(current.get("modelProvider"), "");
+                    if (Set.of("openai", "custom").contains(provider))
+                        result.add(new Setting(id, provider, Objects.toString(current.get("model"), "")));
+                    try { rpc.call("thread/unsubscribe", Map.of("threadId", id)); } catch (Exception ignored) {}
+                } catch (Exception unavailable) { skipped++; }
+            }
+            return new Capture(List.copyOf(result), skipped);
+        }
+    }
+
+    private static List<String> listThreadIds(Rpc rpc) throws Exception {
+        List<String> ids = new ArrayList<>();
+        String cursor = null;
+        Set<String> seen = new HashSet<>();
+        do {
+            Map<String,Object> params = new LinkedHashMap<>(Map.of("limit", 100, "modelProviders", List.of("openai", "custom")));
+            if (cursor != null) params.put("cursor", cursor);
+            Map<String,Object> page = rpc.call("thread/list", params);
+            for (Object value : ClaudeAdapter.list(page.get("data"))) {
+                String id = Objects.toString(Json.object(value).get("id"), "");
+                if (!id.isBlank() && !ids.contains(id)) ids.add(id);
+            }
+            cursor = (String) page.get("nextCursor");
+            if (cursor != null && !seen.add(cursor)) throw new IOException("历史对话分页异常，已停止切换");
+        } while (cursor != null);
+        return ids;
     }
 
     static List<Setting> targets(Path home, List<Setting> before, String provider, List<String> models,
@@ -89,6 +128,38 @@ final class CodexHistorySettings {
         }
     }
 
+    /** Migrates usable threads and reports stale/incompatible entries individually. */
+    static Migration applyAvailable(Path home, List<Setting> settings) throws Exception {
+        if (settings.isEmpty()) return new Migration(0, 0);
+        List<Setting> candidates = new ArrayList<>();
+        int skipped = 0;
+        try (Rpc rpc = new Rpc(home)) {
+            for (Setting setting : settings) {
+                try {
+                    Map<String,Object> resumed = rpc.call("thread/resume", Map.of("threadId", setting.id,
+                        "modelProvider", setting.provider, "model", setting.model, "excludeTurns", true));
+                    if (!setting.provider.equals(resumed.get("modelProvider"))) throw new IOException("服务商未切换");
+                    rpc.call("thread/settings/update", Map.of("threadId", setting.id, "model", setting.model));
+                    candidates.add(setting);
+                    try { rpc.call("thread/unsubscribe", Map.of("threadId", setting.id)); } catch (Exception ignored) {}
+                } catch (Exception unavailable) { skipped++; }
+            }
+        }
+        List<Setting> migrated = new ArrayList<>();
+        try (Rpc rpc = new Rpc(home)) {
+            for (Setting setting : candidates) {
+                try {
+                    Map<String,Object> actual = rpc.call("thread/resume", Map.of("threadId", setting.id, "excludeTurns", true));
+                    if (!setting.provider.equals(actual.get("modelProvider")) || !setting.model.equals(actual.get("model")))
+                        throw new IOException("设置未持久保存");
+                    migrated.add(setting);
+                    try { rpc.call("thread/unsubscribe", Map.of("threadId", setting.id)); } catch (Exception ignored) {}
+                } catch (Exception unavailable) { skipped++; }
+            }
+        }
+        return new Migration(migrated.size(), skipped);
+    }
+
     static String encode(List<Setting> settings) { return Json.stringify(settings.stream().map(Setting::json).toList()); }
     static List<Setting> decode(String json) {
         return ClaudeAdapter.list(Json.parse(json)).stream().map(Json::object).map(r -> new Setting(
@@ -128,14 +199,32 @@ final class CodexHistorySettings {
                         continue;
                     }
                     if (value.get("id") instanceof Number number && number.intValue() == id) {
-                        if (value.containsKey("error")) throw new IOException("Codex 不支持或未能完成设置操作（" + method + "），没有发送聊天请求");
+                        if (value.containsKey("error")) {
+                            Map<String,Object> error = Json.object(value.get("error"));
+                            String code = Objects.toString(error.get("code"), "");
+                            String detail = ErrorMessages.safe(Objects.toString(error.get("message"), ""));
+                            String suffix = (code.isBlank() ? "" : "，代码 " + code)
+                                + (detail.isBlank() ? "" : "：" + detail);
+                            throw new IOException("Codex 未能完成设置操作（" + method + suffix + "），没有发送聊天请求");
+                        }
                         return value.get("result") == null ? Map.of() : Json.object(value.get("result"));
                     }
                 }
                 throw new IOException("Codex 设置接口提前退出");
             });
             try { return response.get(30, TimeUnit.SECONDS); }
-            catch (Exception e) { response.cancel(true); throw new IOException("对话设置操作失败（" + method + "）", e); }
+            catch (ExecutionException e) {
+                Throwable cause = e.getCause();
+                if (cause instanceof Exception failure) throw failure;
+                throw new IOException("对话设置操作失败（" + method + "）", cause);
+            } catch (TimeoutException e) {
+                response.cancel(true);
+                throw new IOException("对话设置操作超时（" + method + "）", e);
+            } catch (InterruptedException e) {
+                response.cancel(true);
+                Thread.currentThread().interrupt();
+                throw new IOException("对话设置操作被中断（" + method + "）", e);
+            }
         }
         public void close() throws IOException {
             try { writer.close(); } catch (IOException ignored) {}
