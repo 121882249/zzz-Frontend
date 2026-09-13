@@ -1,6 +1,6 @@
 package work.tokenpro.client;
 
-import java.net.URI;
+import java.net.*;
 import java.net.http.*;
 import java.time.Duration;
 import java.util.*;
@@ -41,8 +41,9 @@ final class BridgeLifecycle {
     }
 
     /** Stops and forgets the removed Codex loopback adapter after an upgrade. */
-    static void removeLegacyCodexAdapter(SecureStore store) {
+    private static void removeLegacyCodexAdapter(SecureStore store) {
         String file = "codex-image-bridge.json";
+        String flag = store.isCodexCli() ? "--codex-cli-image-bridge" : "--codex-image-bridge";
         try {
             Map<String,Object> legacy = Json.object(Json.parse(store.read(file).orElse("{}")));
             String token = Objects.toString(legacy.get("token"), "").trim();
@@ -55,9 +56,45 @@ final class BridgeLifecycle {
                     .send(request, HttpResponse.BodyHandlers.discarding());
             }
         } catch (Exception ignored) {
-            // Cleanup must never prevent the direct client from starting.
+            // Fall through to terminating the obsolete helper process itself.
         }
-        try { store.delete(file); } catch (Exception ignored) {}
-        try { store.delete("codex-connection-state.json"); } catch (Exception ignored) {}
+        stopLegacyCodexAdapterProcesses(flag);
+        int port = store.isCodexCli() ? 23182 : 23180;
+        if (!legacyCodexAdapterRunning(flag) && !loopbackPortOpen(port)) {
+            try { store.delete(file); } catch (Exception ignored) {}
+            try { store.delete("codex-connection-state.json"); } catch (Exception ignored) {}
+        }
+    }
+
+    private static void stopLegacyCodexAdapterProcesses(String flag) {
+        for (ProcessHandle process : legacyCodexAdapterProcesses(flag)) {
+            process.destroy();
+            try { process.onExit().get(2, java.util.concurrent.TimeUnit.SECONDS); }
+            catch (Exception ignored) {
+                if (process.isAlive()) process.destroyForcibly();
+                try { process.onExit().get(2, java.util.concurrent.TimeUnit.SECONDS); } catch (Exception stillAlive) {}
+            }
+        }
+    }
+
+    private static boolean legacyCodexAdapterRunning(String flag) {
+        return !legacyCodexAdapterProcesses(flag).isEmpty();
+    }
+
+    private static List<ProcessHandle> legacyCodexAdapterProcesses(String flag) {
+        return ProcessHandle.allProcesses().filter(process -> process.pid() != ProcessHandle.current().pid())
+            .filter(process -> legacyCodexAdapterProcess(process.info().arguments().orElse(new String[0]), flag))
+            .toList();
+    }
+
+    static boolean legacyCodexAdapterProcess(String[] arguments, String flag) {
+        return Arrays.asList(arguments).contains(flag);
+    }
+
+    private static boolean loopbackPortOpen(int port) {
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 300);
+            return true;
+        } catch (Exception closed) { return false; }
     }
 }

@@ -29,7 +29,6 @@ final class CodexConfig {
     }
 
     void apply(String baseUrl, List<PricedModel> models, String key, String accountEmail) throws Exception {
-        BridgeLifecycle.removeLegacyCodexAdapter(store);
         models = ModelPickerDialog.orderedModels(models, "Codex");
         String url = validateUrl(baseUrl);
         String actor = required(accountEmail, "账户邮箱");
@@ -66,7 +65,6 @@ final class CodexConfig {
     }
 
     boolean restore() throws Exception {
-        BridgeLifecycle.removeLegacyCodexAdapter(store);
         Optional<String> original = store.read("codex-original.toml");
         Path target = configPath;
         String current = Files.exists(target) ? Files.readString(target) : "";

@@ -19,6 +19,10 @@ final class SelfTest {
         check(Json.stringify(value).contains("\"TokenPro\""), "JSON writer"); passed++;
         check("邮箱或密码错误".equals(ApiClient.responseMessage("{\"message\":\"邮箱或密码错误\"}")), "API error message is preserved"); passed++;
         check(ApiClient.isUnauthorized(new ApiClient.ApiException(401, "expired")), "HTTP 401 is recognized as an expired login"); passed++;
+        check(BridgeLifecycle.legacyCodexAdapterProcess(new String[]{"--codex-image-bridge"}, "--codex-image-bridge"),
+            "obsolete Codex helper process is identified by its exact retired flag"); passed++;
+        check(!BridgeLifecycle.legacyCodexAdapterProcess(new String[]{"--codex-image-bridge-worker"}, "--codex-image-bridge"),
+            "similar process arguments are never terminated as an obsolete Codex helper"); passed++;
         String sample = "before\n# >>> TokenPro managed >>>\nmanaged\n# <<< TokenPro managed <<<\nafter\n";
         check(CodexConfig.stripManaged(sample).equals("before\nafter\n"), "managed config removal"); passed++;
         String config = "model = \"old\"\nmodel_provider = \"openai\"\n[features]\napps = true\n";
