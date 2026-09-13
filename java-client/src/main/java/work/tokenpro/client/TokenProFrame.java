@@ -39,7 +39,7 @@ final class TokenProFrame extends JFrame {
     }
     private static final Color PURPLE = new Color(102, 82, 240);
     private static final Color STATUS_READY = new Color(114, 230, 210);
-    private static final Color STATUS_OFFICIAL = new Color(121, 181, 255);
+    private static final Color STATUS_OFFICIAL = new Color(184, 142, 255);
     private static final Color STATUS_PENDING = new Color(242, 200, 121);
     private static final Color CANVAS = new Color(11, 20, 47);
     private static final Color TEXT = new Color(242, 245, 255);
@@ -347,12 +347,12 @@ final class TokenProFrame extends JFrame {
         CosmosMenuPanel menu = new CosmosMenuPanel();
         int itemCount = 0;
         CosmosMenuButton choose = new CosmosMenuButton("选择可用模型", "embedded:price",
-            new Color(241, 244, 255), new Color(93, 103, 220, 105));
+            new Color(105, 220, 194), new Color(53, 120, 108, 105));
         choose.addActionListener(event -> { hideModelMenu(); chooseModel.run(); });
         menu.add(choose);
         itemCount++;
-        CosmosMenuButton official = new CosmosMenuButton("恢复官网配置", "RefreshCwLucide.png",
-            STATUS_OFFICIAL, new Color(53, 100, 176, 105));
+        CosmosMenuButton official = new CosmosMenuButton("恢复官方配置", "RefreshCwLucide.png",
+            STATUS_OFFICIAL, new Color(91, 70, 146, 120));
         official.addActionListener(event -> { hideModelMenu(); restore.run(); });
         menu.add(official);
         itemCount++;
@@ -644,8 +644,8 @@ final class TokenProFrame extends JFrame {
     private void restoreCodex() {
         try {
             boolean running = !ClientReconnect.desktopProcesses("Codex").isEmpty();
-            if (running && !TokenProDialogs.confirm(this, "恢复官网配置",
-                "将退出并重启 Codex，切换至官网配置。\n进行中的请求会终止，请先保存。",
+            if (running && !TokenProDialogs.confirm(this, "恢复官方配置",
+                "将退出并重启 Codex，切换至官方配置。\n进行中的请求会终止，请先保存。",
                 "恢复并重启")) return;
             // Keep the last TokenPro selection as a preference only. The live
             // Codex config is official, so no TokenPro key or route remains in use.
@@ -1804,7 +1804,7 @@ final class TokenProFrame extends JFrame {
         button.setFocusPainted(false);
         button.setIcon(resourceIconContained("WebCog.png", 15, 15, true));
         button.setIconTextGap(7);
-        button.setToolTipText("选择模型、恢复官网配置或修复历史对话");
+        button.setToolTipText("选择模型、恢复官方配置或修复历史对话");
         button.setHorizontalAlignment(SwingConstants.CENTER);
         button.setBorder(new EmptyBorder(0, 12, 0, 12));
         sizeComponent(button, 112, 42);
