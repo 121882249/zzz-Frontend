@@ -160,4 +160,5 @@ The UI harness tests local control state; live API latency/failure and native Wi
 
 - Replaced the always-visible recharge ratio with 金额说明 and a small eye icon. Holding the control reveals “$ 为平台额度标记，$1 额度对应人民币 1 元”; releasing, disarming, hiding or losing focus dismisses it without changing card layout. Keyboard press behavior uses the same button model.
 - Naming alternatives offered: 金额说明 (selected default), 额度说明, 计价说明.
+- Removed the persistent focus outline from 金额说明 so releasing the hold returns it to the quiet text-only state. Official states on both desktop and command-line cards now identify the provider consistently as 当前：OpenAI 官方配置 or 当前：Anthropic 官方配置.
 - Build passed 392 checks and desktop UI regression. A standalone real-window check confirmed hidden-by-default, held reveal, release hide and pointer-disarm hide. Updated balance-design previews; not yet released.

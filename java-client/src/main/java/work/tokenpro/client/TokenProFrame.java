@@ -73,10 +73,10 @@ final class TokenProFrame extends JFrame {
     private final JLabel headerBalance = new JLabel("—");
     private final JLabel accountBalance = new JLabel("—");
     private final JPanel subscriptionSlot = transparent(new BorderLayout());
-    private final JLabel homeClaudeStatus = new ClientStatusLabel("请先选择模型");
-    private final JLabel homeCodexStatus = new ClientStatusLabel("请先选择模型");
-    private final JLabel homeCodexCliStatus = new ClientStatusLabel("请先选择模型");
-    private final JLabel homeClaudeCliStatus = new ClientStatusLabel("请先选择模型");
+    private final JLabel homeClaudeStatus = new ClientStatusLabel(officialStatus("Claude"));
+    private final JLabel homeCodexStatus = new ClientStatusLabel(officialStatus("Codex"));
+    private final JLabel homeCodexCliStatus = new ClientStatusLabel(officialStatus("Codex"));
+    private final JLabel homeClaudeCliStatus = new ClientStatusLabel(officialStatus("Claude"));
     private final SupportCountLabel homeCodexCliSupport = new SupportCountLabel();
     private final SupportCountLabel homeClaudeCliSupport = new SupportCountLabel();
     private volatile boolean codexClientInstalled;
@@ -979,7 +979,7 @@ final class TokenProFrame extends JFrame {
         launch.setToolTipText(installed ? "连接 " + name + " 命令行" : "打开 " + name + " 命令行官方下载页");
         launch.setEnabled(known && !connecting && (!installed || count > 0));
         menu.setEnabled(known && installed && !connecting);
-        state.setText(!known ? "正在检查安装状态…" : installed ? selectionStatus(count) : "请先安装应用");
+        state.setText(!known ? "正在检查安装状态…" : installed ? configuredStatus(name, count) : "请先安装应用");
     }
 
     private int cliSelectedCount(String command) {
@@ -1021,8 +1021,11 @@ final class TokenProFrame extends JFrame {
     }
 
     private static String selectionStatus(int count) { return count > 0 ? "当前：TokenPro·已选 " + count + " 款模型" : "请先选择模型"; }
+    private static String configuredStatus(String client, int count) {
+        return count > 0 ? selectionStatus(count) : officialStatus(client);
+    }
     private static String officialStatus(String client) {
-        return client.equals("Claude") ? "当前：Claude 官网配置" : "当前：GPT 官网配置";
+        return client.equals("Claude") ? "当前：Anthropic 官方配置" : "当前：OpenAI 官方配置";
     }
 
     private Set<String> selectedModelIds(String client) {
@@ -2672,6 +2675,7 @@ final class TokenProFrame extends JFrame {
             });
             setIconTextGap(5); setHorizontalAlignment(SwingConstants.LEFT);
             setBorder(new EmptyBorder(0, 0, 0, 0)); setOpaque(false); setContentAreaFilled(false); setBorderPainted(false);
+            setFocusPainted(false);
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
             getAccessibleContext().setAccessibleName("金额说明，按住查看，松开隐藏");
             getModel().addChangeListener(event -> {

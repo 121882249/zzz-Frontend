@@ -21,6 +21,14 @@ public class AccountCardsUiTest {
  SwingUtilities.invokeAndWait(()->{TokenProFrame f=null;try{
  f=new TokenProFrame(new SecureStore(Files.createTempDirectory("tokenpro-design-")),false);
  ((CardLayout)get(f,"views")).show((Container)get(f,"viewHost"),"dashboard");
+ Method official=TokenProFrame.class.getDeclaredMethod("officialStatus",String.class);official.setAccessible(true);
+ if(!official.invoke(null,"Codex").equals("当前：OpenAI 官方配置") || !official.invoke(null,"Claude").equals("当前：Anthropic 官方配置"))
+   throw new AssertionError("official provider labels are inconsistent");
+ JButton stateLaunch=new JButton(),stateMenu=new JButton();JLabel stateLabel=new JLabel();
+ TokenProFrame.applyCliActionState(stateLaunch,stateMenu,stateLabel,"Claude",true,true,0,false);
+ if(!stateLabel.getText().equals("当前：Anthropic 官方配置"))throw new AssertionError("restored CLI state does not show its official provider");
+ TokenProFrame.AmountExplanationButton amountExplanation=new TokenProFrame.AmountExplanationButton();
+ if(amountExplanation.isFocusPainted())throw new AssertionError("amount explanation retains a focus outline after release");
  for(String n:List.of("codexClientInstallLabel","claudeClientInstallLabel","codexCliInstallLabel","claudeCliInstallLabel")){JLabel l=(JLabel)get(f,n);l.setText("已安装");l.setForeground(new Color(97,222,165));}
  for(String n:List.of("homeCodexStatus","homeClaudeStatus","homeCodexCliStatus","homeClaudeCliStatus"))((JLabel)get(f,n)).setText("当前：TokenPro·已选 4 款模型");
  for(String n:List.of("homeCodexSupport","homeClaudeSupport","homeCodexCliSupport","homeClaudeCliSupport"))call(get(f,n),"setCount",new Class[]{long.class},n.contains("Codex")?20L:17L);
@@ -30,7 +38,14 @@ public class AccountCardsUiTest {
  Class<?> item=Class.forName("work.tokenpro.client.TokenProFrame$SubscriptionItem");Constructor<?> c=item.getDeclaredConstructors()[0];c.setAccessible(true);
  call(f,"showSubscriptions",new Class[]{List.class},List.of(c.newInstance("Pro专业额度卡",200d,"2026-10-13T04:01:00Z"),c.newInstance("标准额度卡",50d,"2026-10-20T04:01:00Z")));
  JButton update=(JButton)get(f,"updateButton");call(f,"setUpdateButtonState",new Class[]{String.class,String.class},"latest","已是最新 v"+Main.VERSION);
- f.addNotify();capture(f,args[0]+"/preview-home.png",1280);
+ f.addNotify();
+ ((JLabel)get(f,"homeCodexStatus")).setText("当前：OpenAI 官方配置");
+ ((JLabel)get(f,"homeCodexCliStatus")).setText("当前：OpenAI 官方配置");
+ ((JLabel)get(f,"homeClaudeStatus")).setText("当前：Anthropic 官方配置");
+ ((JLabel)get(f,"homeClaudeCliStatus")).setText("当前：Anthropic 官方配置");
+ capture(f,args[0]+"/preview-official-statuses.png",1280);
+ for(String n:List.of("homeCodexStatus","homeClaudeStatus","homeCodexCliStatus","homeClaudeCliStatus"))((JLabel)get(f,n)).setText("当前：TokenPro·已选 4 款模型");
+ capture(f,args[0]+"/preview-home.png",1280);
  JButton accountAction=(JButton)get(f,"headerAccountButton");
  for(String accountName:List.of("121882249", "121882249@example.com", "long.account.name.for.layout@example.com")){
  ((JLabel)get(f,"headerUser")).setText(accountName);
