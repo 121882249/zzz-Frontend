@@ -26,7 +26,7 @@ public class AccountCardsUiTest {
  for(String n:List.of("homeCodexSupport","homeClaudeSupport","homeCodexCliSupport","homeClaudeCliSupport"))call(get(f,n),"setCount",new Class[]{long.class},n.contains("Codex")?20L:17L);
  for(String n:List.of("codexLaunch","claudeLaunch","codexCliLaunch","claudeCliLaunch")){JButton b=(JButton)get(f,n);b.setEnabled(true);b.setText("连接");}
  for(String n:List.of("codexModelMenuButton","claudeModelMenuButton","codexCliModelMenuButton","claudeCliModelMenuButton"))((JButton)get(f,n)).setEnabled(true);
- ((JLabel)get(f,"headerBalance")).setText("¥20.01");((JLabel)get(f,"headerUser")).setText("演示账户");
+ ((JLabel)get(f,"headerBalance")).setText("$20.01");((JLabel)get(f,"headerUser")).setText("演示账户");
  Class<?> item=Class.forName("work.tokenpro.client.TokenProFrame$SubscriptionItem");Constructor<?> c=item.getDeclaredConstructors()[0];c.setAccessible(true);
  call(f,"showSubscriptions",new Class[]{List.class},List.of(c.newInstance("Pro专业额度卡",200d,"2026-10-13T04:01:00Z"),c.newInstance("标准额度卡",50d,"2026-10-20T04:01:00Z")));
  JButton update=(JButton)get(f,"updateButton");call(f,"setUpdateButtonState",new Class[]{String.class,String.class},"latest","已是最新 v"+Main.VERSION);
@@ -47,7 +47,7 @@ public class AccountCardsUiTest {
  JButton picker=button(slot,"Pro专业额度卡");if(picker==null)throw new AssertionError("missing picker");picker.doClick();
  JButton option=button((Container)get(f,"activeModelMenuOverlay"),"标准额度卡");if(option==null)throw new AssertionError("missing option");option.doClick();
  capture(f,args[0]+"/preview-switched.png",1280);
- if(button(slot,"标准额度卡")==null || !label(slot,"$50.00 · 2026-10-20"))throw new AssertionError("subscription details did not switch");
+ if(button(slot,"标准额度卡")==null || (!label(slot,"$50.00") || !label(slot,"2026-10-20")))throw new AssertionError("subscription details did not switch");
  if(!slotBounds.equals(slot.getBounds()))throw new AssertionError("card moved after switching");
  JButton purchase=(JButton)get(f,"subscriptionPurchaseButton");JButton recharge=button(f.getContentPane(),"充值");
  if(recharge==null || purchase.getClientProperty("tokenpro.webGate")==recharge.getClientProperty("tokenpro.webGate"))throw new AssertionError("purchase controls must have separate gates");

@@ -141,3 +141,23 @@ The UI harness tests local control state; live API latency/failure and native Wi
 - Both CLI icons now use matching rounded-square bounds and corner radius. Codex keeps its purple terminal illustration within the tile; Claude uses a warm gray-purple tile and the supplied orange pixel character at the final reduced scale (60% of icon width). No gold outline remains.
 - Desktop client icons remain unchanged. Includes previously approved dynamic username width and independent three-second purchase controls.
 - Release build: 392 checks passed. Desktop UI regression and class-only CLI icon rendering at 1×/2×/3× passed. Source assets remain unchanged for incremental compatibility.
+
+### Balance typography and currency display
+
+- Wallet and subscription amounts now use ￥. Subscription amount reuses the wallet amount font (26px bold) and remains gold; the package picker and expiry occupy the smaller heading line. Dropdown/tooltip subscription amounts use the same currency symbol.
+- Preserved card bounds and centered subscription actions vertically. Package selection still updates the correct amount and expiry.
+- Build passed 392 checks; existing UI regression passed with updated currency assertions. Inspected default and narrow previews in outputs/balance-design. Amount values are unchanged; this is a display change, not a currency conversion.
+
+- Layout correction: retained the original package-name-over-expiry arrangement. Extracted ￥ amount into its own adjacent column, vertically centered at the same 26px bold size as wallet balance. Default and narrow renders inspected; 392 checks and UI regression passed.
+
+### Final balance alignment and dollar display
+
+- Latest user direction supersedes the ￥ proposal: wallet/account and subscription balances all display $. Numeric values remain unchanged.
+- Both header cards now share identical outer insets, four-pixel layout gaps, two-row caption grids (three-pixel gap), 12px bold first lines and 10px regular second lines. Amounts use the same 26px bold font and sit right-aligned before the refresh and purchase actions.
+- Build passed 392 checks; UI regression passed with dollar-display assertions; default screenshot inspected. Updated balance-design previews.
+
+### Hold-to-view amount explanation
+
+- Replaced the always-visible recharge ratio with 金额说明 and a small eye icon. Holding the control reveals “$ 为平台额度标记，$1 额度对应人民币 1 元”; releasing, disarming, hiding or losing focus dismisses it without changing card layout. Keyboard press behavior uses the same button model.
+- Naming alternatives offered: 金额说明 (selected default), 额度说明, 计价说明.
+- Build passed 392 checks and desktop UI regression. A standalone real-window check confirmed hidden-by-default, held reveal, release hide and pointer-disarm hide. Updated balance-design previews; not yet released.

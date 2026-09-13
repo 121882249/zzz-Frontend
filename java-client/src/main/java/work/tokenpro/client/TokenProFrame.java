@@ -252,24 +252,22 @@ final class TokenProFrame extends JFrame {
         title.add(right, BorderLayout.EAST); panel.add(title, BorderLayout.NORTH);
         Dimension headerCardSize = new Dimension(430, 64);
         RoundedPanel wallet = new RoundedPanel(20, new Color(22, 38, 78, 228), new Color(75, 190, 151, 145));
-        wallet.setLayout(new BorderLayout(6, 0)); wallet.setBorder(new EmptyBorder(10, 14, 10, 14));
+        wallet.setLayout(new BorderLayout(4, 0)); wallet.setBorder(new EmptyBorder(10, 10, 10, 14));
         wallet.setPreferredSize(headerCardSize); wallet.setMinimumSize(headerCardSize);
-        JPanel walletContent = transparent(new FlowLayout(FlowLayout.LEFT, 4, 0));
-        walletContent.add(new JLabel(new AccountCardIcon(false, new Color(105, 220, 194))));
-        JPanel captions = transparent(); captions.setLayout(new BoxLayout(captions, BoxLayout.Y_AXIS));
-        JLabel balanceText = new JLabel("钱包余额"); balanceText.setFont(appFont(12, Font.PLAIN)); balanceText.setForeground(MUTED);
-        JLabel rate = new JLabel("充值比例  1￥ = 1$"); rate.setFont(appFont(10, Font.PLAIN)); rate.setForeground(MUTED);
-        captions.add(balanceText); captions.add(rate); walletContent.add(captions);
-        headerBalance.setFont(appFont(26, Font.BOLD)); headerBalance.setForeground(new Color(105, 220, 194)); walletContent.add(headerBalance);
-        JPanel walletInfo = transparent(new GridBagLayout());
-        GridBagConstraints infoConstraints = new GridBagConstraints(); infoConstraints.weightx = 1; infoConstraints.anchor = GridBagConstraints.WEST;
-        walletInfo.add(walletContent, infoConstraints); wallet.add(walletInfo, BorderLayout.CENTER);
+        wallet.add(new JLabel(new AccountCardIcon(false, new Color(105, 220, 194))), BorderLayout.WEST);
+        JPanel walletInfo = transparent(new BorderLayout(4, 0));
+        JPanel captions = transparent(new GridLayout(2, 1, 0, 3));
+        JLabel balanceText = new JLabel("钱包余额"); balanceText.setFont(appFont(12, Font.BOLD)); balanceText.setForeground(MUTED);
+        JButton rate = new AmountExplanationButton();
+        captions.add(balanceText); captions.add(rate); walletInfo.add(captions, BorderLayout.CENTER);
+        headerBalance.setFont(appFont(26, Font.BOLD)); headerBalance.setForeground(new Color(105, 220, 194)); headerBalance.setHorizontalAlignment(SwingConstants.RIGHT);
+        walletInfo.add(headerBalance, BorderLayout.EAST); wallet.add(walletInfo, BorderLayout.CENTER);
         JPanel walletActions = transparent(new FlowLayout(FlowLayout.RIGHT, 6, 4));
         refreshAccountButton = accountRefreshButton(new Color(105, 220, 194), "刷新余额和订阅");
         refreshAccountButton.addActionListener(e -> refreshAccount()); walletActions.add(refreshAccountButton);
         JButton recharge = soft("充值"); guardWebButton(recharge, "purchase"); recharge.setIcon(resourceIconContained("PlusLucide.png", 15, 15, true));
         recharge.addActionListener(e -> browse("https://tokenpro.work/purchase")); walletActions.add(recharge);
-        wallet.add(walletActions, BorderLayout.EAST);
+        JPanel walletActionSlot = transparent(new GridBagLayout()); walletActionSlot.add(walletActions); wallet.add(walletActionSlot, BorderLayout.EAST);
         subscriptionSlot.setPreferredSize(headerCardSize); subscriptionSlot.setMinimumSize(headerCardSize);
         JPanel row = transparent(new GridBagLayout());
         GridBagConstraints walletConstraints = new GridBagConstraints(); walletConstraints.gridx = 0; walletConstraints.weightx = 1; walletConstraints.fill = GridBagConstraints.BOTH;
@@ -1117,7 +1115,7 @@ final class TokenProFrame extends JFrame {
 
     private void showBalance(Map<String,Object> user) {
         Object rawBalance = user.get("balance");
-        String balance = rawBalance instanceof Number number ? String.format(Locale.ROOT, "¥%.2f", number.doubleValue()) : "—";
+        String balance = rawBalance instanceof Number number ? String.format(Locale.ROOT, "$%.2f", number.doubleValue()) : "—";
         account.setText("已登录：" + string(user.get("email")) + "    余额：" + balance);
         headerBalance.setText(balance);
         accountBalance.setText(balance);
@@ -1363,7 +1361,7 @@ final class TokenProFrame extends JFrame {
         }
         Color tone = active ? new Color(235, 197, 116) : new Color(160, 172, 193);
         RoundedPanel card = new RoundedPanel(20, active ? new Color(42, 40, 59, 238) : new Color(30, 39, 59, 238), active ? new Color(190, 143, 48, 155) : new Color(126, 141, 166, 100));
-        card.setLayout(new BorderLayout(12, 0)); card.setBorder(new EmptyBorder(10, 14, 10, 14));
+        card.setLayout(new BorderLayout(4, 0)); card.setBorder(new EmptyBorder(10, 10, 10, 14));
         JLabel badge = new JLabel(new AccountCardIcon(true, tone)); card.add(badge, BorderLayout.WEST);
         JPanel details = transparent(new GridLayout(2, 1, 0, 3));
         if (active) {
@@ -1378,10 +1376,15 @@ final class TokenProFrame extends JFrame {
             picker.setHorizontalAlignment(SwingConstants.LEFT); picker.setBorder(new EmptyBorder(0, 0, 0, 0));
             picker.setToolTipText(first.displayText());
             picker.addActionListener(event -> showSubscriptionMenu(picker, subscriptions));
-            details.add(picker);
+            details.setLayout(new BorderLayout(4, 0));
+            JPanel subscriptionHeading = transparent(new GridLayout(2, 1, 0, 3));
+            subscriptionHeading.add(picker);
             String expiry = first.expiresAt().matches("\\d{4}-\\d{2}-\\d{2}.*") ? first.expiresAt().substring(0, 10) + "到期" : first.expiryText();
-            JLabel balance = new JLabel("$" + String.format(Locale.US, "%.2f", first.remaining()) + " · " + expiry);
-            balance.setFont(appFont(10, Font.PLAIN)); balance.setForeground(tone); balance.setToolTipText(first.displayText()); details.add(balance);
+            JLabel expiryLabel = new JLabel(expiry); expiryLabel.setFont(appFont(10, Font.PLAIN)); expiryLabel.setForeground(tone);
+            expiryLabel.setToolTipText(first.displayText()); subscriptionHeading.add(expiryLabel);
+            details.add(subscriptionHeading, BorderLayout.CENTER);
+            JLabel balance = new JLabel("$" + String.format(Locale.US, "%.2f", first.remaining()));
+            balance.setFont(headerBalance.getFont()); balance.setHorizontalAlignment(SwingConstants.RIGHT); balance.setForeground(tone); balance.setToolTipText(first.displayText()); details.add(balance, BorderLayout.EAST);
         } else {
             selectedSubscriptionName = null;
             JLabel title = new JLabel("模型订阅 · 尚未开通"); title.setFont(appFont(12, Font.BOLD)); title.setForeground(new Color(188, 197, 213)); details.add(title);
@@ -1391,7 +1394,8 @@ final class TokenProFrame extends JFrame {
         refreshSubscriptionButton = accountRefreshButton(tone, "刷新订阅");
         refreshSubscriptionButton.setEnabled(refreshAccountButton == null || refreshAccountButton.isEnabled());
         refreshSubscriptionButton.setToolTipText("刷新钱包余额和订阅信息"); refreshSubscriptionButton.getAccessibleContext().setAccessibleName("刷新订阅"); refreshSubscriptionButton.addActionListener(event -> refreshAccount()); actions.add(refreshSubscriptionButton);
-        JButton purchase = soft("订阅"); subscriptionPurchaseButton = purchase; guardWebButton(purchase, "subscription"); applyWebButtonState(purchase, browserOpenGates.get("subscription")); purchase.setForeground(active ? tone : new Color(211, 218, 232)); purchase.setIcon(resourceIconContained("PlusLucide.png", 15, 15, true)); purchase.setToolTipText("打开充值/订阅页面"); purchase.addActionListener(event -> browse("https://tokenpro.work/purchase", "subscription")); actions.add(purchase); card.add(actions, BorderLayout.EAST);
+        JButton purchase = soft("订阅"); subscriptionPurchaseButton = purchase; guardWebButton(purchase, "subscription"); applyWebButtonState(purchase, browserOpenGates.get("subscription")); purchase.setForeground(active ? tone : new Color(211, 218, 232)); purchase.setIcon(resourceIconContained("PlusLucide.png", 15, 15, true)); purchase.setToolTipText("打开充值/订阅页面"); purchase.addActionListener(event -> browse("https://tokenpro.work/purchase", "subscription")); actions.add(purchase);
+        JPanel actionSlot = transparent(new GridBagLayout()); actionSlot.add(actions); card.add(actionSlot, BorderLayout.EAST);
         card.add(details, BorderLayout.CENTER); subscriptionSlot.add(card, BorderLayout.CENTER);
         subscriptionSlot.revalidate();
         subscriptionSlot.repaint();
@@ -2647,6 +2651,50 @@ final class TokenProFrame extends JFrame {
             g.drawLine(size - 5, middle + 3, size - 2, middle);
             g.dispose();
         }
+    }
+
+    static final class AmountExplanationButton extends JButton {
+        private Popup explanation;
+        AmountExplanationButton() {
+            super("金额说明"); setFont(appFont(10, Font.PLAIN)); setForeground(MUTED);
+            setIcon(new Icon() {
+                public int getIconWidth() { return 13; }
+                public int getIconHeight() { return 13; }
+                public void paintIcon(Component component, Graphics graphics, int x, int y) {
+                    Graphics2D g = (Graphics2D) graphics.create(); g.translate(x, y);
+                    g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    g.setColor(getModel().isPressed() ? new Color(118, 230, 203) : getForeground());
+                    g.setStroke(new BasicStroke(1.1f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    java.awt.geom.Path2D eye = new java.awt.geom.Path2D.Double();
+                    eye.moveTo(1, 6.5); eye.curveTo(4, 1.5, 9, 1.5, 12, 6.5); eye.curveTo(9, 11.5, 4, 11.5, 1, 6.5); g.draw(eye);
+                    g.drawOval(5, 5, 3, 3); g.dispose();
+                }
+            });
+            setIconTextGap(5); setHorizontalAlignment(SwingConstants.LEFT);
+            setBorder(new EmptyBorder(0, 0, 0, 0)); setOpaque(false); setContentAreaFilled(false); setBorderPainted(false);
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            getAccessibleContext().setAccessibleName("金额说明，按住查看，松开隐藏");
+            getModel().addChangeListener(event -> {
+                if (isEnabled() && getModel().isPressed() && getModel().isArmed()) reveal(); else conceal();
+                repaint();
+            });
+            addFocusListener(new java.awt.event.FocusAdapter() {
+                @Override public void focusLost(java.awt.event.FocusEvent event) { conceal(); }
+            });
+            addHierarchyListener(event -> { if (!isShowing()) conceal(); });
+        }
+        private void reveal() {
+            if (explanation != null || !isShowing()) return;
+            JLabel message = new JLabel("$ 为平台额度标记，$1 额度对应人民币 1 元");
+            message.setFont(appFont(12, Font.PLAIN)); message.setForeground(new Color(231, 239, 250));
+            message.setOpaque(true); message.setBackground(new Color(22, 34, 57));
+            message.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(new Color(94, 128, 146)), new EmptyBorder(10, 12, 10, 12)));
+            Point point = getLocationOnScreen();
+            explanation = PopupFactory.getSharedInstance().getPopup(this, message, point.x, point.y + getHeight() + 6);
+            explanation.show();
+        }
+        private void conceal() { if (explanation != null) { explanation.hide(); explanation = null; } }
+        @Override public void removeNotify() { conceal(); super.removeNotify(); }
     }
 
     private static final class MembershipAvatarIcon implements Icon {
