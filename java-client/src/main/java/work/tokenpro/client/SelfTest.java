@@ -90,9 +90,16 @@ final class SelfTest {
         check(!CodexConfig.routedModelId(new PricedModel("same-model", "openai", "A", 16)).equals(
             CodexConfig.routedModelId(new PricedModel("same-model", "openai", "B", 65))),
             "same model name in different groups cannot share a direct route"); passed++;
-        String releasedProvider = CodexConfig.providerConfiguration("custom", "https://tokenpro.work/v1", "fixture", "user@example.com", 65L);
-        check(releasedProvider.contains("\"x-tokenpro-group-id\" = \"65\"") && !releasedProvider.contains("native-v1")
-            && !releasedProvider.contains("x-tokenpro-image-route"), "release preserves existing routing without pending native-image protocol"); passed++;
+        PricedModel nativeChat = new PricedModel("gpt-5.6-sol", "openai", "GPT", 16);
+        PricedModel nativeImage = new PricedModel("gpt-image-2.5-flare", "openai", "Images", 65);
+        check(CodexConfig.nativeImageRoute(nativeChat, null).equals(CodexConfig.routedModelId(nativeChat)),
+            "text-only native images keep the selected text model's tool capability and group"); passed++;
+        check(CodexConfig.nativeImageRoute(nativeChat, nativeImage).equals(CodexConfig.routedModelId(nativeImage)),
+            "explicit image model keeps its own independent group"); passed++;
+        String nativeProvider = CodexConfig.providerConfiguration("custom", "https://tokenpro.work/v1", "fixture", "user@example.com", null,
+            CodexConfig.nativeImageRoute(nativeChat, nativeImage));
+        check(nativeProvider.contains("\"x-tokenpro-image-mode\" = \"native-v1\"") && !nativeProvider.contains("x-tokenpro-group-id"),
+            "native delivery explicitly opts in without a shared text/image group header"); passed++;
         String managedActor = "# >>> TokenPro managed >>>\n[model_providers.custom]\nname = \"Codex\"\nhttp_headers = { \"x-openai-actor-authorization\" = \"Codex\" }\n# <<< TokenPro managed <<<\n";
         String emailActor = CodexConfig.withActor(managedActor, "user@example.com");
         check(emailActor.contains("name = \"user@example.com\"") && emailActor.contains("\"x-openai-actor-authorization\" = \"user@example.com\""), "existing Codex actor migrates to account email"); passed++;

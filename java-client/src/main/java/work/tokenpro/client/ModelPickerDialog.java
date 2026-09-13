@@ -56,7 +56,7 @@ final class ModelPickerDialog extends JDialog {
         titleLine.add(title, BorderLayout.WEST);
         titleLine.add(closeControl(), BorderLayout.EAST);
         boolean codex = "Codex".equals(client);
-        JLabel detail = new JLabel(codex ? "全局至少选择 1 个模型；生图模型可独立直接生图" : "LLM Model 至少选择 1 个，可同时选择多个");
+        JLabel detail = new JLabel(codex ? "生图默认使用首个已选生图模型；未选生图模型时使用默认主模型分组" : "LLM Model 至少选择 1 个，可同时选择多个");
         detail.setFont(font(12, Font.PLAIN));
         detail.setForeground(MUTED);
         header.add(titleLine);

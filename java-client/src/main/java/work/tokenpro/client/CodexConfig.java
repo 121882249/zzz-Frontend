@@ -44,10 +44,10 @@ final class CodexConfig {
         // Image models stay in their own picker group and are also written to
         // Codex's catalog so they can run directly without a selected LLM.
         Path catalog = writeModelCatalog(models);
-        // Preserve the released direct-routing contract. Native image delivery
-        // is not enabled until the server-side protocol has passed acceptance.
+        // Text uses exact group-qualified slugs. The native image tool sends a
+        // separate Images request and needs the user's default image route.
         String block = managedBlock(url, primaryModel, catalog, key.trim(), actor, current, Set.of("custom"),
-            commonGroup(models));
+            nativeImageRoute(primaryModel, imageModel));
         // Replace the active config; official switching deletes it. Availability
         // is validated by the gateway when a request is actually submitted.
         writeAtomic(target, block);
@@ -55,6 +55,13 @@ final class CodexConfig {
         // Failure is housekeeping, not a reason to restore a previous channel.
         try { pruneModelCatalogs(catalog); store.delete("codex-model-catalog.json"); }
         catch (IOException failure) { /* The active config already names its immutable catalog. */ }
+    }
+
+    // Without a separately selected image model, use the native image tool in
+    // the selected primary model's group. Never silently select another group.
+    static String nativeImageRoute(PricedModel primary, PricedModel image) {
+        if (image != null) return routedModelId(image);
+        return routedModelId(primary);
     }
 
     boolean restore() throws Exception {
@@ -267,7 +274,7 @@ final class CodexConfig {
         return current.substring(0, start) + managed + current.substring(end);
     }
 
-    private String managedBlock(String url, PricedModel model, Path catalog, String key, String actor, String current, Collection<String> historicalProviderIds, Long groupId) throws IOException {
+    private String managedBlock(String url, PricedModel model, Path catalog, String key, String actor, String current, Collection<String> historicalProviderIds, String imageRoute) throws IOException {
         StringBuilder out = new StringBuilder();
         String routedModel = routedModelId(model);
         out.append(START).append('\n');
@@ -283,9 +290,9 @@ final class CodexConfig {
             .filter(entry -> routedModel.equals(entry.get("slug"))).findFirst().orElseThrow();
         out.append(CodexPreferences.retainedLines(current, profile));
         out.append("model_catalog_json = ").append(toml(catalog.toAbsolutePath().toString())).append("\n\n");
-        out.append(providerConfiguration("custom", url, key, actor, groupId));
+        out.append(providerConfiguration("custom", url, key, actor, null, imageRoute));
         historicalProviderIds.stream().filter(id -> !"custom".equals(id)).filter(CodexConfig::compatibleProviderId).sorted()
-            .forEach(id -> out.append(providerConfiguration(id, url, key, actor, groupId)));
+            .forEach(id -> out.append(providerConfiguration(id, url, key, actor, null, imageRoute)));
         // Codex reserves built-in provider IDs; never overwrite 'openai'.
         // Official threads may retain their provider; the UI must not claim
         // they have switched just because this default config was saved.
@@ -294,6 +301,10 @@ final class CodexConfig {
     }
 
     static String providerConfiguration(String id, String url, String key, String actor, Long groupId) {
+        return providerConfiguration(id, url, key, actor, groupId, null);
+    }
+
+    static String providerConfiguration(String id, String url, String key, String actor, Long groupId, String imageRoute) {
         StringBuilder out = new StringBuilder(providerHeader(id)).append('\n');
         out.append("name = ").append(toml(actor)).append('\n');
         // Keep /v1 in the provider URL. Codex appends /responses to this value;
@@ -305,6 +316,8 @@ final class CodexConfig {
         out.append("experimental_bearer_token = ").append(toml(key)).append('\n');
         out.append("http_headers = { \"x-openai-actor-authorization\" = ").append(toml(actor));
         if (groupId != null) out.append(", \"x-tokenpro-group-id\" = ").append(toml(Long.toString(groupId)));
+        if (imageRoute != null) out.append(", \"x-tokenpro-image-route\" = ").append(toml(imageRoute))
+            .append(", \"x-tokenpro-image-mode\" = \"native-v1\"");
         out.append(" }\n");
         out.append("supports_websockets = false\n\n");
         return out.toString();
@@ -312,12 +325,6 @@ final class CodexConfig {
 
     static String providerBaseUrl(String url) {
         return url;
-    }
-
-    private static Long commonGroup(List<PricedModel> models) {
-        if (models.isEmpty()) return null;
-        long group = models.getFirst().groupId();
-        return models.stream().allMatch(model -> model.groupId() == group) ? group : null;
     }
 
     static String routedModelId(PricedModel model) {
