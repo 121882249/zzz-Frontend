@@ -32,6 +32,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 final class TokenProFrame extends JFrame {
+    private static final String REMEMBERED_EMAIL_FILE = "remembered-email.txt";
     record ReleaseInfo(String version, String downloadUrl, String sha256, String incrementalUrl, String incrementalSha256) {
         boolean hasIncrementalUpdate() { return !incrementalUrl.isBlank(); }
         String preferredUrl() { return hasIncrementalUpdate() ? incrementalUrl : downloadUrl; }
@@ -112,10 +113,12 @@ final class TokenProFrame extends JFrame {
     private final AtomicBoolean updateInProgress = new AtomicBoolean();
     private final AtomicBoolean installationScanInProgress = new AtomicBoolean();
     private final AtomicBoolean accountRefreshInProgress = new AtomicBoolean();
+    private final AtomicBoolean serverHealthCheckInProgress = new AtomicBoolean();
     private final ConnectionGate connectingClients = new ConnectionGate();
     private final Map<String,BrowserOpenGate> browserOpenGates = BrowserOpenGate.independentGates();
     private final List<JButton> guardedWebButtons = new ArrayList<>();
     private final javax.swing.Timer webLinkTimer = new javax.swing.Timer(250, e -> updateWebButtons());
+    private javax.swing.Timer serverHealthTimer;
     private long lastAccountRefresh;
     private volatile boolean installationScanCompleted;
     private final Set<String> knownInstallationTargets = new HashSet<>();
@@ -126,6 +129,7 @@ final class TokenProFrame extends JFrame {
     private final CardLayout views = new CardLayout();
     private final JPanel viewHost = new JPanel(views);
     private CosmosLoginPanel loginView;
+    private final CosmosLoginPanel.ServerStatusIndicator dashboardServerStatus = new CosmosLoginPanel.ServerStatusIndicator(true);
     private String accessToken;
     private String refreshToken = "";
     private long tokenExpiresAt;
@@ -151,17 +155,27 @@ final class TokenProFrame extends JFrame {
         setMinimumSize(new Dimension(1080, 720));
         setSize(1280, 820);
         setLocationRelativeTo(null);
+        restoreRememberedEmail();
         setContentPane(content());
         addWindowListener(new WindowAdapter() {
-            @Override public void windowClosed(WindowEvent event) { webLinkTimer.stop(); }
+            @Override public void windowClosed(WindowEvent event) {
+                webLinkTimer.stop();
+                if (serverHealthTimer != null) serverHealthTimer.stop();
+            }
         });
         addWindowFocusListener(new WindowAdapter() {
             @Override public void windowGainedFocus(WindowEvent event) {
                 refreshInstallationState();
-                if (initializeServices) refreshAccountSilently();
+                if (initializeServices) {
+                    refreshAccountSilently();
+                    refreshServerHealth();
+                }
             }
         });
         if (!initializeServices) return;
+        refreshServerHealth();
+        serverHealthTimer = new javax.swing.Timer(10000, event -> refreshServerHealth());
+        serverHealthTimer.start();
         refreshInstallationState();
         restoreSession();
         new SwingWorker<Boolean, Void>() {
@@ -190,7 +204,15 @@ final class TokenProFrame extends JFrame {
     private JComponent content() {
         CosmosLoginPanel.Backdrop shell = new CosmosLoginPanel.Backdrop();
         viewHost.setOpaque(false);
-        loginView = new CosmosLoginPanel(email, password, e -> authenticate(), e -> updateFromButton());
+        loginView = new CosmosLoginPanel(
+            email,
+            password,
+            e -> authenticate(),
+            e -> browse("https://tokenpro.work/register"),
+            e -> browse("https://tokenpro.work/forgot-password"),
+            e -> updateFromButton());
+        guardWebButton(loginView.registerButton(), "register");
+        guardWebButton(loginView.forgotPasswordButton(), "forgot-password");
         viewHost.add(loginView, "login");
         viewHost.add(dashboard(), "dashboard");
         shell.add(windowStage(), BorderLayout.CENTER);
@@ -207,6 +229,21 @@ final class TokenProFrame extends JFrame {
         stage.setOpaque(false);
         stage.add(viewHost, JLayeredPane.DEFAULT_LAYER);
         return stage;
+    }
+
+    private void refreshServerHealth() {
+        if (!serverHealthCheckInProgress.compareAndSet(false, true)) return;
+        new SwingWorker<ApiClient.HealthResult, Void>() {
+            @Override protected ApiClient.HealthResult doInBackground() { return api.health(); }
+            @Override protected void done() {
+                ApiClient.HealthResult health = new ApiClient.HealthResult(false, -1L);
+                try { health = get(); }
+                catch (Exception ignored) { }
+                if (loginView != null) loginView.setServerHealth(health);
+                dashboardServerStatus.setHealth(health);
+                serverHealthCheckInProgress.set(false);
+            }
+        }.execute();
     }
 
     private JComponent dashboard() {
@@ -227,7 +264,8 @@ final class TokenProFrame extends JFrame {
     private JComponent sidebar() {
         JPanel panel = new SidebarPanel(); panel.setLayout(new BorderLayout()); panel.setPreferredSize(new Dimension(226, 650));
         JPanel top = new JPanel(); top.setOpaque(false); top.setBorder(new EmptyBorder(25, 12, 10, 12)); top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
-        JLabel brand = new JLabel("TokenPro", resourceIconContained("TokenProCosmosIcon.png", 28, 28, false), SwingConstants.LEFT); brand.setIconTextGap(11); brand.setFont(appFont(17, Font.BOLD)); brand.setForeground(TEXT); brand.setBorder(new EmptyBorder(0, 5, 24, 0)); top.add(brand);
+        JLabel brand = new JLabel("TokenPro", resourceIconContained("TokenProCosmosIcon.png", 28, 28, false), SwingConstants.LEFT); brand.setIconTextGap(11); brand.setFont(appFont(17, Font.BOLD)); brand.setForeground(dashboardServerStatus.statusColor()); brand.setBorder(new EmptyBorder(0, 5, 0, 0)); dashboardServerStatus.addPropertyChangeListener("statusColor", event -> brand.setForeground((Color) event.getNewValue()));
+        JPanel brandRow = transparent(new BorderLayout()); brandRow.setAlignmentX(Component.LEFT_ALIGNMENT); brandRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32)); brandRow.add(brand, BorderLayout.CENTER); brandRow.add(dashboardServerStatus, BorderLayout.EAST); top.add(brandRow); top.add(Box.createVerticalStrut(24));
         addNav(top, "首页", "SparklesLucide.png");
         JButton backend = sideAction("后台管理", "WebCog.png"); guardWebButton(backend, "admin"); backend.addActionListener(e -> browse("https://tokenpro.work/admin/dashboard")); top.add(backend); top.add(Box.createVerticalStrut(6));
         JButton docs = sideAction("使用文档", "WebBook.png"); guardWebButton(docs, "docs"); docs.addActionListener(e -> browse("https://tokenpro.work/docs")); top.add(docs); top.add(Box.createVerticalStrut(6));
@@ -469,6 +507,7 @@ final class TokenProFrame extends JFrame {
 
     private void authenticate() {
         String emailValue = email.getText().trim();
+        rememberEmail(emailValue);
         char[] secret = password.getPassword();
         if (emailValue.isBlank() || secret.length == 0) {
             Arrays.fill(secret, '\0');
@@ -515,6 +554,7 @@ final class TokenProFrame extends JFrame {
     private void logout() {
         try {
             store.delete("java-session.json"); accessToken = null; refreshToken = ""; tokenExpiresAt = 0; sessionUser = Map.of(); accountId = ""; keys.clear();
+            password.setText("");
             account.setText("尚未登录"); headerUser.setText("登录账户"); accountEmail.setText("登录账户"); headerBalance.setText("—"); accountBalance.setText("—"); finishAccountRefresh("刷新钱包余额和订阅信息"); showSubscriptions(List.of());
             homeCodexSupport.reset(); homeClaudeSupport.reset(); premiumModelTicker.reset();
             setDesktopCardState("Codex", "请先选择模型", false);
@@ -752,6 +792,8 @@ final class TokenProFrame extends JFrame {
                 refreshToken = string(saved.get("refresh_token"));
                 tokenExpiresAt = saved.get("token_expires_at") instanceof Number number ? number.longValue() : 0;
                 sessionUser = saved.get("user") instanceof Map<?, ?> ? Json.object(saved.get("user")) : Map.of();
+                String savedEmail = string(sessionUser.get("email"));
+                if (!savedEmail.isBlank()) store.write(REMEMBERED_EMAIL_FILE, savedEmail.trim().toLowerCase(Locale.ROOT));
                 if (accessToken.isBlank()) return null;
                 Map<String, Object> user = api.me(accessToken);
                 saveSession(user);
@@ -760,12 +802,13 @@ final class TokenProFrame extends JFrame {
             protected void done() {
                 try {
                     Map<String, Object> value = get();
-                    if (value == null) { status("就绪"); showLoginScreen(); }
+                    if (value == null) { restoreRememberedEmail(); status("就绪"); showLoginScreen(); }
                     else { showAccount(value); updateCodexStatus(); updateBridgeStatus(); showPage("首页"); showDashboardScreen(); }
                 } catch (Exception error) {
                     Throwable cause = error.getCause() == null ? error : error.getCause();
                     if (ApiClient.isUnauthorized(cause)) try { store.delete("java-session.json"); } catch (Exception ignored) {}
                     accessToken = null; refreshToken = ""; tokenExpiresAt = 0; sessionUser = Map.of(); accountId = "";
+                    restoreRememberedEmail();
                     status("请重新登录"); showLoginScreen();
                     loginView.setLoading(false, ApiClient.isUnauthorized(cause) ? "登录已失效，请重新登录" : "暂时无法恢复登录，可重试或检查更新");
                 }
@@ -1085,6 +1128,7 @@ final class TokenProFrame extends JFrame {
     private void showAccount(Map<String, Object> user, boolean loadSubscriptions) {
         sessionUser = new LinkedHashMap<>(user);
         String emailValue = string(user.get("email"));
+        rememberEmail(emailValue);
         showBalance(user);
         headerUser.setText(emailValue.isBlank() ? "我的账户" : emailValue);
         accountEmail.setText(emailValue.isBlank() ? "我的账户" : emailValue);
@@ -1218,6 +1262,20 @@ final class TokenProFrame extends JFrame {
         if (tokenExpiresAt > 0) saved.put("token_expires_at", tokenExpiresAt);
         saved.put("user", user);
         store.write("java-session.json", Json.stringify(saved));
+    }
+
+    private void restoreRememberedEmail() {
+        try {
+            String value = store.read(REMEMBERED_EMAIL_FILE).orElse("").trim();
+            if (!value.isBlank()) email.setText(value);
+        } catch (Exception ignored) { }
+    }
+
+    private void rememberEmail(String value) {
+        String normalized = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+        if (normalized.isBlank()) return;
+        try { store.write(REMEMBERED_EMAIL_FILE, normalized); }
+        catch (Exception ignored) { }
     }
 
     private JPanel vertical() {

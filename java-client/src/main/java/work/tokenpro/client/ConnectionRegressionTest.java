@@ -6,9 +6,23 @@ import java.util.*;
 final class ConnectionRegressionTest {
     static int run() throws Exception {
         int passed = 0;
+        check(ApiClient.isHealthyResponse(200, "{\"status\":\"ok\"}"), "health endpoint accepts an explicit ok response"); passed++;
+        check(ApiClient.isHealthyResponse(200, "{\"status\":\"OK\"}"), "health endpoint status is case-insensitive"); passed++;
+        check(!ApiClient.isHealthyResponse(503, "{\"status\":\"ok\"}")
+            && !ApiClient.isHealthyResponse(200, "{\"status\":\"down\"}")
+            && !ApiClient.isHealthyResponse(200, "not-json"), "health endpoint rejects failures and malformed data"); passed++;
+        check(CosmosLoginPanel.ServerStatusIndicator.colorFor(new ApiClient.HealthResult(true, 500L)).equals(new java.awt.Color(105, 220, 194)), "health is green through 500ms"); passed++;
+        check(CosmosLoginPanel.ServerStatusIndicator.colorFor(new ApiClient.HealthResult(true, 501L)).equals(new java.awt.Color(255, 190, 69))
+            && CosmosLoginPanel.ServerStatusIndicator.colorFor(new ApiClient.HealthResult(true, 1500L)).equals(new java.awt.Color(255, 190, 69)), "health is yellow from 501ms through 1500ms"); passed++;
+        check(CosmosLoginPanel.ServerStatusIndicator.colorFor(new ApiClient.HealthResult(true, 1501L)).equals(new java.awt.Color(255, 91, 111))
+            && CosmosLoginPanel.ServerStatusIndicator.colorFor(new ApiClient.HealthResult(false, -1L)).equals(new java.awt.Color(255, 91, 111)), "health is red above 1500ms or when disconnected"); passed++;
+        check(CosmosLoginPanel.ServerStatusIndicator.colorFor(new ApiClient.HealthResult(true, 3000L)).equals(new java.awt.Color(255, 91, 111)), "health remains red through 3000ms"); passed++;
+        check(CosmosLoginPanel.ServerStatusIndicator.colorFor(new ApiClient.HealthResult(true, 3001L)).equals(new java.awt.Color(132, 143, 174))
+            && CosmosLoginPanel.ServerStatusIndicator.colorFor(null).equals(new java.awt.Color(132, 143, 174)), "health is gray above 3000ms and before the first result"); passed++;
         java.util.concurrent.atomic.AtomicLong linkClock = new java.util.concurrent.atomic.AtomicLong(1000);
         BrowserOpenGate links = new BrowserOpenGate(linkClock::get);
-        for (String url : List.of("https://tokenpro.work/admin/dashboard", "https://tokenpro.work/docs", "https://tokenpro.work/purchase")) {
+        for (String url : List.of("https://tokenpro.work/admin/dashboard", "https://tokenpro.work/docs", "https://tokenpro.work/purchase",
+            "https://tokenpro.work/register", "https://tokenpro.work/forgot-password")) {
             check(BrowserOpenGate.protects(url), "protected web entry " + url); passed++;
         }
         check(!BrowserOpenGate.protects("https://tokenpro.work/downloads/latest/release-v2.json") && !BrowserOpenGate.protects("https://other.example/docs"), "updates and unrelated links do not share web cooldown"); passed++;
@@ -30,7 +44,9 @@ final class ConnectionRegressionTest {
         BrowserOpenGate admin = entries.get(BrowserOpenGate.key("https://tokenpro.work/admin/dashboard"));
         BrowserOpenGate docs = entries.get(BrowserOpenGate.key("https://tokenpro.work/docs"));
         BrowserOpenGate purchase = entries.get(BrowserOpenGate.key("https://tokenpro.work/purchase"));
-        check(admin != docs && docs != purchase && admin != purchase, "three entries have separate state"); passed++;
+        BrowserOpenGate register = entries.get(BrowserOpenGate.key("https://tokenpro.work/register"));
+        BrowserOpenGate forgotPassword = entries.get(BrowserOpenGate.key("https://tokenpro.work/forgot-password"));
+        check(Set.of(admin, docs, purchase, register, forgotPassword).size() == 5, "web entries have separate state"); passed++;
         check(admin.begin() && docs.begin() && purchase.begin(), "pending admin request does not block docs or purchase"); passed++;
         admin.opened();
         independentClock.addAndGet(3000); docs.opened();
@@ -52,6 +68,13 @@ final class ConnectionRegressionTest {
         independentClock.addAndGet(1000);
         check(subscription.begin(), "subscription unlocks three seconds after its own successful open"); passed++;
         purchase.failed(); subscription.failed();
+        check(register.begin() && forgotPassword.begin(), "registration and password recovery have independent locks"); passed++;
+        register.opened(); forgotPassword.opened();
+        independentClock.addAndGet(2999);
+        check(!register.begin() && !forgotPassword.begin(), "account links stay locked before three seconds"); passed++;
+        independentClock.incrementAndGet();
+        check(register.begin() && forgotPassword.begin(), "account links unlock independently at three seconds"); passed++;
+        register.failed(); forgotPassword.failed();
         for (String label : List.of("后台管理", "使用文档", "充值/订阅")) {
             javax.swing.SwingUtilities.invokeAndWait(() -> {
                 BrowserOpenGate buttonGate = new BrowserOpenGate(independentClock::get);

@@ -16,7 +16,13 @@ final class BrowserOpenGate {
     BrowserOpenGate(LongSupplier clock, long intervalMs) { this.clock = clock; this.intervalMs = intervalMs; }
     static Map<String,BrowserOpenGate> independentGates() { return independentGates(() -> System.nanoTime() / 1_000_000); }
     static Map<String,BrowserOpenGate> independentGates(LongSupplier clock) {
-        return Map.of("admin", new BrowserOpenGate(clock), "docs", new BrowserOpenGate(clock), "purchase", new BrowserOpenGate(clock, 3000), "subscription", new BrowserOpenGate(clock, 3000));
+        return Map.of(
+            "admin", new BrowserOpenGate(clock),
+            "docs", new BrowserOpenGate(clock),
+            "purchase", new BrowserOpenGate(clock, 3000),
+            "subscription", new BrowserOpenGate(clock, 3000),
+            "register", new BrowserOpenGate(clock, 3000),
+            "forgot-password", new BrowserOpenGate(clock, 3000));
     }
     static boolean protects(String url) {
         return key(url) != null;
@@ -26,7 +32,7 @@ final class BrowserOpenGate {
             URI target = URI.create(url);
             if (!"https".equalsIgnoreCase(target.getScheme()) || !"tokenpro.work".equalsIgnoreCase(target.getHost())) return null;
             String path = target.getPath();
-            for (String key : new String[]{"admin", "docs", "purchase"})
+            for (String key : new String[]{"admin", "docs", "purchase", "register", "forgot-password"})
                 if(path.equals("/" + key) || path.startsWith("/" + key + "/")) return key;
             return null;
         } catch (Exception ignored) { return null; }

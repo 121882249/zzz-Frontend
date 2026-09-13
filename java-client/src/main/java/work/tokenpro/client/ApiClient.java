@@ -8,13 +8,44 @@ import java.time.Duration;
 import java.util.*;
 
 final class ApiClient {
+    record HealthResult(boolean connected, long latencyMillis) { }
+
     static final class ApiException extends IllegalStateException {
         private final int status;
         ApiException(int status, String message) { super(message); this.status = status; }
         int status() { return status; }
     }
     private static final String BASE = "https://tokenpro.work/api/v1";
+    private static final URI HEALTH_ENDPOINT = URI.create("https://tokenpro.work/health");
     private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).followRedirects(HttpClient.Redirect.NEVER).build();
+
+    HealthResult health() {
+        long started = System.nanoTime();
+        try {
+            HttpRequest request = HttpRequest.newBuilder(HEALTH_ENDPOINT)
+                .timeout(Duration.ofSeconds(4))
+                .header("Accept", "application/json")
+                .GET()
+                .build();
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            long latency = Math.max(0L, (System.nanoTime() - started) / 1_000_000L);
+            return new HealthResult(isHealthyResponse(response.statusCode(), response.body()), latency);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return new HealthResult(false, -1L);
+        } catch (Exception ignored) {
+            return new HealthResult(false, -1L);
+        }
+    }
+
+    static boolean isHealthyResponse(int status, String body) {
+        if (status != 200 || body == null || body.isBlank()) return false;
+        try {
+            return "ok".equalsIgnoreCase(text(Json.object(Json.parse(body)).get("status")));
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
 
     Map<String, Object> login(String email, String password) throws Exception {
         if (!email.contains("@") || email.chars().anyMatch(Character::isWhitespace)) throw new IllegalArgumentException("请输入有效邮箱");

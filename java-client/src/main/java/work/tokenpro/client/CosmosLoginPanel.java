@@ -15,11 +15,16 @@ import java.util.List;
 final class CosmosLoginPanel extends JPanel {
     private static final Color TEXT = new Color(246, 248, 255);
     private static final Color MUTED = new Color(164, 175, 211);
-    private final JButton loginButton = new GradientButton("登录 / 注册");
+    private final JButton loginButton = new GradientButton("登录");
+    private final JButton registerButton = linkButton("注册账户");
+    private final JButton forgotPasswordButton = linkButton("忘记密码");
     private final JButton updateButton = TokenProFrame.headerControl("检查更新", 168);
-    private final JLabel feedback = label("登录信息仅加密保存在当前设备", 11, Font.PLAIN, new Color(145, 156, 191));
+    private final JLabel feedback = label("邮箱保存在当前设备，密码不会保存", 11, Font.PLAIN, new Color(145, 156, 191));
+    private final ServerStatusIndicator serverStatus = new ServerStatusIndicator(false);
 
-    CosmosLoginPanel(JTextField email, JPasswordField password, ActionListener loginAction, ActionListener updateAction) {
+    CosmosLoginPanel(JTextField email, JPasswordField password, ActionListener loginAction,
+                     ActionListener registerAction, ActionListener forgotPasswordAction,
+                     ActionListener updateAction) {
         super(new BorderLayout());
         setOpaque(false);
         setBorder(new EmptyBorder(32, 44, 34, 44));
@@ -43,21 +48,22 @@ final class CosmosLoginPanel extends JPanel {
         login.fill = GridBagConstraints.BOTH;
         JPanel loginWell = new JPanel(new GridBagLayout());
         loginWell.setOpaque(false);
-        loginWell.add(loginCard(email, password, loginAction));
+        loginWell.add(loginCard(email, password, loginAction, registerAction, forgotPasswordAction));
         stage.add(loginWell, login);
         add(stage, BorderLayout.CENTER);
     }
 
-    private JComponent loginCard(JTextField email, JPasswordField password, ActionListener loginAction) {
+    private JComponent loginCard(JTextField email, JPasswordField password, ActionListener loginAction,
+                                 ActionListener registerAction, ActionListener forgotPasswordAction) {
         GlassPanel card = new GlassPanel();
-        card.setPreferredSize(new Dimension(400, 404));
+        card.setPreferredSize(new Dimension(400, 432));
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setBorder(new EmptyBorder(20, 24, 20, 24));
 
         JPanel top = new JPanel(new BorderLayout());
         top.setOpaque(false); top.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
         top.setAlignmentX(Component.LEFT_ALIGNMENT);
-        top.add(label("●  服务运行正常", 11, Font.PLAIN, new Color(111, 229, 196)), BorderLayout.WEST);
+        top.add(serverStatus, BorderLayout.WEST);
         top.add(label("简体中文", 11, Font.PLAIN, new Color(151, 160, 190)), BorderLayout.EAST);
         card.add(top); card.add(Box.createVerticalStrut(16));
 
@@ -75,9 +81,19 @@ final class CosmosLoginPanel extends JPanel {
         loginButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
         loginButton.setPreferredSize(new Dimension(352, 44));
         loginButton.addActionListener(loginAction);
+        registerButton.addActionListener(registerAction);
+        forgotPasswordButton.addActionListener(forgotPasswordAction);
         email.addActionListener(loginAction);
         password.addActionListener(loginAction);
-        card.add(loginButton); card.add(Box.createVerticalStrut(14));
+        card.add(loginButton); card.add(Box.createVerticalStrut(8));
+
+        JPanel accountLinks = new JPanel(new BorderLayout());
+        accountLinks.setOpaque(false);
+        accountLinks.setAlignmentX(Component.LEFT_ALIGNMENT);
+        accountLinks.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
+        accountLinks.add(registerButton, BorderLayout.WEST);
+        accountLinks.add(forgotPasswordButton, BorderLayout.EAST);
+        card.add(accountLinks); card.add(Box.createVerticalStrut(10));
 
         JLabel divider = label("────────  端到端安全连接  ────────", 10, Font.PLAIN, new Color(102, 112, 148));
         divider.setAlignmentX(Component.LEFT_ALIGNMENT); divider.setHorizontalAlignment(SwingConstants.CENTER); divider.setMaximumSize(new Dimension(Integer.MAX_VALUE, divider.getPreferredSize().height)); card.add(divider); card.add(Box.createVerticalStrut(10));
@@ -104,8 +120,8 @@ final class CosmosLoginPanel extends JPanel {
 
     void setLoading(boolean loading, String text) {
         loginButton.setEnabled(!loading);
-        loginButton.setText(loading ? "正在登录…" : "登录 / 注册");
-        feedback.setText(text == null || text.isBlank() ? "登录信息仅加密保存在当前设备" : text);
+        loginButton.setText(loading ? "正在登录…" : "登录");
+        feedback.setText(text == null || text.isBlank() ? "邮箱保存在当前设备，密码不会保存" : text);
         feedback.setForeground(loading ? new Color(150, 168, 255) : new Color(145, 156, 191));
     }
 
@@ -124,12 +140,135 @@ final class CosmosLoginPanel extends JPanel {
         updateButton.repaint();
     }
 
+    JButton registerButton() { return registerButton; }
+    JButton forgotPasswordButton() { return forgotPasswordButton; }
+
+    void setServerHealth(ApiClient.HealthResult health) { serverStatus.setHealth(health); }
+    void setServerConnected(boolean connected) { serverStatus.setHealth(new ApiClient.HealthResult(connected, connected ? 0L : -1L)); }
+
+    private static JButton linkButton(String text) {
+        JButton button = new JButton(text);
+        button.setFont(font(11, Font.PLAIN));
+        button.setForeground(new Color(105, 220, 194));
+        button.setBorder(new EmptyBorder(2, 0, 2, 0));
+        button.setContentAreaFilled(false);
+        button.setFocusPainted(false);
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        return button;
+    }
+
     private static JLabel label(String text, int size, int style, Color color) {
         JLabel label = new JLabel(text); label.setFont(font(size, style)); label.setForeground(color); return label;
     }
 
     private static Font font(float size, int style) {
         return new Font(Platform.OS_KIND == Platform.OS.MAC ? "PingFang SC" : "SansSerif", style, Math.round(size));
+    }
+
+    static final class ServerStatusIndicator extends JPanel {
+        private static final Color CONNECTED = new Color(105, 220, 194);
+        private static final Color DEGRADED = new Color(255, 190, 69);
+        private static final Color DISCONNECTED = new Color(255, 91, 111);
+        private static final Color UNKNOWN = new Color(132, 143, 174);
+        private final StatusDot dot = new StatusDot();
+        private final JLabel text = label("服务器运行状态", 11, Font.PLAIN, UNKNOWN);
+        private final Timer pulse = new Timer(33, event -> dot.repaint());
+        private State state = State.UNKNOWN;
+
+        private enum State { UNKNOWN, CONNECTED, DEGRADED, CRITICAL, STALLED, DISCONNECTED }
+
+        ServerStatusIndicator(boolean compact) {
+            super(new FlowLayout(FlowLayout.LEFT, 7, compact ? 7 : 0));
+            setOpaque(false);
+            dot.setPreferredSize(new Dimension(12, 17));
+            add(dot);
+            if (!compact) add(text);
+            setToolTipText("正在检测服务器");
+            dot.setToolTipText("正在检测服务器");
+        }
+
+        void setHealth(ApiClient.HealthResult health) {
+            Color previousColor = statusColor();
+            state = stateFor(health);
+            Color color = colorFor(health);
+            text.setForeground(color);
+            String tooltip = tooltipFor(health);
+            setToolTipText(tooltip);
+            dot.setToolTipText(tooltip);
+            dot.repaint();
+            firePropertyChange("statusColor", previousColor, color);
+            if (state != State.DISCONNECTED) pulse.stop();
+            else if (isDisplayable()) pulse.start();
+        }
+
+        Color statusColor() {
+            return switch (state) {
+                case CONNECTED -> CONNECTED;
+                case DEGRADED -> DEGRADED;
+                case CRITICAL, DISCONNECTED -> DISCONNECTED;
+                case UNKNOWN, STALLED -> UNKNOWN;
+            };
+        }
+
+        static Color colorFor(ApiClient.HealthResult health) {
+            return switch (stateFor(health)) {
+                case CONNECTED -> CONNECTED;
+                case DEGRADED -> DEGRADED;
+                case CRITICAL, DISCONNECTED -> DISCONNECTED;
+                case UNKNOWN, STALLED -> UNKNOWN;
+            };
+        }
+
+        private static State stateFor(ApiClient.HealthResult health) {
+            if (health == null) return State.UNKNOWN;
+            if (!health.connected()) return State.DISCONNECTED;
+            if (health.latencyMillis() > 3000L) return State.STALLED;
+            if (health.latencyMillis() > 1500L) return State.CRITICAL;
+            if (health.latencyMillis() > 500L) return State.DEGRADED;
+            return State.CONNECTED;
+        }
+
+        private static String tooltipFor(ApiClient.HealthResult health) {
+            if (health == null) return "正在检测服务器";
+            if (!health.connected()) return "服务器未连接";
+            String latency = health.latencyMillis() + "ms";
+            if (health.latencyMillis() > 3000L) return "服务器响应极慢 · " + latency;
+            if (health.latencyMillis() > 1500L) return "服务器连接延迟严重 · " + latency;
+            if (health.latencyMillis() > 500L) return "服务器连接较慢 · " + latency;
+            return "服务器已连接 · " + latency;
+        }
+
+        @Override public void addNotify() {
+            super.addNotify();
+            if (state == State.DISCONNECTED) pulse.start();
+        }
+
+        @Override public void removeNotify() {
+            pulse.stop();
+            super.removeNotify();
+        }
+
+        private final class StatusDot extends JComponent {
+            @Override protected void paintComponent(Graphics graphics) {
+                Graphics2D g = (Graphics2D) graphics.create();
+                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                if (state != State.DISCONNECTED) {
+                    g.setColor(statusColor());
+                    g.fillOval(2, 5, 8, 8);
+                } else {
+                    double phase = (System.nanoTime() / 1_000_000L % 720L) / 720d;
+                    double breath = (Math.sin(phase * Math.PI * 2d - Math.PI / 2d) + 1d) / 2d;
+                    int halo = 8 + (int) Math.round(breath * 4d);
+                    int haloAlpha = 30 + (int) Math.round(breath * 100d);
+                    g.setColor(new Color(DISCONNECTED.getRed(), DISCONNECTED.getGreen(), DISCONNECTED.getBlue(), haloAlpha));
+                    g.fillOval((getWidth() - halo) / 2, (getHeight() - halo) / 2, halo, halo);
+                    int coreAlpha = 145 + (int) Math.round(breath * 110d);
+                    g.setColor(new Color(DISCONNECTED.getRed(), DISCONNECTED.getGreen(), DISCONNECTED.getBlue(), Math.min(255, coreAlpha)));
+                    g.fillOval((getWidth() - 7) / 2, (getHeight() - 7) / 2, 7, 7);
+                }
+                g.dispose();
+            }
+        }
     }
 
     private static BufferedImage image(String name) {
