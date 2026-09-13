@@ -27,7 +27,7 @@ flowchart LR
   G -- 否 --> I[重新登录、刷新余额并重新应用]
 ```
 
-开始前请确认 TokenPro 已更新到 `v1.2.90` 或更高版本。Claude Code 需为 `2.1.242` 或更高版本；Windows 一键连接使用原生 CLI，WSL 环境需要单独配置。
+开始前请确认 TokenPro 已更新到 `v1.2.91` 或更高版本。Claude Code 需为 `2.1.242` 或更高版本；Windows 一键连接使用原生 CLI，WSL 环境需要单独配置。
 
 TokenPro 不修改系统全局 PATH，也不会用命令行配置覆盖桌面端配置。直接从普通终端运行原来的 `codex` 或 `claude`，仍使用各自的官方配置。
 
