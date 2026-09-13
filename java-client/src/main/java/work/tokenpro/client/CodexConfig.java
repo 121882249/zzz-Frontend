@@ -29,6 +29,7 @@ final class CodexConfig {
     }
 
     void apply(String baseUrl, List<PricedModel> models, String key, String accountEmail) throws Exception {
+        BridgeLifecycle.removeLegacyCodexAdapter(store);
         models = ModelPickerDialog.orderedModels(models, "Codex");
         String url = validateUrl(baseUrl);
         String actor = required(accountEmail, "账户邮箱");
@@ -65,6 +66,7 @@ final class CodexConfig {
     }
 
     boolean restore() throws Exception {
+        BridgeLifecycle.removeLegacyCodexAdapter(store);
         Optional<String> original = store.read("codex-original.toml");
         Path target = configPath;
         String current = Files.exists(target) ? Files.readString(target) : "";
@@ -270,8 +272,6 @@ final class CodexConfig {
         Map<String, Object> profile = ((List<?>) catalogRoot.get("models")).stream().map(Json::object)
             .filter(entry -> routedModel.equals(entry.get("slug"))).findFirst().orElseThrow();
         out.append(CodexPreferences.retainedLines(current, profile));
-        out.append("model_context_window = 372000\n");
-        out.append("model_auto_compact_token_limit = 372000\n\n");
         out.append("model_catalog_json = ").append(toml(catalog.toAbsolutePath().toString())).append("\n\n");
         out.append(providerConfiguration("custom", url, key, actor, groupId));
         historicalProviderIds.stream().filter(id -> !"custom".equals(id)).filter(CodexConfig::compatibleProviderId).sorted()

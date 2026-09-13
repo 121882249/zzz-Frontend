@@ -41,7 +41,7 @@ final class BridgeLifecycle {
     }
 
     /** Stops and forgets the removed Codex loopback adapter after an upgrade. */
-    private static void removeLegacyCodexAdapter(SecureStore store) {
+    static void removeLegacyCodexAdapter(SecureStore store) {
         String file = "codex-image-bridge.json";
         try {
             Map<String,Object> legacy = Json.object(Json.parse(store.read(file).orElse("{}")));
