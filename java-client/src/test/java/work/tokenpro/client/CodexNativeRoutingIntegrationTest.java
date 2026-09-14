@@ -19,6 +19,7 @@ public final class CodexNativeRoutingIntegrationTest {
         CountDownLatch returned = new CountDownLatch(1);
         AtomicReference<Throwable> failure = new AtomicReference<>();
         AtomicInteger requests = new AtomicInteger();
+        AtomicReference<String> imageTurn = new AtomicReference<>();
         var pngBuffer = new java.io.ByteArrayOutputStream();
         javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(8, 8, java.awt.image.BufferedImage.TYPE_INT_RGB), "png", pngBuffer);
         byte[] png = pngBuffer.toByteArray();
@@ -29,7 +30,8 @@ public final class CodexNativeRoutingIntegrationTest {
                 Map<String,Object> body = Json.object(Json.parse(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8)));
                 require(chatRoute.equals(body.get("model")), "text model lost its group-qualified slug");
                 require("Bearer fixture-key".equals(exchange.getRequestHeaders().getFirst("Authorization")), "missing configured Bearer");
-                require(imageRoute.equals(exchange.getRequestHeaders().getFirst("x-tokenpro-image-route")), "image route header missing");
+                require("native-v2".equals(exchange.getRequestHeaders().getFirst("x-tokenpro-image-mode")), "turn route mode missing");
+                imageTurn.set(Objects.toString(Json.object(body.get("client_metadata")).get("turn_id")));
                 require(exchange.getRequestHeaders().getFirst("x-tokenpro-group-id") == null, "text and image groups must not share a static group header");
                 text.countDown();
                 int n = requests.incrementAndGet();
@@ -60,7 +62,8 @@ public final class CodexNativeRoutingIntegrationTest {
             try {
                 Map<String,Object> body = Json.object(Json.parse(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8)));
                 require("gpt-image-2".equals(body.get("model")), "unexpected native image model");
-                require(imageRoute.equals(exchange.getRequestHeaders().getFirst("x-tokenpro-image-route")), "native image request lost configured group");
+                require(imageTurn.get().equals(exchange.getRequestHeaders().getFirst("x-codex-image-turn-id")), "native image request lost exact turn");
+                require(exchange.getRequestHeaders().getFirst("x-tokenpro-image-route") == null, "static image route survived");
                 require("Bearer fixture-key".equals(exchange.getRequestHeaders().getFirst("Authorization")), "native image request lost Bearer");
                 reply(exchange, "application/json", Json.stringify(Map.of("created", 1, "data",
                     List.of(Map.of("b64_json", Base64.getEncoder().encodeToString(png))))));

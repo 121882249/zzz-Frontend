@@ -56,7 +56,7 @@ final class ModelPickerDialog extends JDialog {
         titleLine.add(title, BorderLayout.WEST);
         titleLine.add(closeControl(), BorderLayout.EAST);
         boolean codex = "Codex".equals(client);
-        JLabel detail = new JLabel(codex ? "文本模型可多选；生图模型只能选择 1 个，模型与图片路由严格对应" : "LLM Model 至少选择 1 个，可同时选择多个");
+        JLabel detail = new JLabel(codex ? "文本和生图模型均可多选；每次使用 Codex 中当前选择的模型" : "LLM Model 至少选择 1 个，可同时选择多个");
         detail.setFont(font(12, Font.PLAIN));
         detail.setForeground(MUTED);
         header.add(titleLine);
@@ -112,7 +112,6 @@ final class ModelPickerDialog extends JDialog {
             }
         }
         if (codex && !imageGroupAdded) addImageChoices(groups, models, selectedIds);
-        if (codex) normalizeSelectedImageChoices();
         if (!codex && choices.stream().noneMatch(AbstractButton::isSelected)) {
             choices.stream().findFirst().ifPresent(choice -> choice.setSelected(true));
         }
@@ -150,15 +149,9 @@ final class ModelPickerDialog extends JDialog {
         JButton apply = button("应用模型", true);
         apply.addActionListener(event -> {
             List<PricedModel> selected = selected();
-            long imageCount = selected.stream().filter(PricedModel::isImageGeneration).count();
             if (selected.isEmpty()) {
                 TokenProDialogs.warning(this, "请选择模型",
                     "请至少选择 1 款模型。");
-                return;
-            }
-            if (codex && imageCount > 1) {
-                TokenProDialogs.warning(this, "生图模型必须一一对应",
-                    "一次只能应用 1 款生图模型。请保留要在 Codex 中使用的那一款。");
                 return;
             }
             dispose();
@@ -210,11 +203,6 @@ final class ModelPickerDialog extends JDialog {
             for (PricedModel model : groupModels) {
                 ModelCheckBox choice = new ModelCheckBox(model);
                 choice.setSelected(matchesSelectedImage(model, selectedIds));
-                choice.addActionListener(event -> {
-                    if (!choice.isSelected()) return;
-                    choices.stream().filter(other -> other != choice && other.model().isImageGeneration())
-                        .forEach(other -> other.setSelected(false));
-                });
                 choices.add(choice);
                 imageGroup.add(choice);
             }
@@ -233,29 +221,9 @@ final class ModelPickerDialog extends JDialog {
         return choices.stream().filter(AbstractButton::isSelected).map(ModelCheckBox::model).toList();
     }
 
-    private void normalizeSelectedImageChoices() {
-        boolean kept = false;
-        for (ModelCheckBox choice : choices) {
-            if (!choice.isSelected() || !choice.model().isImageGeneration()) continue;
-            if (!kept) kept = true;
-            else choice.setSelected(false);
-        }
-    }
-
-    static List<PricedModel> singleImageSelection(List<PricedModel> models) {
-        boolean kept = false;
-        List<PricedModel> result = new ArrayList<>();
-        for (PricedModel model : models) {
-            if (!model.isImageGeneration()) result.add(model);
-            else if (!kept) { result.add(model); kept = true; }
-        }
-        return List.copyOf(result);
-    }
-
     static String id(PricedModel model) { return model.groupId() + "\u0000" + model.name(); }
-    static String imageNameId(String name) { return "\u0000" + name; }
     static boolean matchesSelectedImage(PricedModel model, Set<String> selectedIds) {
-        return selectedIds.contains(id(model)) || selectedIds.contains(imageNameId(model.name()));
+        return selectedIds.contains(id(model));
     }
     static boolean supportsClient(PricedModel model, String client) {
         return !model.isImageGeneration() || "Codex".equals(client);

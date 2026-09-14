@@ -95,19 +95,14 @@ final class SelfTest {
         PricedModel nativeChat = new PricedModel("gpt-5.6-sol", "openai", "GPT", 16);
         PricedModel nativeImage = new PricedModel("gpt-image-2.5-flare", "openai", "Images", 65);
         PricedModel otherImage = new PricedModel("gpt-image-2.5-sunburst", "openai", "Images", 65);
-        List<PricedModel> oneImage = ModelPickerDialog.singleImageSelection(List.of(nativeChat, nativeImage, otherImage));
-        check(oneImage.equals(List.of(nativeChat, nativeImage)), "Codex retains every text model and exactly one image model"); passed++;
+        List<PricedModel> allImages = ModelPickerDialog.orderedModels(List.of(nativeChat, nativeImage, otherImage), "Codex");
+        check(allImages.size() == 3 && allImages.containsAll(List.of(nativeChat, nativeImage, otherImage)), "Codex retains all selected text and image models"); passed++;
         int[] pickerPixels = ModelPickerDialog.cosmosBackgroundAlphaPixels(200, 160);
         check(pickerPixels[0] == 0 && pickerPixels[1] == 255,
             "model picker paints transparent rounded corners without black edge pixels"); passed++;
-        check(CodexConfig.nativeImageRoute(nativeChat, null).equals(CodexConfig.routedModelId(nativeChat)),
-            "text-only native images keep the selected text model's tool capability and group"); passed++;
-        check(CodexConfig.nativeImageRoute(nativeChat, nativeImage).equals(CodexConfig.routedModelId(nativeImage)),
-            "explicit image model keeps its own independent group"); passed++;
-        String nativeProvider = CodexConfig.providerConfiguration("custom", "https://tokenpro.work/v1", "fixture", "user@example.com", null,
-            CodexConfig.nativeImageRoute(nativeChat, nativeImage));
-        check(nativeProvider.contains("\"x-tokenpro-image-mode\" = \"native-v1\"") && !nativeProvider.contains("x-tokenpro-group-id"),
-            "native delivery explicitly opts in without a shared text/image group header"); passed++;
+        String nativeProvider = CodexConfig.providerConfiguration("custom", "https://tokenpro.work/v1", "fixture", "user@example.com", null);
+        check(nativeProvider.contains("\"x-tokenpro-image-mode\" = \"native-v2\"") && !nativeProvider.contains("x-tokenpro-group-id") && !nativeProvider.contains("x-tokenpro-image-route"),
+            "native delivery uses turn routing without a static image model or group"); passed++;
         String managedActor = "# >>> TokenPro managed >>>\n[model_providers.custom]\nname = \"Codex\"\nhttp_headers = { \"x-openai-actor-authorization\" = \"Codex\" }\n# <<< TokenPro managed <<<\n";
         String emailActor = CodexConfig.withActor(managedActor, "user@example.com");
         check(emailActor.contains("name = \"user@example.com\"") && emailActor.contains("\"x-openai-actor-authorization\" = \"user@example.com\""), "existing Codex actor migrates to account email"); passed++;
@@ -212,7 +207,7 @@ final class SelfTest {
         check("Gemini".equals(new PricedModel("Gemini", "google", "Google", 17).displayName()), "non-GPT model display name"); passed++;
         check(new PricedModel("gpt-image-2.5-sunburst", "openai", "GPT", 17).isImageGeneration(), "image model classification"); passed++;
         PricedModel movedImage = new PricedModel("gpt-image-2.5-sunburst", "openai", "New image group", 99);
-        check(ModelPickerDialog.matchesSelectedImage(movedImage, Set.of(ModelPickerDialog.imageNameId(movedImage.name()))), "image selection follows model across groups"); passed++;
+        check(!ModelPickerDialog.matchesSelectedImage(movedImage, Set.of("65\u0000" + movedImage.name())), "image selection must not move to another group with the same model name"); passed++;
         check(!new PricedModel("gpt-5.6-sol", "openai", "GPT", 17).isImageGeneration(), "chat model classification"); passed++;
         check(CodexConfig.inferredReasoningEfforts(priced).equals(List.of("low", "medium", "high", "xhigh", "max")), "GPT five reasoning levels"); passed++;
         check(CodexConfig.inferredReasoningEfforts(new PricedModel("gemini-3-pro", "google", "Google", 17)).equals(List.of("low", "medium", "high", "xhigh", "max")), "generic models expose five reasoning levels"); passed++;
