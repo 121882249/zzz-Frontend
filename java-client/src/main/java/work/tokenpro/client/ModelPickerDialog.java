@@ -13,6 +13,7 @@ import java.util.function.Consumer;
 final class ModelPickerDialog extends JDialog {
     private static final Color TEXT = new Color(242, 245, 255);
     private static final Color MUTED = new Color(180, 190, 220);
+    private static final Color LIST_BACKGROUND = new Color(24, 32, 78);
     private final List<ModelCheckBox> choices = new ArrayList<>();
 
     ModelPickerDialog(JFrame owner, String client, List<PricedModel> models,
@@ -65,7 +66,8 @@ final class ModelPickerDialog extends JDialog {
         header.add(Box.createVerticalStrut(18));
         root.add(header, BorderLayout.NORTH);
 
-        JPanel groups = transparent();
+        JPanel groups = new JPanel();
+        groups.setBackground(LIST_BACKGROUND);
         groups.setLayout(new BoxLayout(groups, BoxLayout.Y_AXIS));
         Map<String, List<PricedModel>> grouped = new LinkedHashMap<>();
         for (PricedModel model : models) {
@@ -125,8 +127,14 @@ final class ModelPickerDialog extends JDialog {
         }
         JScrollPane scroll = new JScrollPane(groups);
         scroll.setBorder(null);
-        scroll.setOpaque(false);
-        scroll.getViewport().setOpaque(false);
+        // A translucent window must not copy existing screen pixels while
+        // scrolling: on macOS that can expose its owner's surface for a frame.
+        // Paint the viewport and view independently of the rounded outer shell.
+        scroll.setBackground(LIST_BACKGROUND);
+        scroll.setOpaque(true);
+        scroll.getViewport().setBackground(LIST_BACKGROUND);
+        scroll.getViewport().setOpaque(true);
+        scroll.getViewport().setScrollMode(JViewport.SIMPLE_SCROLL_MODE);
         scroll.getVerticalScrollBar().setUnitIncrement(18);
         root.add(scroll, BorderLayout.CENTER);
 
