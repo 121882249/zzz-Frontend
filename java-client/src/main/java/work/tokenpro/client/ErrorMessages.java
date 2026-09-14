@@ -58,6 +58,14 @@ final class ErrorMessages {
     static String describe(Throwable error) {
         while ((error instanceof ExecutionException || error instanceof CompletionException || error instanceof java.lang.reflect.InvocationTargetException)
             && error.getCause() != null) error = error.getCause();
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (cause instanceof NetworkProxy.ConfigurationException) return safe(cause.getMessage());
+            if (cause instanceof javax.net.ssl.SSLHandshakeException) {
+                String detail = Objects.toString(cause.getMessage(), "").toLowerCase(Locale.ROOT);
+                if (detail.contains("remote host terminated") || detail.contains("handshake_failure"))
+                    return "与服务器的安全连接被中断；若网页能打开，请启用系统代理或配置 TokenPro HTTP 代理后重启";
+            }
+        }
         if (error instanceof ApiClient.ApiException) return safe(error.getMessage());
         if (error instanceof HttpTimeoutException || error instanceof SocketTimeoutException) return "网络请求超时，请检查网络后重试";
         if (error instanceof UnknownHostException) return "无法解析服务器地址，请检查网络或 DNS 设置";

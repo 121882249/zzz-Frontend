@@ -81,6 +81,58 @@ cd java-client
 & "$env:JAVA_HOME/bin/java.exe" -jar build/TokenPro.jar
 ```
 
+## Windows 非管理员切换
+
+Windows 切换 TokenPro 或恢复官方通道时，保留现有 `config.toml` 中的项目、MCP、审批策略及其他用户设置，
+只替换模型选择字段和 TokenPro 管理的服务商配置。恢复官方不再删除整份文件。
+切换前的文件保存在当前 TokenPro 配置目录的 `codex-last-switch-config.toml`，方便排查和回退。
+
+按非管理员兼容需求，Windows 切换同时设置：
+
+```toml
+[windows]
+sandbox = "unelevated"
+```
+
+当前选中的命名 profile 如单独配置了 Windows 沙箱，也会同步为 `unelevated`；其审批策略等其他设置保留。
+这是 Codex 支持的 RestrictedToken 模式，不会修改系统 UAC，也不写入 `danger-full-access` 或取消审批。
+它与提权沙箱的实现和隔离能力不同，不保证所有依赖提权环境的功能均可用。
+macOS/Linux 不自动改变 Windows 沙箱设置。
+
+这个改动解决 TokenPro 的配置切换及重复重置问题，不负责安装 ChatGPT/Codex 的系统组件。
+如果具体 ChatGPT 版本仍要求首次安装或企业管理员授权，应查看其初始化日志，不能通过 TokenPro 保证跳过。
+此构建已做配置往返和真实配置写入测试，故障 Windows 设备仍需实测。
+
+无法安全识别的配置会在写入前报错；例如损坏的 TOML/管理标记、内联 `windows = {...}`，
+或与第三方非 TokenPro `custom` 服务商重名时，需要先整理为标准独立配置表。
+
+## 网络代理兼容
+
+客户端启动时默认启用 Java 系统代理读取；系统代理变化后请完全退出并重启 TokenPro。
+登录、健康检查、账户及模型查询、更新检查和下载、Claude 桥接的云端请求使用统一代理策略。
+本机桥接请求（localhost、127.x.x.x、::1）始终直连。
+
+除本机地址和 `NO_PROXY` 排除项外，代理优先级为：
+
+1. JVM 参数 `-Dtokenpro.proxy=http://主机:端口`，或环境变量 `TOKENPRO_PROXY`。
+2. 已有 JVM 参数 `https.proxyHost` / `http.proxyHost`（端口及排除项由 Java 处理）。
+3. 对应协议的 `https_proxy` / `HTTPS_PROXY`、`http_proxy` / `HTTP_PROXY`，随后是 `all_proxy` / `ALL_PROXY`。
+4. Java 系统代理；未配置代理时直连。
+
+`no_proxy` / `NO_PROXY` 支持逗号分隔的域名、IP、主机:端口及 `*`，暂不支持 CIDR。
+环境变量代理地址使用 `http://`，可用于 HTTPS CONNECT 隧道；目前不接受 SOCKS、HTTPS 代理端点和带用户名密码的代理 URL。
+请使用代理软件提供的 HTTP 或混合端口。代理配置无效时明确报错，不自动退回直连。
+TLS 证书和主机名继续按 Java 默认规则验证。
+
+Windows 可在安装目录 `app/TokenPro.cfg` 的 `[JavaOptions]` 下添加：
+
+```ini
+java-options=-Dtokenpro.proxy=http://127.0.0.1:7892
+```
+
+`7892` 仅为示例，必须与本机代理软件的 HTTP/混合端口一致；保存后重启。
+配置只作用于 TokenPro 自身的请求，不会自动修改独立运行的 Codex / Claude 客户端的网络设置。
+
 ## 原生安装包
 
 - macOS Intel：在 Intel Mac 上运行 `./package.sh`。

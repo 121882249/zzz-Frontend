@@ -4,6 +4,13 @@
 
 TokenPro 现在只有一套 Java 21/Swing 客户端源码，支持 Windows、macOS 和 Linux。macOS 的 Intel 与 Apple 芯片版本、Windows x64 版本和 Linux x64 版本由 GitHub Actions 分别在对应系统构建。
 
+## v1.3.3 更新
+
+- Windows 通道切换使用非管理员沙箱模式；在同一个 `config.toml` 中更新模型和服务商，保留审批、项目、MCP 等设置，恢复官方不再删除配置文件。
+- 客户端云端请求支持系统代理及常用 HTTP 代理环境变量，TLS 握手失败提供中文提示。
+- “订阅”按钮直接打开订阅选项卡。
+- 保留 v1.3.2 的生图分组路由修复。
+
 ## 使用指南
 
 最新版客户端提供 4 条彼此隔离的接入路径。面向最终用户的图文教程以 [TokenPro 使用文档](https://tokenpro.work/docs) 为准，包含安装检查、模型选择、连接验证、恢复官方配置和常见问题。

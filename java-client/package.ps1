@@ -21,6 +21,7 @@ New-Item -ItemType Directory -Path (Join-Path $PSScriptRoot 'dist') -Force | Out
 Copy-Item -LiteralPath 'build/TokenPro.jar' -Destination (Join-Path $inputRoot 'TokenPro.jar')
 & "$env:JAVA_HOME/bin/jpackage.exe" --type app-image --name TokenPro --app-version $Version `
   --input $inputRoot --main-jar TokenPro.jar --main-class work.tokenpro.client.Main `
+  --java-options "-Djava.net.useSystemProxies=true" `
   --module-path "$env:JAVA_HOME/jmods" `
   --add-modules java.base,java.desktop,java.net.http,jdk.httpserver,jdk.crypto.ec `
   --icon ../Router.ico `

@@ -11,7 +11,7 @@ final class ClaudeBridgeManager {
         try {
             ClaudeBridgeConfig config = ClaudeBridgeConfig.load(store);
             HttpRequest request = HttpRequest.newBuilder(URI.create(config.baseUrl() + "/health")).timeout(Duration.ofMillis(800)).header("Authorization", "Bearer " + config.localToken()).GET().build();
-            HttpResponse<String> response = HttpClient.newBuilder().connectTimeout(Duration.ofMillis(800)).build().send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = NetworkProxy.localBuilder().connectTimeout(Duration.ofMillis(800)).build().send(request, HttpResponse.BodyHandlers.ofString());
             return response.statusCode() == 200 && response.body().contains("tokenpro-claude-bridge-v1");
         } catch (Exception e) { return false; }
     }
@@ -33,7 +33,7 @@ final class ClaudeBridgeManager {
         HttpRequest request = HttpRequest.newBuilder(URI.create(config.baseUrl() + "/shutdown"))
             .timeout(Duration.ofSeconds(2)).header("Authorization", "Bearer " + config.localToken())
             .POST(HttpRequest.BodyPublishers.noBody()).build();
-        HttpResponse<String> response = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(1)).build()
+        HttpResponse<String> response = NetworkProxy.localBuilder().connectTimeout(Duration.ofSeconds(1)).build()
             .send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() != 200) throw new IllegalStateException("Claude 本地桥接无法停止");
         for (int i = 0; i < 30; i++) {

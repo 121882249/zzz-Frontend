@@ -41,15 +41,19 @@ final class CodexConfig {
         Path target = configPath;
         Files.createDirectories(target.getParent());
         String current = Files.exists(target) ? Files.readString(target) : "";
+        String preserved = CodexSwitchConfig.clean(current);
+        if (Platform.OS_KIND == Platform.OS.WINDOWS) preserved = CodexSwitchConfig.withoutAdministrator(preserved);
         // Image models stay in their own picker group and are also written to
         // Codex's catalog so they can run directly without a selected LLM.
         Path catalog = writeModelCatalog(models);
         // Each turn selects its group-qualified slug. Native Images requests
         // correlate through the backend's authenticated turn map.
         String block = managedBlock(url, primaryModel, catalog, key.trim(), actor, current, Set.of("custom"));
-        // Replace the active config; official switching deletes it. Availability
-        // is validated by the gateway when a request is actually submitted.
-        writeAtomic(target, block);
+        String candidate = CodexSwitchConfig.merge(preserved, block);
+        if (!current.equals(candidate)) {
+            store.write("codex-last-switch-config.toml", current);
+            writeAtomic(target, candidate);
+        }
         // Retire only our old generated catalogs after the new config is committed.
         // Failure is housekeeping, not a reason to restore a previous channel.
         try { pruneModelCatalogs(catalog); store.delete("codex-model-catalog.json"); }
@@ -81,9 +85,16 @@ final class CodexConfig {
         return changed;
     }
 
-    /** Official mode is intentionally a clean slate: Codex recreates config.toml itself. */
+    /** Remove the TokenPro route without resetting the user's Windows setup or permissions. */
     void deleteForOfficial() throws IOException {
-        Files.deleteIfExists(configPath);
+        String current = Files.exists(configPath) ? Files.readString(configPath) : "";
+        String restored = CodexSwitchConfig.clean(current);
+        if (Platform.OS_KIND == Platform.OS.WINDOWS) restored = CodexSwitchConfig.withoutAdministrator(restored);
+        if (!current.equals(restored)) {
+            Files.createDirectories(configPath.getParent());
+            store.write("codex-last-switch-config.toml", current);
+            writeAtomic(configPath, restored);
+        }
         store.delete("codex-original.toml");
         store.delete("codex-model-catalog.json");
         store.delete("codex-selected.json");
@@ -504,6 +515,7 @@ final class CodexConfig {
     }
 
     static String stripManaged(String text) {
+        if (text.contains("# >>> TokenPro model selection >>>")) return CodexSwitchConfig.clean(text);
         int start = text.indexOf(START);
         if (start < 0) return text;
         int end = text.indexOf(END, start);

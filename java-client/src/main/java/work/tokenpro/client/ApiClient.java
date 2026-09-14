@@ -17,7 +17,7 @@ final class ApiClient {
     }
     private static final String BASE = "https://tokenpro.work/api/v1";
     private static final URI HEALTH_ENDPOINT = URI.create("https://tokenpro.work/health");
-    private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).followRedirects(HttpClient.Redirect.NEVER).build();
+    private final HttpClient client = NetworkProxy.newBuilder().connectTimeout(Duration.ofSeconds(15)).followRedirects(HttpClient.Redirect.NEVER).build();
 
     HealthResult health() {
         long started = System.nanoTime();

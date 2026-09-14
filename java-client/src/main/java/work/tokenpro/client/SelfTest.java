@@ -8,7 +8,7 @@ import java.util.*;
 
 final class SelfTest {
     static void run() throws Exception {
-        int passed = 0;
+        int passed = NetworkProxyTest.run() + CodexSwitchConfigTest.run();
         String manifestVersion = Main.class.getPackage().getImplementationVersion();
         check(manifestVersion == null || Main.VERSION.equals(manifestVersion), "JAR manifest version matches the application version"); passed++;
         passed += ChannelSwitchTest.run();
@@ -41,8 +41,8 @@ final class SelfTest {
             check(officialStore.read("codex-image-bridge.json").isPresent() && officialStore.read("codex-cleanup-warning.txt").isPresent(),
                 "failed helper shutdown is reported with state retained"); passed++;
             BridgeLifecycle.finishLegacyCodexCleanup(officialStore, false);
-            check(!Files.exists(officialConfig) && officialStore.read("codex-selected.json").isEmpty()
-                && officialStore.read("codex-model-catalog.json").isEmpty(), "official switch deletes Codex config and generated mapping"); passed++;
+            check(Files.exists(officialConfig) && !Files.readString(officialConfig).contains("model_provider") && officialStore.read("codex-selected.json").isEmpty()
+                && officialStore.read("codex-model-catalog.json").isEmpty(), "official switch removes route fields and mapping without deleting config"); passed++;
             check(officialStore.read("codex-image-bridge.json").isEmpty(), "official switch removes legacy bridge file"); passed++;
             check(officialStore.read("codex-cleanup-warning.txt").isEmpty(), "successful cleanup clears prior warning"); passed++;
             check(Files.readString(officialConfig.getParent().resolve("auth.json")).equals("fixture-official-auth")

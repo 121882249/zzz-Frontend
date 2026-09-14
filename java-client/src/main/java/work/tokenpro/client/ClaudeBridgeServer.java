@@ -15,7 +15,7 @@ final class ClaudeBridgeServer implements AutoCloseable {
     private static final int MAX_BODY = 32 * 1024 * 1024;
     private final SecureStore store;
     private final HttpServer server;
-    private final HttpClient upstream = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(20)).followRedirects(HttpClient.Redirect.NEVER).build();
+    private final HttpClient upstream = NetworkProxy.newBuilder().connectTimeout(Duration.ofSeconds(20)).followRedirects(HttpClient.Redirect.NEVER).build();
     private final String upstreamBase;
     private final Set<CompletableFuture<?>> inFlightRequests = ConcurrentHashMap.newKeySet();
     private final Set<Closeable> inFlightBodies = ConcurrentHashMap.newKeySet();

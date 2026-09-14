@@ -534,7 +534,7 @@ final class TokenProFrame extends JFrame {
                 } catch (Exception e) {
                     accessToken = null;
                     Throwable cause = e.getCause() == null ? e : e.getCause();
-                    loginView.setLoading(false, "登录失败：" + cause.getMessage());
+                    loginView.setLoading(false, "登录失败：" + ErrorMessages.describe(cause));
                 }
             }
         }.execute();
@@ -1036,7 +1036,7 @@ final class TokenProFrame extends JFrame {
     private void switchOfficialProfile(String app, boolean cli) {
         String label = app + (cli ? " 命令行" : " 客户端");
         if (!TokenProDialogs.confirm(this, "切换官方配置", "将正常退出并重启 " + label
-            + (app.equals("Codex") ? "。\n删除渠道配置并清空已选模型，聊天内容保持不变。" : "。\n只备份设置，聊天内容保持不变。"), "切换并重启")) return;
+            + (app.equals("Codex") ? "。\n移除渠道配置并清空已选模型，保留 Windows 和其他用户设置。" : "。\n只备份设置，聊天内容保持不变。"), "切换并重启")) return;
         String identity = app.toLowerCase(Locale.ROOT) + (cli ? "-cli" : "-desktop");
         if (!connectingClients.begin(identity)) return;
         refreshConnectControls();
@@ -1466,7 +1466,7 @@ final class TokenProFrame extends JFrame {
         refreshSubscriptionButton = accountRefreshButton(tone, "刷新订阅");
         refreshSubscriptionButton.setEnabled(refreshAccountButton == null || refreshAccountButton.isEnabled());
         refreshSubscriptionButton.setToolTipText("刷新钱包余额和订阅信息"); refreshSubscriptionButton.getAccessibleContext().setAccessibleName("刷新订阅"); refreshSubscriptionButton.addActionListener(event -> refreshAccount()); actions.add(refreshSubscriptionButton);
-        JButton purchase = soft("订阅"); subscriptionPurchaseButton = purchase; guardWebButton(purchase, "subscription"); applyWebButtonState(purchase, browserOpenGates.get("subscription")); purchase.setForeground(active ? tone : new Color(211, 218, 232)); purchase.setIcon(resourceIconContained("PlusLucide.png", 15, 15, true)); purchase.setToolTipText("打开充值/订阅页面"); purchase.addActionListener(event -> browse("https://tokenpro.work/purchase", "subscription")); actions.add(purchase);
+        JButton purchase = soft("订阅"); subscriptionPurchaseButton = purchase; guardWebButton(purchase, "subscription"); applyWebButtonState(purchase, browserOpenGates.get("subscription")); purchase.setForeground(active ? tone : new Color(211, 218, 232)); purchase.setIcon(resourceIconContained("PlusLucide.png", 15, 15, true)); purchase.setToolTipText("打开订阅页面"); purchase.addActionListener(event -> browse("https://tokenpro.work/purchase?tab=subscription", "subscription")); actions.add(purchase);
         JPanel actionSlot = transparent(new GridBagLayout()); actionSlot.add(actions); card.add(actionSlot, BorderLayout.EAST);
         card.add(details, BorderLayout.CENTER); subscriptionSlot.add(card, BorderLayout.CENTER);
         subscriptionSlot.revalidate();
@@ -1538,14 +1538,14 @@ final class TokenProFrame extends JFrame {
                 try {
                     HttpRequest request = HttpRequest.newBuilder(URI.create("https://tokenpro.work/downloads/latest/release-v2.json"))
                         .header("Accept", "application/json").timeout(java.time.Duration.ofSeconds(12)).GET().build();
-                    HttpResponse<String> response = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build().send(request, HttpResponse.BodyHandlers.ofString());
+                    HttpResponse<String> response = NetworkProxy.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build().send(request, HttpResponse.BodyHandlers.ofString());
                     if (response.statusCode() == 200) payload = response.body();
                 } catch (Exception ignored) {}
                 if (payload.isBlank()) {
                     try {
                         HttpRequest request = HttpRequest.newBuilder(URI.create("https://api.github.com/repositories/1360196661/releases/latest"))
                             .header("Accept", "application/vnd.github+json").timeout(java.time.Duration.ofSeconds(20)).GET().build();
-                        HttpResponse<String> response = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build().send(request, HttpResponse.BodyHandlers.ofString());
+                        HttpResponse<String> response = NetworkProxy.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build().send(request, HttpResponse.BodyHandlers.ofString());
                         if (response.statusCode() == 200) payload = response.body();
                     } catch (Exception ignored) {}
                 }
@@ -1661,7 +1661,7 @@ final class TokenProFrame extends JFrame {
                 String suffix = uri.getPath().replaceFirst("^.*(?=\\.)", "");
                 Path target = Files.createTempFile("TokenPro-" + release.version() + "-", suffix);
                 HttpRequest request = HttpRequest.newBuilder(uri).timeout(java.time.Duration.ofMinutes(8)).GET().build();
-                HttpResponse<InputStream> response = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build().send(request, HttpResponse.BodyHandlers.ofInputStream());
+                HttpResponse<InputStream> response = NetworkProxy.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build().send(request, HttpResponse.BodyHandlers.ofInputStream());
                 if (response.statusCode() != 200) {
                     Files.deleteIfExists(target);
                     throw new IllegalStateException("更新包下载失败（HTTP " + response.statusCode() + "）");

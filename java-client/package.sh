@@ -23,6 +23,7 @@ mkdir -p build/input
 cp build/TokenPro.jar build/input/TokenPro.jar
 "$JAVA_HOME/bin/jpackage" --type "$TYPE" --name TokenPro --app-version "$VERSION" \
   --input build/input --main-jar TokenPro.jar --main-class work.tokenpro.client.Main \
+  --java-options "-Djava.net.useSystemProxies=true" \
   --module-path "$JAVA_HOME/jmods" \
   --add-modules java.base,java.desktop,java.net.http,jdk.httpserver,jdk.crypto.ec \
   --vendor TokenPro --description "TokenPro cross-platform desktop client" "${ICON[@]}" --dest dist

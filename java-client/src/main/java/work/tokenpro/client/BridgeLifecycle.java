@@ -52,7 +52,7 @@ final class BridgeLifecycle {
                 HttpRequest request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/v1/shutdown"))
                     .timeout(Duration.ofSeconds(2)).header("Authorization", "Bearer " + token)
                     .POST(HttpRequest.BodyPublishers.noBody()).build();
-                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(1)).build()
+                NetworkProxy.localBuilder().connectTimeout(Duration.ofSeconds(1)).build()
                     .send(request, HttpResponse.BodyHandlers.discarding());
             }
         } catch (Exception ignored) {
