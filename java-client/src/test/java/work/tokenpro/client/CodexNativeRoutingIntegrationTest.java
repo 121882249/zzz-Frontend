@@ -30,7 +30,7 @@ public final class CodexNativeRoutingIntegrationTest {
                 Map<String,Object> body = Json.object(Json.parse(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8)));
                 require(chatRoute.equals(body.get("model")), "text model lost its group-qualified slug");
                 require("Bearer fixture-key".equals(exchange.getRequestHeaders().getFirst("Authorization")), "missing configured Bearer");
-                require("native-v2".equals(exchange.getRequestHeaders().getFirst("x-tokenpro-image-mode")), "turn route mode missing");
+                require(exchange.getRequestHeaders().getFirst("x-tokenpro-image-mode") == null, "provider must not enable native mode for every group");
                 imageTurn.set(Objects.toString(Json.object(body.get("client_metadata")).get("turn_id")));
                 require(exchange.getRequestHeaders().getFirst("x-tokenpro-group-id") == null, "text and image groups must not share a static group header");
                 text.countDown();

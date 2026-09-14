@@ -101,8 +101,8 @@ final class SelfTest {
         check(pickerPixels[0] == 0 && pickerPixels[1] == 255,
             "model picker paints transparent rounded corners without black edge pixels"); passed++;
         String nativeProvider = CodexConfig.providerConfiguration("custom", "https://tokenpro.work/v1", "fixture", "user@example.com", null);
-        check(nativeProvider.contains("\"x-tokenpro-image-mode\" = \"native-v2\"") && !nativeProvider.contains("x-tokenpro-group-id") && !nativeProvider.contains("x-tokenpro-image-route"),
-            "native delivery uses turn routing without a static image model or group"); passed++;
+        check(!nativeProvider.contains("x-tokenpro-image-mode") && !nativeProvider.contains("x-tokenpro-group-id") && !nativeProvider.contains("x-tokenpro-image-route"),
+            "shared provider leaves native delivery to the authenticated group policy"); passed++;
         String managedActor = "# >>> TokenPro managed >>>\n[model_providers.custom]\nname = \"Codex\"\nhttp_headers = { \"x-openai-actor-authorization\" = \"Codex\" }\n# <<< TokenPro managed <<<\n";
         String emailActor = CodexConfig.withActor(managedActor, "user@example.com");
         check(emailActor.contains("name = \"user@example.com\"") && emailActor.contains("\"x-openai-actor-authorization\" = \"user@example.com\""), "existing Codex actor migrates to account email"); passed++;

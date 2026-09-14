@@ -304,7 +304,8 @@ final class CodexConfig {
         out.append("experimental_bearer_token = ").append(toml(key)).append('\n');
         out.append("http_headers = { \"x-openai-actor-authorization\" = ").append(toml(actor));
         if (groupId != null) out.append(", \"x-tokenpro-group-id\" = ").append(toml(Long.toString(groupId)));
-        out.append(", \"x-tokenpro-image-mode\" = \"native-v2\"");
+        // Native image delivery is selected by the backend from the routed
+        // group's platform and description, never for this entire provider.
         out.append(" }\n");
         out.append("supports_websockets = false\n\n");
         return out.toString();
