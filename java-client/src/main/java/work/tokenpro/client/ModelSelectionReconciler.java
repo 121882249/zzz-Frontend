@@ -49,7 +49,8 @@ final class ModelSelectionReconciler {
             PricedModel model = available.get(id(group.longValue(), name));
             if(model == null) continue;
             Map<String,Object> current = new LinkedHashMap<>(row);
-            current.put("platform", model.platform()); current.put("group_name", model.groupName());
+            current.put("platform", model.platform()); current.put("group_platform", model.groupPlatform());
+            current.put("group_name", model.groupName());
             kept.add(current); keptModels.add(model);
         }
         root.put(field, kept);

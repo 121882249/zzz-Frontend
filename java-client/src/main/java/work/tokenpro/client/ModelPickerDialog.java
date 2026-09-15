@@ -14,6 +14,9 @@ final class ModelPickerDialog extends JDialog {
     private static final Color TEXT = new Color(242, 245, 255);
     private static final Color MUTED = new Color(180, 190, 220);
     private static final Color LIST_BACKGROUND = new Color(24, 32, 78);
+    private static final Color SUBSCRIPTION_SURFACE = new Color(69, 54, 25, 235);
+    private static final Color SUBSCRIPTION_BORDER = new Color(196, 153, 61, 135);
+    private static final Color SUBSCRIPTION_TEXT = new Color(218, 181, 92);
     private final List<ModelCheckBox> choices = new ArrayList<>();
 
     ModelPickerDialog(JFrame owner, String client, List<PricedModel> models,
@@ -55,7 +58,6 @@ final class ModelPickerDialog extends JDialog {
         title.setFont(font(23, Font.BOLD));
         title.setForeground(TEXT);
         titleLine.add(title, BorderLayout.WEST);
-        titleLine.add(closeControl(), BorderLayout.EAST);
         boolean codex = "Codex".equals(client);
         JLabel detail = new JLabel(codex ? "文本和生图模型均可多选；每次使用 Codex 中当前选择的模型" : "LLM Model 至少选择 1 个，可同时选择多个");
         detail.setFont(font(12, Font.PLAIN));
@@ -82,7 +84,8 @@ final class ModelPickerDialog extends JDialog {
             groupModels.sort(ApiClient::compareSelectablePriceDescending);
             PricedModel first = groupModels.getFirst();
             boolean subscription = first.subscription();
-            JPanel group = new GroupPanel(subscription);
+            PlatformStyle platformStyle = platformStyle(first.groupPlatform());
+            JPanel group = new GroupPanel(subscription, platformStyle);
             group.setLayout(new BoxLayout(group, BoxLayout.Y_AXIS));
             group.setBorder(new EmptyBorder(14, 16, 12, 16));
             group.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -90,10 +93,11 @@ final class ModelPickerDialog extends JDialog {
             if (subscription) groupLabel += "   订阅余额 $" + String.format(Locale.US, "%.2f", first.subscriptionRemaining()) + "   " + first.subscriptionExpiryLabel();
             JLabel groupName = new JLabel(groupLabel);
             groupName.setFont(font(13, Font.BOLD));
-            groupName.setForeground(subscription ? new Color(218, 181, 92) : new Color(105, 220, 194));
+            groupName.setForeground(subscription ? SUBSCRIPTION_TEXT : platformStyle.text());
             JPanel heading = transparent(new FlowLayout(FlowLayout.LEFT, 8, 0));
             heading.setAlignmentX(Component.LEFT_ALIGNMENT);
             heading.add(new BillingBadge(subscription));
+            heading.add(new JLabel(platformIcon(platformStyle)));
             heading.add(groupName);
             group.add(heading);
             group.add(Box.createVerticalStrut(8));
@@ -173,14 +177,6 @@ final class ModelPickerDialog extends JDialog {
         return root;
     }
 
-    private JComponent closeControl() {
-        JPanel controls = transparent(new FlowLayout(FlowLayout.RIGHT, 0, 0));
-        WindowControlButton close = new WindowControlButton(new Color(255, 95, 86));
-        close.addActionListener(event -> dispose());
-        controls.add(close);
-        return controls;
-    }
-
     private void addImageChoices(JPanel groups, List<PricedModel> models, Set<String> selectedIds) {
         List<PricedModel> imageModels = models.stream()
             .filter(PricedModel::isImageGeneration)
@@ -194,17 +190,20 @@ final class ModelPickerDialog extends JDialog {
         }
         for (List<PricedModel> groupModels : grouped.values()) {
             groupModels.sort(ApiClient::compareSelectablePriceDescending);
-            boolean subscription = groupModels.getFirst().subscription();
-            JPanel imageGroup = new GroupPanel(subscription);
+            PricedModel first = groupModels.getFirst();
+            boolean subscription = first.subscription();
+            PlatformStyle platformStyle = platformStyle(first.groupPlatform());
+            JPanel imageGroup = new GroupPanel(subscription, platformStyle);
             imageGroup.setLayout(new BoxLayout(imageGroup, BoxLayout.Y_AXIS));
             imageGroup.setBorder(new EmptyBorder(14, 16, 12, 16));
             imageGroup.setAlignmentX(Component.LEFT_ALIGNMENT);
-            JLabel imageTitle = new JLabel(groupModels.getFirst().displayGroupName());
+            JLabel imageTitle = new JLabel(first.displayGroupName());
             imageTitle.setFont(font(13, Font.BOLD));
-            imageTitle.setForeground(subscription ? new Color(218, 181, 92) : new Color(105, 220, 194));
+            imageTitle.setForeground(subscription ? SUBSCRIPTION_TEXT : platformStyle.text());
             JPanel imageHeading = transparent(new FlowLayout(FlowLayout.LEFT, 8, 0));
             imageHeading.setAlignmentX(Component.LEFT_ALIGNMENT);
             imageHeading.add(new BillingBadge(subscription));
+            imageHeading.add(new JLabel(platformIcon(platformStyle)));
             imageHeading.add(imageTitle);
             imageGroup.add(imageHeading);
             imageGroup.add(Box.createVerticalStrut(8));
@@ -318,6 +317,57 @@ final class ModelPickerDialog extends JDialog {
     private static JPanel transparent(LayoutManager layout) { JPanel panel = new JPanel(layout); panel.setOpaque(false); return panel; }
     private static Font font(float size, int style) { return new Font(Platform.OS_KIND == Platform.OS.MAC ? ".AppleSystemUIFont" : "SansSerif", style, Math.round(size)); }
 
+    private record PlatformStyle(Color surface, Color border, Color text, Color icon, String iconResource) {}
+
+    private static PlatformStyle platformStyle(String rawPlatform) {
+        String platform = rawPlatform == null ? "" : rawPlatform.trim().toLowerCase(Locale.ROOT);
+        platform = switch (platform) {
+            case "gpt", "chatgpt" -> "openai";
+            case "claude" -> "anthropic";
+            case "google" -> "gemini";
+            case "xai" -> "grok";
+            default -> platform;
+        };
+        return switch (platform) {
+            case "openai" -> style(34, 197, 94, 134, 239, 172, 52, 211, 153, "OpenAIBlossomRuntime.png");
+            case "anthropic" -> style(249, 115, 22, 253, 186, 116, 251, 146, 60, "ClaudeSparkRuntime.png");
+            case "antigravity" -> style(168, 85, 247, 216, 180, 254, 192, 132, 252, "UnknownModelRuntime.png");
+            case "gemini" -> style(59, 130, 246, 147, 197, 253, 96, 165, 250, "GeminiSparkTransparent.png");
+            case "grok" -> style(113, 113, 122, 228, 228, 231, 228, 228, 231, "GrokMarkTransparent.png");
+            case "kimi" -> style(236, 72, 153, 249, 168, 212, 244, 114, 182, "UnknownModelRuntime.png");
+            case "zhipu" -> style(99, 102, 241, 165, 180, 252, 129, 140, 248, "UnknownModelRuntime.png");
+            case "deepseek" -> style(20, 184, 166, 94, 234, 212, 45, 212, 191, "UnknownModelRuntime.png");
+            case "minimax" -> style(244, 63, 94, 253, 164, 175, 251, 113, 133, "UnknownModelRuntime.png");
+            case "opencode_go" -> style(245, 158, 11, 252, 211, 77, 252, 211, 77, "UnknownModelRuntime.png");
+            case "composite" -> style(6, 182, 212, 103, 232, 249, 103, 232, 249, "UnknownModelRuntime.png");
+            default -> style(20, 184, 166, 94, 234, 212, 45, 212, 191, "UnknownModelRuntime.png");
+        };
+    }
+
+    private static PlatformStyle style(int red, int green, int blue,
+                                       int textRed, int textGreen, int textBlue,
+                                       int iconRed, int iconGreen, int iconBlue,
+                                       String iconResource) {
+        return new PlatformStyle(
+            new Color(red, green, blue, 26),
+            new Color(red, green, blue, 92),
+            new Color(textRed, textGreen, textBlue),
+            new Color(iconRed, iconGreen, iconBlue),
+            iconResource
+        );
+    }
+
+    private static Icon platformIcon(PlatformStyle style) {
+        return TokenProFrame.resourceIconContained(style.iconResource(), 15, 15, style.icon());
+    }
+
+    static int[] platformStyleSnapshot(String platform, boolean subscription) {
+        PlatformStyle style = platformStyle(platform);
+        Color surface = subscription ? SUBSCRIPTION_SURFACE : style.surface();
+        Color text = subscription ? SUBSCRIPTION_TEXT : style.text();
+        return new int[]{surface.getRGB(), text.getRGB(), style.icon().getRGB()};
+    }
+
     private static JButton button(String text, boolean primary) {
         JButton button = new PickerButton(text, primary);
         button.setFont(font(13, Font.BOLD));
@@ -401,6 +451,7 @@ final class ModelPickerDialog extends JDialog {
             while (end > 1 && metrics.stringWidth(value.substring(0, end) + suffix) > maxWidth) end--;
             return value.substring(0, end) + suffix;
         }
+
     }
 
     private static final class CosmosPanel extends JPanel {
@@ -462,51 +513,20 @@ final class ModelPickerDialog extends JDialog {
         }
     }
 
-    private static final class WindowControlButton extends JButton {
-        private final Color accent;
-        WindowControlButton(Color accent) {
-            super("");
-            this.accent = accent;
-            setToolTipText("关闭");
-            getAccessibleContext().setAccessibleName("关闭");
-            setPreferredSize(new Dimension(28, 28));
-            setFocusPainted(false);
-            setOpaque(false);
-            setContentAreaFilled(false);
-            setBorderPainted(false);
-            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        }
-
-        protected void paintComponent(Graphics graphics) {
-            Graphics2D g = (Graphics2D) graphics.create();
-            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            Color fill = getModel().isRollover() ? accent.brighter() : accent;
-            g.setColor(fill);
-            int diameter = 17;
-            int x = (getWidth() - diameter) / 2, y = (getHeight() - diameter) / 2;
-            g.fillOval(x, y, diameter, diameter);
-            g.setColor(new Color(125, 24, 20, 150));
-            g.drawOval(x, y, diameter, diameter);
-            if (getModel().isRollover()) {
-                g.setColor(new Color(90, 20, 18, 220));
-                g.setStroke(new BasicStroke(1.25f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-                int cx = getWidth() / 2, cy = getHeight() / 2;
-                g.drawLine(cx - 4, cy - 4, cx + 4, cy + 4);
-                g.drawLine(cx + 4, cy - 4, cx - 4, cy + 4);
-            }
-            g.dispose();
-        }
-    }
-
     private static final class GroupPanel extends JPanel {
         private final boolean subscription;
-        GroupPanel(boolean subscription) { this.subscription = subscription; setOpaque(false); }
+        private final PlatformStyle platformStyle;
+        GroupPanel(boolean subscription, PlatformStyle platformStyle) {
+            this.subscription = subscription;
+            this.platformStyle = platformStyle;
+            setOpaque(false);
+        }
         protected void paintComponent(Graphics graphics) {
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g.setColor(subscription ? new Color(69, 54, 25, 235) : new Color(19, 67, 61, 232));
+            g.setColor(subscription ? SUBSCRIPTION_SURFACE : platformStyle.surface());
             g.fillRoundRect(0, 0, getWidth(), getHeight(), 18, 18);
-            g.setColor(subscription ? new Color(196, 153, 61, 135) : new Color(79, 190, 163, 125));
+            g.setColor(subscription ? SUBSCRIPTION_BORDER : platformStyle.border());
             g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 18, 18);
             g.dispose();
             super.paintComponent(graphics);

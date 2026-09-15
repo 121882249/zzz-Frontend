@@ -136,6 +136,7 @@ final class ApiClient {
                 result.add(new PricedModel(
                     modelName,
                     text(model.getOrDefault("platform", groupPlatform)),
+                    groupPlatform,
                     groupName,
                     groupId,
                     billingMode,

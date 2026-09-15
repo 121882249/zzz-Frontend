@@ -100,6 +100,18 @@ final class SelfTest {
         int[] pickerPixels = ModelPickerDialog.cosmosBackgroundAlphaPixels(200, 160);
         check(pickerPixels[0] == 0 && pickerPixels[1] == 255,
             "model picker paints transparent rounded corners without black edge pixels"); passed++;
+        int[] openAIGroupStyle = ModelPickerDialog.platformStyleSnapshot("openai", false);
+        int[] openAIAliasStyle = ModelPickerDialog.platformStyleSnapshot("gpt", false);
+        check(Arrays.equals(openAIGroupStyle, openAIAliasStyle),
+            "group styling follows the server platform instead of model names"); passed++;
+        int[] subscriptionGroupStyle = ModelPickerDialog.platformStyleSnapshot("openai", true);
+        check(subscriptionGroupStyle[0] != openAIGroupStyle[0] && subscriptionGroupStyle[1] != openAIGroupStyle[1]
+                && subscriptionGroupStyle[2] == openAIGroupStyle[2],
+            "subscription cards remain gold while their platform icon keeps the platform color"); passed++;
+        PricedModel compositeGroupModel = new PricedModel("gpt-test", "openai", "composite", "Mixed", 99,
+            "token", 0.000001d, null, List.of(), false, 0d, "", "");
+        check("openai".equals(compositeGroupModel.platform()) && "composite".equals(compositeGroupModel.groupPlatform()),
+            "model routing platform and visual group platform remain independent"); passed++;
         String nativeProvider = CodexConfig.providerConfiguration("custom", "https://tokenpro.work/v1", "fixture", "user@example.com", null);
         check(!nativeProvider.contains("x-tokenpro-image-mode") && !nativeProvider.contains("x-tokenpro-group-id") && !nativeProvider.contains("x-tokenpro-image-route"),
             "shared provider leaves native delivery to the authenticated group policy"); passed++;

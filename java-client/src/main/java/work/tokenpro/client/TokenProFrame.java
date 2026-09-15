@@ -1116,6 +1116,7 @@ final class TokenProFrame extends JFrame {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("name", model.name());
             row.put("platform", model.platform());
+            row.put("group_platform", model.groupPlatform());
             row.put("group_name", model.groupName());
             row.put("group_id", model.groupId());
             row.put("group_description", model.groupDescription());
@@ -1901,7 +1902,7 @@ final class TokenProFrame extends JFrame {
         return new ImageIcon(new BaseMultiResolutionImage(oneX, twoX, threeX));
     }
 
-    private static ImageIcon resourceIconContained(String name, int maxWidth, int maxHeight, Color tint) {
+    static ImageIcon resourceIconContained(String name, int maxWidth, int maxHeight, Color tint) {
         BufferedImage source = resourceImage(name); if (source == null) return null;
         return scaledIcon(tinted(source, tint), maxWidth, maxHeight);
     }
@@ -2155,7 +2156,9 @@ final class TokenProFrame extends JFrame {
         for (Object raw : ClaudeAdapter.list(saved.get("models"))) {
             Map<String,Object> row = Json.object(raw);
             if (row.get("group_id") instanceof Number group && row.get("name") instanceof String name && !name.isBlank())
-                models.add(new PricedModel(name, string(row.get("platform")), string(row.get("group_name")), group.longValue(),
+                models.add(new PricedModel(name, string(row.get("platform")),
+                    string(row.get("group_platform")).isBlank() ? string(row.get("platform")) : string(row.get("group_platform")),
+                    string(row.get("group_name")), group.longValue(),
                     "token", null, null, List.of(), false, 0d, "",
                     string(row.get("group_description"))));
         }
