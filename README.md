@@ -4,6 +4,10 @@
 
 TokenPro 现在只有一套 Java 21/Swing 客户端源码，支持 Windows、macOS 和 Linux。macOS 的 Intel 与 Apple 芯片版本、Windows x64 版本和 Linux x64 版本由 GitHub Actions 分别在对应系统构建。
 
+## v1.3.5 更新
+
+- “余额”标签的底色、边框和文字也跟随服务器分组平台颜色；“订阅”标签继续保持金色。
+
 ## v1.3.4 更新
 
 - 模型选择器按服务器分组平台自动映射框体、标题和平台图标颜色，新平台分组可直接复用平台视觉配置。

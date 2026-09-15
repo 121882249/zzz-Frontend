@@ -108,6 +108,14 @@ final class SelfTest {
         check(subscriptionGroupStyle[0] != openAIGroupStyle[0] && subscriptionGroupStyle[1] != openAIGroupStyle[1]
                 && subscriptionGroupStyle[2] == openAIGroupStyle[2],
             "subscription cards remain gold while their platform icon keeps the platform color"); passed++;
+        int[] openAIBalanceBadge = ModelPickerDialog.billingBadgeStyleSnapshot("openai", false);
+        int[] anthropicBalanceBadge = ModelPickerDialog.billingBadgeStyleSnapshot("anthropic", false);
+        check(!Arrays.equals(openAIBalanceBadge, anthropicBalanceBadge),
+            "balance badge surface, border and text follow the server group platform"); passed++;
+        int[] openAISubscriptionBadge = ModelPickerDialog.billingBadgeStyleSnapshot("openai", true);
+        int[] anthropicSubscriptionBadge = ModelPickerDialog.billingBadgeStyleSnapshot("anthropic", true);
+        check(Arrays.equals(openAISubscriptionBadge, anthropicSubscriptionBadge),
+            "subscription badge remains gold across platforms"); passed++;
         PricedModel compositeGroupModel = new PricedModel("gpt-test", "openai", "composite", "Mixed", 99,
             "token", 0.000001d, null, List.of(), false, 0d, "", "");
         check("openai".equals(compositeGroupModel.platform()) && "composite".equals(compositeGroupModel.groupPlatform()),

@@ -17,6 +17,9 @@ final class ModelPickerDialog extends JDialog {
     private static final Color SUBSCRIPTION_SURFACE = new Color(69, 54, 25, 235);
     private static final Color SUBSCRIPTION_BORDER = new Color(196, 153, 61, 135);
     private static final Color SUBSCRIPTION_TEXT = new Color(218, 181, 92);
+    private static final Color SUBSCRIPTION_BADGE_SURFACE = new Color(125, 91, 27, 190);
+    private static final Color SUBSCRIPTION_BADGE_BORDER = new Color(221, 174, 70, 150);
+    private static final Color SUBSCRIPTION_BADGE_TEXT = new Color(244, 210, 126);
     private final List<ModelCheckBox> choices = new ArrayList<>();
 
     ModelPickerDialog(JFrame owner, String client, List<PricedModel> models,
@@ -96,7 +99,7 @@ final class ModelPickerDialog extends JDialog {
             groupName.setForeground(subscription ? SUBSCRIPTION_TEXT : platformStyle.text());
             JPanel heading = transparent(new FlowLayout(FlowLayout.LEFT, 8, 0));
             heading.setAlignmentX(Component.LEFT_ALIGNMENT);
-            heading.add(new BillingBadge(subscription));
+            heading.add(new BillingBadge(subscription, platformStyle));
             heading.add(new JLabel(platformIcon(platformStyle)));
             heading.add(groupName);
             group.add(heading);
@@ -202,7 +205,7 @@ final class ModelPickerDialog extends JDialog {
             imageTitle.setForeground(subscription ? SUBSCRIPTION_TEXT : platformStyle.text());
             JPanel imageHeading = transparent(new FlowLayout(FlowLayout.LEFT, 8, 0));
             imageHeading.setAlignmentX(Component.LEFT_ALIGNMENT);
-            imageHeading.add(new BillingBadge(subscription));
+            imageHeading.add(new BillingBadge(subscription, platformStyle));
             imageHeading.add(new JLabel(platformIcon(platformStyle)));
             imageHeading.add(imageTitle);
             imageGroup.add(imageHeading);
@@ -366,6 +369,18 @@ final class ModelPickerDialog extends JDialog {
         Color surface = subscription ? SUBSCRIPTION_SURFACE : style.surface();
         Color text = subscription ? SUBSCRIPTION_TEXT : style.text();
         return new int[]{surface.getRGB(), text.getRGB(), style.icon().getRGB()};
+    }
+
+    static int[] billingBadgeStyleSnapshot(String platform, boolean subscription) {
+        PlatformStyle style = platformStyle(platform);
+        Color surface = subscription ? SUBSCRIPTION_BADGE_SURFACE : alpha(style.surface(), 110);
+        Color border = subscription ? SUBSCRIPTION_BADGE_BORDER : alpha(style.border(), 155);
+        Color text = subscription ? SUBSCRIPTION_BADGE_TEXT : style.text();
+        return new int[]{surface.getRGB(), border.getRGB(), text.getRGB()};
+    }
+
+    private static Color alpha(Color color, int alpha) {
+        return new Color(color.getRed(), color.getGreen(), color.getBlue(), alpha);
     }
 
     private static JButton button(String text, boolean primary) {
@@ -535,11 +550,13 @@ final class ModelPickerDialog extends JDialog {
 
     private static final class BillingBadge extends JLabel {
         private final boolean subscription;
-        BillingBadge(boolean subscription) {
+        private final PlatformStyle platformStyle;
+        BillingBadge(boolean subscription, PlatformStyle platformStyle) {
             super(subscription ? "订阅" : "余额");
             this.subscription = subscription;
+            this.platformStyle = platformStyle;
             setFont(font(10, Font.BOLD));
-            setForeground(subscription ? new Color(244, 210, 126) : new Color(151, 229, 211));
+            setForeground(subscription ? SUBSCRIPTION_BADGE_TEXT : platformStyle.text());
             setBorder(new EmptyBorder(3, 8, 3, 8));
             setOpaque(false);
         }
@@ -547,9 +564,9 @@ final class ModelPickerDialog extends JDialog {
         @Override protected void paintComponent(Graphics graphics) {
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g.setColor(subscription ? new Color(125, 91, 27, 190) : new Color(31, 105, 91, 175));
+            g.setColor(subscription ? SUBSCRIPTION_BADGE_SURFACE : alpha(platformStyle.surface(), 110));
             g.fillRoundRect(0, 0, getWidth(), getHeight(), getHeight(), getHeight());
-            g.setColor(subscription ? new Color(221, 174, 70, 150) : new Color(98, 205, 178, 120));
+            g.setColor(subscription ? SUBSCRIPTION_BADGE_BORDER : alpha(platformStyle.border(), 155));
             g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, getHeight(), getHeight());
             g.dispose();
             super.paintComponent(graphics);
