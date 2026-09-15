@@ -4,6 +4,11 @@
 
 TokenPro 现在只有一套 Java 21/Swing 客户端源码，支持 Windows、macOS 和 Linux。macOS 的 Intel 与 Apple 芯片版本、Windows x64 版本和 Linux x64 版本由 GitHub Actions 分别在对应系统构建。
 
+## v1.3.6 更新
+
+- 分组平台为 `openai` 且描述为“生图”的分组使用紫蓝青极光框体、同色“余额”标签和带星光渐变的 OpenAI 生图图标。
+- 生图分组固定排列在全部订阅分组之后、普通余额分组之前。
+
 ## v1.3.5 更新
 
 - “余额”标签的底色、边框和文字也跟随服务器分组平台颜色；“订阅”标签继续保持金色。

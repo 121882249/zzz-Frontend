@@ -97,6 +97,20 @@ final class SelfTest {
         PricedModel otherImage = new PricedModel("gpt-image-2.5-sunburst", "openai", "Images", 65);
         List<PricedModel> allImages = ModelPickerDialog.orderedModels(List.of(nativeChat, nativeImage, otherImage), "Codex");
         check(allImages.size() == 3 && allImages.containsAll(List.of(nativeChat, nativeImage, otherImage)), "Codex retains all selected text and image models"); passed++;
+        PricedModel subscriptionChat = new PricedModel("gpt-sub", "openai", "Subscription", 10,
+            "token", 0.1d, null, List.of(), true, 20d, "", "");
+        PricedModel balanceChat = new PricedModel("gpt-balance", "openai", "Balance", 11);
+        List<PricedModel> subscriptionThenImages = ModelPickerDialog.orderedModels(
+            List.of(balanceChat, nativeImage, subscriptionChat), "Codex");
+        check(subscriptionThenImages.equals(List.of(subscriptionChat, nativeImage, balanceChat)),
+            "image groups sort directly below subscriptions and above ordinary balance groups"); passed++;
+        PricedModel dedicatedImage = new PricedModel("gpt-image-2", "openai", "openai", "Images", 65,
+            "image", null, null, List.of(), false, 0d, "", " 生图 ");
+        PricedModel ordinaryOpenAI = new PricedModel("gpt-image-2", "openai", "openai", "Images", 65,
+            "image", null, null, List.of(), false, 0d, "", "图片");
+        check(ModelPickerDialog.isDedicatedImageGroup(dedicatedImage)
+                && !ModelPickerDialog.isDedicatedImageGroup(ordinaryOpenAI),
+            "dedicated image styling requires OpenAI group platform and exact trimmed 生图 description"); passed++;
         int[] pickerPixels = ModelPickerDialog.cosmosBackgroundAlphaPixels(200, 160);
         check(pickerPixels[0] == 0 && pickerPixels[1] == 255,
             "model picker paints transparent rounded corners without black edge pixels"); passed++;
@@ -116,6 +130,9 @@ final class SelfTest {
         int[] anthropicSubscriptionBadge = ModelPickerDialog.billingBadgeStyleSnapshot("anthropic", true);
         check(Arrays.equals(openAISubscriptionBadge, anthropicSubscriptionBadge),
             "subscription badge remains gold across platforms"); passed++;
+        int[] imageBalanceBadge = ModelPickerDialog.billingBadgeStyleSnapshot("openai", false, true);
+        check(!Arrays.equals(imageBalanceBadge, openAIBalanceBadge),
+            "dedicated image balance badge follows the image-generation tone"); passed++;
         PricedModel compositeGroupModel = new PricedModel("gpt-test", "openai", "composite", "Mixed", 99,
             "token", 0.000001d, null, List.of(), false, 0d, "", "");
         check("openai".equals(compositeGroupModel.platform()) && "composite".equals(compositeGroupModel.groupPlatform()),

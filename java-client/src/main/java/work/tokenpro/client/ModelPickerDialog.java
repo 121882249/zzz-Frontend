@@ -20,6 +20,9 @@ final class ModelPickerDialog extends JDialog {
     private static final Color SUBSCRIPTION_BADGE_SURFACE = new Color(125, 91, 27, 190);
     private static final Color SUBSCRIPTION_BADGE_BORDER = new Color(221, 174, 70, 150);
     private static final Color SUBSCRIPTION_BADGE_TEXT = new Color(244, 210, 126);
+    private static final Color IMAGE_TEXT = new Color(139, 231, 255);
+    private static final Color IMAGE_BADGE_SURFACE = new Color(71, 72, 181, 175);
+    private static final Color IMAGE_BADGE_BORDER = new Color(104, 218, 255, 185);
     private final List<ModelCheckBox> choices = new ArrayList<>();
 
     ModelPickerDialog(JFrame owner, String client, List<PricedModel> models,
@@ -88,7 +91,7 @@ final class ModelPickerDialog extends JDialog {
             PricedModel first = groupModels.getFirst();
             boolean subscription = first.subscription();
             PlatformStyle platformStyle = platformStyle(first.groupPlatform());
-            JPanel group = new GroupPanel(subscription, platformStyle);
+            JPanel group = new GroupPanel(subscription, platformStyle, false);
             group.setLayout(new BoxLayout(group, BoxLayout.Y_AXIS));
             group.setBorder(new EmptyBorder(14, 16, 12, 16));
             group.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -99,7 +102,7 @@ final class ModelPickerDialog extends JDialog {
             groupName.setForeground(subscription ? SUBSCRIPTION_TEXT : platformStyle.text());
             JPanel heading = transparent(new FlowLayout(FlowLayout.LEFT, 8, 0));
             heading.setAlignmentX(Component.LEFT_ALIGNMENT);
-            heading.add(new BillingBadge(subscription, platformStyle));
+            heading.add(new BillingBadge(subscription, platformStyle, false));
             heading.add(new JLabel(platformIcon(platformStyle)));
             heading.add(groupName);
             group.add(heading);
@@ -111,14 +114,14 @@ final class ModelPickerDialog extends JDialog {
                 group.add(choice);
             }
             group.setMaximumSize(new Dimension(Integer.MAX_VALUE, group.getPreferredSize().height));
-            groups.add(group);
-            groups.add(Box.createVerticalStrut(10));
-            // The image models remain their own independent group. Their visual
-            // position is immediately below the first GPT/OpenAI group only.
-            if (codex && !imageGroupAdded && !first.subscription() && isGptGroup(first)) {
+            // Image groups sit directly below every subscription group and
+            // before the first ordinary balance group.
+            if (codex && !imageGroupAdded && !first.subscription()) {
                 addImageChoices(groups, models, selectedIds);
                 imageGroupAdded = true;
             }
+            groups.add(group);
+            groups.add(Box.createVerticalStrut(10));
         }
         if (codex && !imageGroupAdded) addImageChoices(groups, models, selectedIds);
         if (!codex && choices.stream().noneMatch(AbstractButton::isSelected)) {
@@ -196,17 +199,18 @@ final class ModelPickerDialog extends JDialog {
             PricedModel first = groupModels.getFirst();
             boolean subscription = first.subscription();
             PlatformStyle platformStyle = platformStyle(first.groupPlatform());
-            JPanel imageGroup = new GroupPanel(subscription, platformStyle);
+            boolean dedicatedImageGroup = isDedicatedImageGroup(first);
+            JPanel imageGroup = new GroupPanel(subscription, platformStyle, dedicatedImageGroup);
             imageGroup.setLayout(new BoxLayout(imageGroup, BoxLayout.Y_AXIS));
             imageGroup.setBorder(new EmptyBorder(14, 16, 12, 16));
             imageGroup.setAlignmentX(Component.LEFT_ALIGNMENT);
             JLabel imageTitle = new JLabel(first.displayGroupName());
             imageTitle.setFont(font(13, Font.BOLD));
-            imageTitle.setForeground(subscription ? SUBSCRIPTION_TEXT : platformStyle.text());
+            imageTitle.setForeground(subscription ? SUBSCRIPTION_TEXT : dedicatedImageGroup ? IMAGE_TEXT : platformStyle.text());
             JPanel imageHeading = transparent(new FlowLayout(FlowLayout.LEFT, 8, 0));
             imageHeading.setAlignmentX(Component.LEFT_ALIGNMENT);
-            imageHeading.add(new BillingBadge(subscription, platformStyle));
-            imageHeading.add(new JLabel(platformIcon(platformStyle)));
+            imageHeading.add(new BillingBadge(subscription, platformStyle, dedicatedImageGroup));
+            imageHeading.add(new JLabel(platformIcon(platformStyle, dedicatedImageGroup)));
             imageHeading.add(imageTitle);
             imageGroup.add(imageHeading);
             imageGroup.add(Box.createVerticalStrut(8));
@@ -222,9 +226,9 @@ final class ModelPickerDialog extends JDialog {
         }
     }
 
-    private static boolean isGptGroup(PricedModel model) {
-        String value = (model.name() + " " + model.platform() + " " + model.groupName()).toLowerCase(Locale.ROOT);
-        return value.contains("gpt") || value.contains("openai");
+    static boolean isDedicatedImageGroup(PricedModel model) {
+        return "openai".equalsIgnoreCase(model.groupPlatform().trim())
+            && "生图".equals(model.groupDescription().trim());
     }
 
     private List<PricedModel> selected() {
@@ -253,12 +257,12 @@ final class ModelPickerDialog extends JDialog {
         for (List<PricedModel> group : orderedGroups) {
             List<PricedModel> sorted = new ArrayList<>(group);
             sorted.sort(ApiClient::compareSelectablePriceDescending);
-            result.addAll(sorted);
             PricedModel first = sorted.getFirst();
-            if ("Codex".equals(client) && !imagesAdded && !first.subscription() && isGptGroup(first)) {
+            if ("Codex".equals(client) && !imagesAdded && !first.subscription()) {
                 result.addAll(images);
                 imagesAdded = true;
             }
+            result.addAll(sorted);
         }
         if ("Codex".equals(client) && !imagesAdded) result.addAll(images);
         return List.copyOf(result);
@@ -364,6 +368,13 @@ final class ModelPickerDialog extends JDialog {
         return TokenProFrame.resourceIconContained(style.iconResource(), 15, 15, style.icon());
     }
 
+    private static Icon platformIcon(PlatformStyle style, boolean dedicatedImageGroup) {
+        if (!dedicatedImageGroup) return platformIcon(style);
+        Icon base = TokenProFrame.resourceIconGradientContained(style.iconResource(), 17, 17,
+            new Color(52, 211, 153), new Color(69, 212, 255), new Color(151, 91, 255));
+        return base == null ? platformIcon(style) : new ImageGenerationPlatformIcon(base);
+    }
+
     static int[] platformStyleSnapshot(String platform, boolean subscription) {
         PlatformStyle style = platformStyle(platform);
         Color surface = subscription ? SUBSCRIPTION_SURFACE : style.surface();
@@ -372,10 +383,14 @@ final class ModelPickerDialog extends JDialog {
     }
 
     static int[] billingBadgeStyleSnapshot(String platform, boolean subscription) {
+        return billingBadgeStyleSnapshot(platform, subscription, false);
+    }
+
+    static int[] billingBadgeStyleSnapshot(String platform, boolean subscription, boolean dedicatedImageGroup) {
         PlatformStyle style = platformStyle(platform);
-        Color surface = subscription ? SUBSCRIPTION_BADGE_SURFACE : alpha(style.surface(), 110);
-        Color border = subscription ? SUBSCRIPTION_BADGE_BORDER : alpha(style.border(), 155);
-        Color text = subscription ? SUBSCRIPTION_BADGE_TEXT : style.text();
+        Color surface = subscription ? SUBSCRIPTION_BADGE_SURFACE : dedicatedImageGroup ? IMAGE_BADGE_SURFACE : alpha(style.surface(), 110);
+        Color border = subscription ? SUBSCRIPTION_BADGE_BORDER : dedicatedImageGroup ? IMAGE_BADGE_BORDER : alpha(style.border(), 155);
+        Color text = subscription ? SUBSCRIPTION_BADGE_TEXT : dedicatedImageGroup ? IMAGE_TEXT : style.text();
         return new int[]{surface.getRGB(), border.getRGB(), text.getRGB()};
     }
 
@@ -531,32 +546,73 @@ final class ModelPickerDialog extends JDialog {
     private static final class GroupPanel extends JPanel {
         private final boolean subscription;
         private final PlatformStyle platformStyle;
-        GroupPanel(boolean subscription, PlatformStyle platformStyle) {
+        private final boolean dedicatedImageGroup;
+        GroupPanel(boolean subscription, PlatformStyle platformStyle, boolean dedicatedImageGroup) {
             this.subscription = subscription;
             this.platformStyle = platformStyle;
+            this.dedicatedImageGroup = dedicatedImageGroup;
             setOpaque(false);
         }
         protected void paintComponent(Graphics graphics) {
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g.setColor(subscription ? SUBSCRIPTION_SURFACE : platformStyle.surface());
-            g.fillRoundRect(0, 0, getWidth(), getHeight(), 18, 18);
-            g.setColor(subscription ? SUBSCRIPTION_BORDER : platformStyle.border());
-            g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 18, 18);
+            Shape surface = new java.awt.geom.RoundRectangle2D.Double(0, 0,
+                Math.max(0, getWidth() - 1), Math.max(0, getHeight() - 1), 18, 18);
+            if (dedicatedImageGroup && !subscription) {
+                g.setClip(surface);
+                g.setPaint(new GradientPaint(0, 0, new Color(28, 35, 111, 246),
+                    getWidth(), getHeight(), new Color(8, 78, 106, 238)));
+                g.fill(surface);
+                float radius = Math.max(90f, getWidth() * .42f);
+                g.setPaint(new RadialGradientPaint(getWidth() * .68f, getHeight() * .18f, radius,
+                    new float[]{0f, 1f}, new Color[]{new Color(56, 189, 248, 115), new Color(56, 189, 248, 0)}));
+                g.fill(surface);
+                g.setPaint(new RadialGradientPaint(getWidth() * .38f, getHeight() * .92f, radius,
+                    new float[]{0f, 1f}, new Color[]{new Color(139, 92, 246, 105), new Color(139, 92, 246, 0)}));
+                g.fill(surface);
+                paintImageMotif(g, getWidth(), getHeight());
+                g.setClip(null);
+                g.setStroke(new BasicStroke(1.4f));
+                g.setPaint(new LinearGradientPaint(0, 0, Math.max(1, getWidth()), 0,
+                    new float[]{0f, .48f, 1f},
+                    new Color[]{new Color(72, 214, 255, 220), new Color(139, 92, 246, 220), new Color(60, 196, 255, 220)}));
+                g.draw(surface);
+            } else {
+                g.setColor(subscription ? SUBSCRIPTION_SURFACE : platformStyle.surface());
+                g.fill(surface);
+                g.setColor(subscription ? SUBSCRIPTION_BORDER : platformStyle.border());
+                g.draw(surface);
+            }
             g.dispose();
             super.paintComponent(graphics);
+        }
+
+        private static void paintImageMotif(Graphics2D g, int width, int height) {
+            int size = Math.min(54, Math.max(30, height / 4));
+            int x = Math.max(0, width - size - 42), y = 18;
+            g.setColor(new Color(183, 216, 255, 34));
+            g.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g.drawRoundRect(x, y, size, size - 8, 7, 7);
+            g.drawLine(x + 7, y + size - 17, x + 20, y + size - 30);
+            g.drawLine(x + 20, y + size - 30, x + 29, y + size - 21);
+            g.drawLine(x + 29, y + size - 21, x + size - 7, y + size - 36);
+            g.fillOval(x + 10, y + 8, 6, 6);
+            g.drawLine(x + size + 16, y + 5, x + size + 16, y + 19);
+            g.drawLine(x + size + 9, y + 12, x + size + 23, y + 12);
         }
     }
 
     private static final class BillingBadge extends JLabel {
         private final boolean subscription;
         private final PlatformStyle platformStyle;
-        BillingBadge(boolean subscription, PlatformStyle platformStyle) {
+        private final boolean dedicatedImageGroup;
+        BillingBadge(boolean subscription, PlatformStyle platformStyle, boolean dedicatedImageGroup) {
             super(subscription ? "订阅" : "余额");
             this.subscription = subscription;
             this.platformStyle = platformStyle;
+            this.dedicatedImageGroup = dedicatedImageGroup;
             setFont(font(10, Font.BOLD));
-            setForeground(subscription ? SUBSCRIPTION_BADGE_TEXT : platformStyle.text());
+            setForeground(subscription ? SUBSCRIPTION_BADGE_TEXT : dedicatedImageGroup ? IMAGE_TEXT : platformStyle.text());
             setBorder(new EmptyBorder(3, 8, 3, 8));
             setOpaque(false);
         }
@@ -564,12 +620,33 @@ final class ModelPickerDialog extends JDialog {
         @Override protected void paintComponent(Graphics graphics) {
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g.setColor(subscription ? SUBSCRIPTION_BADGE_SURFACE : alpha(platformStyle.surface(), 110));
+            g.setColor(subscription ? SUBSCRIPTION_BADGE_SURFACE : dedicatedImageGroup ? IMAGE_BADGE_SURFACE : alpha(platformStyle.surface(), 110));
             g.fillRoundRect(0, 0, getWidth(), getHeight(), getHeight(), getHeight());
-            g.setColor(subscription ? SUBSCRIPTION_BADGE_BORDER : alpha(platformStyle.border(), 155));
+            g.setColor(subscription ? SUBSCRIPTION_BADGE_BORDER : dedicatedImageGroup ? IMAGE_BADGE_BORDER : alpha(platformStyle.border(), 155));
             g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, getHeight(), getHeight());
             g.dispose();
             super.paintComponent(graphics);
+        }
+    }
+
+    private static final class ImageGenerationPlatformIcon implements Icon {
+        private final Icon base;
+        ImageGenerationPlatformIcon(Icon base) { this.base = base; }
+        public int getIconWidth() { return base.getIconWidth() + 4; }
+        public int getIconHeight() { return Math.max(base.getIconHeight(), 18); }
+        public void paintIcon(Component component, Graphics graphics, int x, int y) {
+            int baseY = y + (getIconHeight() - base.getIconHeight()) / 2;
+            base.paintIcon(component, graphics, x, baseY);
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            int cx = x + base.getIconWidth() + 1, cy = y + 3;
+            g.setColor(new Color(184, 126, 255));
+            java.awt.geom.Path2D sparkle = new java.awt.geom.Path2D.Double();
+            sparkle.moveTo(cx, cy - 3); sparkle.lineTo(cx + 1, cy - 1); sparkle.lineTo(cx + 3, cy);
+            sparkle.lineTo(cx + 1, cy + 1); sparkle.lineTo(cx, cy + 3); sparkle.lineTo(cx - 1, cy + 1);
+            sparkle.lineTo(cx - 3, cy); sparkle.lineTo(cx - 1, cy - 1); sparkle.closePath();
+            g.fill(sparkle);
+            g.dispose();
         }
     }
 }

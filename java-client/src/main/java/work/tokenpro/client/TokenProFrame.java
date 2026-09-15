@@ -1907,6 +1907,12 @@ final class TokenProFrame extends JFrame {
         return scaledIcon(tinted(source, tint), maxWidth, maxHeight);
     }
 
+    static ImageIcon resourceIconGradientContained(String name, int maxWidth, int maxHeight,
+                                                   Color start, Color middle, Color end) {
+        BufferedImage source = resourceImage(name); if (source == null) return null;
+        return scaledIcon(gradientTinted(source, start, middle, end), maxWidth, maxHeight);
+    }
+
     private static ImageIcon menuIcon(String name, int maxWidth, int maxHeight, Color tint) {
         if (!name.startsWith("embedded:")) return resourceIconContained(name, maxWidth, maxHeight, tint);
         String encoded = name.endsWith("price") ? PRICE_MENU_ICON : REPAIR_MENU_ICON;
@@ -1944,6 +1950,23 @@ final class TokenProFrame extends JFrame {
         for (int y = 0; y < source.getHeight(); y++) for (int x = 0; x < source.getWidth(); x++) {
             int alpha = source.getRGB(x, y) >>> 24;
             output.setRGB(x, y, (alpha << 24) | rgb);
+        }
+        return output;
+    }
+
+    private static BufferedImage gradientTinted(BufferedImage source, Color start, Color middle, Color end) {
+        BufferedImage output = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_INT_ARGB);
+        double denominator = Math.max(1d, source.getWidth() + source.getHeight() - 2d);
+        for (int y = 0; y < source.getHeight(); y++) for (int x = 0; x < source.getWidth(); x++) {
+            int alpha = source.getRGB(x, y) >>> 24;
+            double position = (x + y) / denominator;
+            Color left = position < .5d ? start : middle;
+            Color right = position < .5d ? middle : end;
+            double local = position < .5d ? position * 2d : (position - .5d) * 2d;
+            int red = (int) Math.round(left.getRed() + (right.getRed() - left.getRed()) * local);
+            int green = (int) Math.round(left.getGreen() + (right.getGreen() - left.getGreen()) * local);
+            int blue = (int) Math.round(left.getBlue() + (right.getBlue() - left.getBlue()) * local);
+            output.setRGB(x, y, (alpha << 24) | (red << 16) | (green << 8) | blue);
         }
         return output;
     }
