@@ -361,7 +361,11 @@ final class TokenProFrame extends JFrame {
         actions.add(menu);
         JButton launch = connectionActionButton();
         launch.setEnabled(false);
-        launch.addActionListener(e -> { if (desktopClientInstalled(iconName)) open.run(); else browse(downloadUrl); });
+        launch.addActionListener(e -> {
+            if (!desktopClientInstalled(iconName)) browse(downloadUrl);
+            else if (!Boolean.TRUE.equals(launch.getClientProperty("tokenpro.canConnect"))) chooseModel.run();
+            else open.run();
+        });
         if (iconName.equals("Codex")) codexLaunch = launch; else claudeLaunch = launch;
         actions.add(launch); card.add(actions, BorderLayout.EAST); return card;
     }
@@ -828,7 +832,7 @@ final class TokenProFrame extends JFrame {
                 String selected = string(saved.get("model")); if (selected.isBlank()) throw new IllegalStateException("未选择");
                 setDesktopCardState("Codex", selectionStatus(1), true);
             }
-        } catch (Exception ignored) { setDesktopCardState("Codex", officialStatus("Codex"), true); }
+        } catch (Exception ignored) { setDesktopCardState("Codex", selectionStatus(0), false); }
     }
 
     private boolean codexOfficialMode() {
@@ -927,8 +931,10 @@ final class TokenProFrame extends JFrame {
             return;
         }
         launch.setText(installed ? "连接" : "去下载");
-        launch.setToolTipText(installed ? "重新连接 " + client + " 客户端" : "打开 " + client + " 官方下载页");
-        launch.setEnabled(!installed || canConnect);
+        if (installed && !canConnect) launch.setText("配置渠道");
+        launch.putClientProperty("tokenpro.canConnect", canConnect);
+        launch.setToolTipText(installed ? (canConnect ? "重新连接 " + client + " 客户端" : "选择可用模型并配置渠道") : "打开 " + client + " 官方下载页");
+        launch.setEnabled(true);
         if (menu != null) menu.setEnabled(true);
         if (!installed) state.setText("请先安装应用");
     }
@@ -1076,9 +1082,9 @@ final class TokenProFrame extends JFrame {
         }.execute();
     }
 
-    private static String selectionStatus(int count) { return count > 0 ? "当前：TokenPro·已选 " + count + " 款模型" : "请先选择模型"; }
+    private static String selectionStatus(int count) { return count > 0 ? "当前：TokenPro·已选 " + count + " 款模型" : "请配置渠道"; }
     private static String configuredStatus(String client, int count) {
-        return count > 0 ? selectionStatus(count) : officialStatus(client);
+        return selectionStatus(count);
     }
     private static String officialStatus(String client) {
         return client.equals("Claude") ? "当前：Anthropic 官方配置" : "当前：OpenAI 官方配置";
@@ -3000,6 +3006,7 @@ final class TokenProFrame extends JFrame {
         }
 
         private static Color statusColor(String text) {
+            if (text != null && text.startsWith("请先安装")) return MUTED;
             if (text != null && text.startsWith("当前：") && (text.contains("官方") || text.contains("官网"))) return STATUS_OFFICIAL;
             return text != null && text.startsWith("当前：TokenPro") ? STATUS_READY : STATUS_PENDING;
         }
