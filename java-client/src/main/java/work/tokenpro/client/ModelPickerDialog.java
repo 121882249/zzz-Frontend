@@ -564,13 +564,18 @@ final class ModelPickerDialog extends JDialog {
             this.subscription = subscription;
             this.platformStyle = platformStyle;
             this.dedicatedImageGroup = dedicatedImageGroup;
-            setOpaque(false);
+            // The image group lives inside a translucent scroll surface. Mark it
+            // opaque so Swing repaints it independently instead of only making
+            // its heading visible during a child hover repaint.
+            setOpaque(dedicatedImageGroup);
+            if (dedicatedImageGroup) setBackground(LIST_BACKGROUND);
         }
         @Override public Dimension getMaximumSize() {
             Dimension preferred = getPreferredSize();
             return new Dimension(Integer.MAX_VALUE, preferred.height);
         }
         protected void paintComponent(Graphics graphics) {
+            super.paintComponent(graphics);
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             Shape surface = new java.awt.geom.RoundRectangle2D.Double(0, 0,
@@ -601,7 +606,6 @@ final class ModelPickerDialog extends JDialog {
                 g.draw(surface);
             }
             g.dispose();
-            super.paintComponent(graphics);
         }
 
         private static void paintImageMotif(Graphics2D g, int width, int height) {
