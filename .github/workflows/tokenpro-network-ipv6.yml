@@ -108,8 +108,8 @@ jobs:
             rollback
             exit 1
           fi
-          test -n "$(ss -H -6 -lnt 'sport = :80')"
-          test -n "$(ss -H -6 -lnt 'sport = :443')"
+          ss -H -6 -lnt | awk '$4 ~ /:80$/ { found=1 } END { exit found ? 0 : 1 }'
+          ss -H -6 -lnt | awk '$4 ~ /:443$/ { found=1 } END { exit found ? 0 : 1 }'
 
           for host in tokenpro.work api.tokenpro.work www.tokenpro.work; do
             curl -g -6 --resolve "$host:443:[$expected_ipv6]" \
