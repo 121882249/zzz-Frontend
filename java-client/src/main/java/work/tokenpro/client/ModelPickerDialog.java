@@ -105,6 +105,7 @@ final class ModelPickerDialog extends JDialog {
             heading.add(new BillingBadge(subscription, platformStyle, false));
             heading.add(new JLabel(platformIcon(platformStyle)));
             heading.add(groupName);
+            lockRowHeight(heading);
             group.add(heading);
             group.add(Box.createVerticalStrut(8));
             for (PricedModel model : groupModels) {
@@ -212,6 +213,7 @@ final class ModelPickerDialog extends JDialog {
             imageHeading.add(new BillingBadge(subscription, platformStyle, dedicatedImageGroup));
             imageHeading.add(new JLabel(platformIcon(platformStyle, dedicatedImageGroup)));
             imageHeading.add(imageTitle);
+            lockRowHeight(imageHeading);
             imageGroup.add(imageHeading);
             imageGroup.add(Box.createVerticalStrut(8));
             for (PricedModel model : groupModels) {
@@ -328,6 +330,11 @@ final class ModelPickerDialog extends JDialog {
 
     private static JPanel transparent() { JPanel panel = new JPanel(); panel.setOpaque(false); return panel; }
     private static JPanel transparent(LayoutManager layout) { JPanel panel = new JPanel(layout); panel.setOpaque(false); return panel; }
+    private static void lockRowHeight(JComponent component) {
+        int height = component.getPreferredSize().height;
+        component.setMinimumSize(new Dimension(0, height));
+        component.setMaximumSize(new Dimension(Integer.MAX_VALUE, height));
+    }
     private static Font font(float size, int style) { return new Font(Platform.OS_KIND == Platform.OS.MAC ? ".AppleSystemUIFont" : "SansSerif", style, Math.round(size)); }
 
     private record PlatformStyle(Color surface, Color border, Color text, Color icon, String iconResource) {}
@@ -558,6 +565,10 @@ final class ModelPickerDialog extends JDialog {
             this.platformStyle = platformStyle;
             this.dedicatedImageGroup = dedicatedImageGroup;
             setOpaque(false);
+        }
+        @Override public Dimension getMaximumSize() {
+            Dimension preferred = getPreferredSize();
+            return new Dimension(Integer.MAX_VALUE, preferred.height);
         }
         protected void paintComponent(Graphics graphics) {
             Graphics2D g = (Graphics2D) graphics.create();
