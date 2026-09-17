@@ -1,0 +1,122 @@
+name: TokenPro IPv6 Network Enablement
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_ipv6:
+        description: 'IPv6 address currently assigned to the TokenPro server'
+        default: '240d:c000:f05f:7700:8e76:7978:6a72:0'
+        required: true
+        type: string
+      confirm:
+        description: 'Type ENABLE_IPV6 to apply the idempotent Nginx change'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tokenpro-network-ipv6
+  cancel-in-progress: false
+
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate explicit request
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+          EXPECTED_IPV6: ${{ inputs.expected_ipv6 }}
+        run: |
+          test "$CONFIRM" = ENABLE_IPV6
+          [[ "$EXPECTED_IPV6" =~ ^[0-9a-fA-F:]+$ ]]
+
+      - name: Configure existing TokenPro deployment credentials
+        env:
+          DEPLOY_KEY: ${{ secrets.TOKENPRO_DEPLOY_KEY }}
+          KNOWN_HOSTS: ${{ secrets.TOKENPRO_KNOWN_HOSTS }}
+        run: |
+          install -d -m 0700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/tokenpro-deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/tokenpro-deploy ~/.ssh/known_hosts
+
+      - name: Enable Nginx IPv6 listeners and verify locally
+        env:
+          DEPLOY_HOST: ${{ secrets.TOKENPRO_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.TOKENPRO_DEPLOY_USER }}
+          EXPECTED_IPV6: ${{ inputs.expected_ipv6 }}
+        run: |
+          ssh -o BatchMode=yes -o ConnectTimeout=15 -i ~/.ssh/tokenpro-deploy "$DEPLOY_USER@$DEPLOY_HOST" \
+            "sudo -n bash -s -- '$EXPECTED_IPV6'" <<'REMOTE'
+          set -euo pipefail
+          expected_ipv6="$1"
+
+          ip -6 -o address show scope global | grep -Fq " $expected_ipv6/"
+
+          backup_dir="/var/backups/tokenpro-nginx-ipv6/$(date -u +%Y%m%dT%H%M%SZ)"
+          install -d -m 0700 "$backup_dir"
+
+          targets=()
+          for enabled in /etc/nginx/sites-enabled/tokenpro.work /etc/nginx/sites-enabled/api.tokenpro.work; do
+            test -e "$enabled"
+            target="$(readlink -f "$enabled")"
+            test -f "$target"
+            targets+=("$target")
+            cp -a "$target" "$backup_dir/$(basename "$target")"
+
+            python3 - "$target" <<'PY'
+          import pathlib
+          import re
+          import sys
+
+          path = pathlib.Path(sys.argv[1])
+          text = path.read_text()
+
+          def add_listener(source: str, ipv4_pattern: str, ipv6_line: str) -> str:
+              if re.search(rf"^\s*{re.escape(ipv6_line)}\s*$", source, flags=re.MULTILINE):
+                  return source
+              match = re.search(ipv4_pattern, source, flags=re.MULTILINE)
+              if not match:
+                  raise SystemExit(f"expected listener missing in {path}: {ipv4_pattern}")
+              indent = match.group(1)
+              return source[:match.end()] + f"\n{indent}{ipv6_line}" + source[match.end():]
+
+          text = add_listener(text, r"^(\s*)listen\s+80;\s*$", "listen [::]:80;")
+          text = add_listener(text, r"^(\s*)listen\s+443\s+ssl;\s*$", "listen [::]:443 ssl;")
+          path.write_text(text)
+          PY
+          done
+
+          rollback() {
+            for target in "${targets[@]}"; do
+              cp -a "$backup_dir/$(basename "$target")" "$target"
+            done
+            nginx -t
+            systemctl reload nginx
+          }
+
+          if ! nginx -t; then
+            rollback
+            exit 1
+          fi
+
+          if ! systemctl reload nginx; then
+            rollback
+            exit 1
+          fi
+          test -n "$(ss -H -6 -lnt 'sport = :80')"
+          test -n "$(ss -H -6 -lnt 'sport = :443')"
+
+          for host in tokenpro.work api.tokenpro.work www.tokenpro.work; do
+            curl -g -6 --resolve "$host:443:[$expected_ipv6]" \
+              -sS -o /dev/null --connect-timeout 5 --max-time 15 \
+              -w "$host code=%{http_code} connect=%{time_connect} tls=%{time_appconnect} total=%{time_total}\n" \
+              "https://$host/health"
+          done
+
+          echo "backup=$backup_dir"
+          REMOTE
