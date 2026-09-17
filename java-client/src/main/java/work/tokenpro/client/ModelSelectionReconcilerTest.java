@@ -19,10 +19,10 @@ final class ModelSelectionReconcilerTest {
             String before = store.read("codex-selected.json").orElseThrow();
             check(ModelSelectionReconciler.reconcileAll(store, "18", List.of()) == 0 && store.read("codex-selected.json").orElseThrow().equals(before), "empty response never destroys selections"); passed++;
             check(ModelSelectionReconciler.reconcileAll(store, "99", catalog) == 0 && store.read("codex-selected.json").orElseThrow().equals(before), "another account's saved configuration preserved"); passed++;
-            check(ModelSelectionReconciler.reconcileAll(store, "18", catalog) == 0, "catalog refresh does not discard Codex model selections"); passed++;
+            check(ModelSelectionReconciler.reconcileAll(store, "18", catalog) == 2, "catalog refresh removes unavailable Codex selections"); passed++;
             Map<String,Object> after = Json.object(Json.parse(store.read("codex-selected.json").orElseThrow()));
-            check(((List<?>)after.get("models")).size() == 3 && after.get("default_model").equals(old.name()), "Codex default remains the user's choice"); passed++;
-            check(after.get("image_model").equals(image.name()) && store.read("codex-selected.json").orElseThrow().equals(before), "image and group selections remain byte-for-byte intact"); passed++;
+            check(((List<?>)after.get("models")).size() == 1 && after.get("default_model").equals(live.name()), "Codex default falls back to an available selected model"); passed++;
+            check(after.get("image_model").equals("") && ((List<?>) after.get("image_models")).isEmpty(), "removed image selections do not remain in Codex state"); passed++;
             check(after.get("custom").equals("preserve") && ((Number)after.get("key_id")).longValue() == 91, "unrelated fields and key reference preserved"); passed++;
             check(ModelSelectionReconciler.reconcileAll(store, "18", catalog) == 0, "reconciliation idempotent"); passed++;
             List<PricedModel> selected = ModelSelectionReconciler.currentModels(List.of(old, live, live), catalog, "Codex");
@@ -44,10 +44,10 @@ final class ModelSelectionReconcilerTest {
             check(retained.key().equals(bridge.key()) && retained.localToken().equals(bridge.localToken()) && retained.port() == bridge.port(), "credentials and bridge port unchanged"); passed++;
             SecureStore codexCli = store.cli("codex"), claudeCli = store.cli("claude");
             codexCli.write("codex-selected.json", Json.stringify(document)); bridge.save(claudeCli);
-            check(ModelSelectionReconciler.reconcileAll(store, "18", catalog) == 1, "only Claude CLI routes are reconciled"); passed++;
-            check(ClaudeBridgeConfig.load(store).routes().size() == 1 && ClaudeBridgeConfig.load(claudeCli).routes().size() == 1, "desktop and CLI remain separate"); passed++;
+            check(ModelSelectionReconciler.reconcileAll(store, "18", catalog) == 3, "Codex CLI and Claude CLI stale selections are reconciled"); passed++;
+            check(TokenProFrame.savedCodexModels(codexCli).equals(List.of(live)) && ClaudeBridgeConfig.load(store).routes().size() == 1 && ClaudeBridgeConfig.load(claudeCli).routes().size() == 1, "desktop and CLI selections remain isolated"); passed++;
             store.write("codex-selected.json", "{\"model\":\"GPT-Old\",\"group_id\":7,\"key_id\":91}");
-            check(ModelSelectionReconciler.reconcileAll(store, "18", catalog) == 0 && store.read("codex-selected.json").orElseThrow().contains("GPT-Old"), "legacy Codex selection is preserved until the user changes it"); passed++;
+            check(ModelSelectionReconciler.reconcileAll(store, "18", catalog) == 1 && !store.read("codex-selected.json").orElseThrow().contains("GPT-Old"), "legacy Codex selection is removed when no longer available"); passed++;
             store.write("codex-selected.json", "{\"models\":[{\"name\":\"missing group\"}]}");
             before = store.read("codex-selected.json").orElseThrow();
             check(ModelSelectionReconciler.reconcileAll(store, "18", catalog) == 0 && store.read("codex-selected.json").orElseThrow().equals(before), "unknown record shape preserved"); passed++;

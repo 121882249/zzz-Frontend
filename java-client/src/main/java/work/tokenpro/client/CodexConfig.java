@@ -79,6 +79,9 @@ final class CodexConfig {
             }
             writeAtomic(target, candidate);
         }
+        // Switching routes is final: no foreign relay configuration, model
+        // cache, backup, or proxy state may survive to be restored later.
+        cleanupStaleForeignModelArtifacts(target.getParent(), foreignRelayPlan != null);
         // Retire only our old generated catalogs after the new config is committed.
         // Failure is housekeeping, not a reason to restore a previous channel.
         try { pruneModelCatalogs(catalog); store.delete("codex-model-catalog.json"); }
@@ -125,6 +128,7 @@ final class CodexConfig {
         store.delete("codex-selected.json");
         store.delete("codex-official-mode.txt");
         pruneModelCatalogs(null);
+        cleanupStaleForeignModelArtifacts(configPath.getParent(), true);
     }
 
     private void pruneModelCatalogs(Path keep) throws IOException {
@@ -133,6 +137,65 @@ final class CodexConfig {
             for (Path path : files.filter(p -> p.getFileName().toString().matches("[a-f0-9-]{36}\\.json")).toList())
                 if (!path.equals(keep)) Files.deleteIfExists(path);
         }
+    }
+
+    /** Remove known TeamoRouter state. This is deliberately one-way on every channel switch. */
+    private static void cleanupStaleForeignModelArtifacts(Path codexHome, boolean foreignRouteDetected) throws IOException {
+        if (codexHome == null) return;
+        Path cache = codexHome.resolve("models_cache.json");
+        if (regularFile(cache) && (foreignRouteDetected || containsTeamoRouter(cache))) Files.deleteIfExists(cache);
+        deleteRegularFile(codexHome.resolve("teamorouter-native-model-catalog.json"));
+        deleteRegularFile(codexHome.resolve("teamorouter-http-proxy.json"));
+        deleteRegularFile(codexHome.resolve("teamorouter-http-proxy.log"));
+        deleteRegularFile(codexHome.resolve("teamorouter-http-proxy-service.log"));
+        deleteRegularFile(codexHome.resolve("teamorouter-chatgpt-auth.json"));
+        deleteMatchingRegularFiles(codexHome, "config.toml.teamorouter-backup-*");
+        deleteMatchingRegularFiles(codexHome, "auth.json.teamorouter-backup-*");
+        deleteTreeIfDirectory(codexHome.resolve("backups_state/teamorouter-fast"));
+        deleteTreeIfDirectory(codexHome.resolve("backups_state/teamorouter-history-sync"));
+        Path legacySkill = codexHome.resolve("skills/teamorouter-imagegen");
+        deleteTreeIfDirectory(legacySkill);
+        Path legacySkillState = codexHome.resolve("backups_state/teamorouter-imagegen");
+        deleteTreeIfDirectory(legacySkillState);
+        stopTeamoRouterProxyService();
+    }
+
+    private static boolean containsTeamoRouter(Path file) {
+        try { return Files.readString(file, StandardCharsets.UTF_8).toLowerCase(Locale.ROOT).contains("teamorouter"); }
+        catch (IOException ignored) { return false; }
+    }
+
+    private static void deleteRegularFile(Path file) throws IOException {
+        if (regularFile(file)) Files.deleteIfExists(file);
+    }
+
+    private static void deleteMatchingRegularFiles(Path directory, String glob) throws IOException {
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, glob)) {
+            for (Path file : files) deleteRegularFile(file);
+        }
+    }
+
+    private static void deleteTreeIfDirectory(Path directory) throws IOException {
+        if (Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) deleteTree(directory);
+    }
+
+    private static void stopTeamoRouterProxyService() {
+        ProcessHandle.allProcesses().filter(process -> process.pid() != ProcessHandle.current().pid())
+            .filter(process -> isTeamoRouterProxyService(process.info())).forEach(process -> {
+                process.destroy();
+                try { process.onExit().get(2, TimeUnit.SECONDS); }
+                catch (Exception ignored) { if (process.isAlive()) process.destroyForcibly(); }
+            });
+    }
+
+    static boolean isTeamoRouterProxyService(ProcessHandle.Info info) {
+        String command = info.command().orElse("").toLowerCase(Locale.ROOT);
+        if (!command.endsWith("/teamorouter-desktop") && !command.endsWith("\\teamorouter-desktop.exe")) return false;
+        return Arrays.asList(info.arguments().orElse(new String[0])).contains("--http-proxy-service");
+    }
+
+    private static boolean regularFile(Path file) {
+        return Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS);
     }
 
     static String restoreContent(String current, Optional<String> original, boolean preserveDesktopHistoryProvider) {

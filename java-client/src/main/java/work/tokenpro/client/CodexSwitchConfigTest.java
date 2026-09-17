@@ -94,6 +94,25 @@ final class CodexSwitchConfigTest {
             String foreignConfig = "openai_base_url='https://relay.example/v1'\nmodel_provider='custom'\n"
                 + "approval_policy='on-request'\n[model_providers.custom]\nbase_url='https://relay.example/v1'\nexperimental_bearer_token='foreign-key'\n";
             Files.writeString(configPath, foreignConfig);
+            Path foreignCache = configPath.getParent().resolve("models_cache.json");
+            Path foreignCatalog = configPath.getParent().resolve("teamorouter-native-model-catalog.json");
+            Path foreignBackupCatalog = configPath.getParent().resolve("backups_state/teamorouter-fast/model-catalog.json");
+            Path foreignHistoryState = configPath.getParent().resolve("backups_state/teamorouter-history-sync/state.json");
+            Path legacyImageSkill = configPath.getParent().resolve("skills/teamorouter-imagegen/SKILL.md");
+            Path legacyImageState = configPath.getParent().resolve("backups_state/teamorouter-imagegen/state.json");
+            Path proxyConfig = configPath.getParent().resolve("teamorouter-http-proxy.json");
+            Path proxyLog = configPath.getParent().resolve("teamorouter-http-proxy.log");
+            Path proxyServiceLog = configPath.getParent().resolve("teamorouter-http-proxy-service.log");
+            Path relayAuth = configPath.getParent().resolve("teamorouter-chatgpt-auth.json");
+            Path relayConfigBackup = configPath.getParent().resolve("config.toml.teamorouter-backup-fixture");
+            Path relayAuthBackup = configPath.getParent().resolve("auth.json.teamorouter-backup-fixture");
+            Files.writeString(foreignCache, "{\"models\":[{\"description\":\"glm routed through TeamoRouter\"}]}" );
+            Files.writeString(foreignCatalog, "foreign catalog");
+            Files.createDirectories(foreignBackupCatalog.getParent()); Files.writeString(foreignBackupCatalog, "foreign backup catalog");
+            Files.createDirectories(foreignHistoryState.getParent()); Files.writeString(foreignHistoryState, "foreign history state");
+            Files.createDirectories(legacyImageSkill.getParent()); Files.writeString(legacyImageSkill, "legacy image skill");
+            Files.createDirectories(legacyImageState.getParent()); Files.writeString(legacyImageState, "legacy image state");
+            for (Path artifact : List.of(proxyConfig, proxyLog, proxyServiceLog, relayAuth, relayConfigBackup, relayAuthBackup)) Files.writeString(artifact, "foreign state");
             store.write("codex-foreign-relay-backup.toml", "stale-backup");
             CodexConfig.ForeignRelayPlan plan = CodexConfig.foreignRelayPlan(configPath).orElseThrow();
             config.apply("https://tokenpro.work/v1", List.of(new PricedModel("gpt-5.4", "openai", "fixture", 1)),
@@ -104,6 +123,12 @@ final class CodexSwitchConfigTest {
             check(store.read("codex-foreign-relay-backup.toml").isEmpty()
                 && store.read("codex-last-switch-config.toml").isEmpty(),
                 "direct foreign relay removal retains no route or credential backup");
+            check(!Files.exists(foreignCache) && !Files.exists(foreignCatalog) && !Files.exists(foreignBackupCatalog),
+                "foreign relay model cache and catalogs are removed with the route");
+            check(!Files.exists(foreignHistoryState.getParent()) && List.of(proxyConfig, proxyLog, proxyServiceLog, relayAuth, relayConfigBackup, relayAuthBackup).stream().noneMatch(Files::exists),
+                "foreign relay proxy, auth, history state, and backups are removed with the route");
+            check(!Files.exists(legacyImageSkill.getParent()) && !Files.exists(legacyImageState.getParent()),
+                "obsolete foreign relay image skill and state are removed");
             config.deleteForOfficial();
             String officialAfterForeign = Files.readString(configPath);
             check(!officialAfterForeign.contains("relay.example") && !officialAfterForeign.contains("tokenpro.work")
@@ -119,7 +144,7 @@ final class CodexSwitchConfigTest {
                 throw new AssertionError("stale cleanup plan accepted");
             } catch (IllegalStateException expected) { }
             check(Files.readString(configPath).equals(externallyChanged), "stale cleanup plan cannot overwrite a newer Codex config");
-            return 12;
+            return 14;
         } finally {
             try (var paths = Files.walk(root)) { for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path); }
         }
