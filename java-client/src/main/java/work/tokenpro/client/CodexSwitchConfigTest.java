@@ -80,6 +80,7 @@ final class CodexSwitchConfigTest {
             CodexConfig config = new CodexConfig(store, configPath);
             config.apply("https://tokenpro.work/v1", List.of(new PricedModel("gpt-5.4", "openai", "fixture", 1)), "fixture-route-key", "fixture@example.test");
             String applied = Files.readString(configPath);
+            check(CodexConfig.tokenProActive(configPath), "fresh TokenPro route is recognized as active");
             check(applied.contains("trust_level = \"trusted\"") && applied.contains("args = [\n  \"--name\""), "actual apply preserves project and MCP settings");
             check(applied.contains("sandbox_mode = \"workspace-write\"") && applied.contains("approval_policy = \"on-request\""), "actual apply preserves permission policy");
             check(applied.contains("sandbox = \"" + (Platform.OS_KIND == Platform.OS.WINDOWS ? "unelevated" : "elevated") + "\""), "no-admin selection is Windows-only");
@@ -95,6 +96,7 @@ final class CodexSwitchConfigTest {
             }
             config.deleteForOfficial();
             String restored = Files.readString(configPath);
+            check(!CodexConfig.tokenProActive(configPath), "official route is not reported as TokenPro active");
             check(!restored.contains("fixture-route-key") && !restored.contains("model_provider = \"custom\""), "actual official restore removes TokenPro authentication and route");
             check(restored.contains("sandbox_private_desktop = true") && restored.contains("trust_level = \"trusted\""), "official restore retains Windows and project state");
             check(Files.readString(auth).equals("fixture-official-login"), "official login file remains untouched");
