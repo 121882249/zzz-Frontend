@@ -114,14 +114,14 @@ final class ModelPickerDialog extends JDialog {
                 group.add(choice);
             }
             group.setMaximumSize(new Dimension(Integer.MAX_VALUE, group.getPreferredSize().height));
-            // Image groups sit directly below every subscription group and
-            // before the first ordinary balance group.
-            if (codex && !imageGroupAdded && !first.subscription()) {
+            groups.add(group);
+            groups.add(Box.createVerticalStrut(10));
+            // Keep images immediately below the first GPT group, including a
+            // GPT subscription group, rather than below every subscription.
+            if (codex && !imageGroupAdded && isGptGroup(first)) {
                 addImageChoices(groups, models, selectedIds);
                 imageGroupAdded = true;
             }
-            groups.add(group);
-            groups.add(Box.createVerticalStrut(10));
         }
         if (codex && !imageGroupAdded) addImageChoices(groups, models, selectedIds);
         if (!codex && choices.stream().noneMatch(AbstractButton::isSelected)) {
@@ -258,14 +258,20 @@ final class ModelPickerDialog extends JDialog {
             List<PricedModel> sorted = new ArrayList<>(group);
             sorted.sort(ApiClient::compareSelectablePriceDescending);
             PricedModel first = sorted.getFirst();
-            if ("Codex".equals(client) && !imagesAdded && !first.subscription()) {
+            result.addAll(sorted);
+            if ("Codex".equals(client) && !imagesAdded && isGptGroup(first)) {
                 result.addAll(images);
                 imagesAdded = true;
             }
-            result.addAll(sorted);
         }
         if ("Codex".equals(client) && !imagesAdded) result.addAll(images);
         return List.copyOf(result);
+    }
+
+    private static boolean isGptGroup(PricedModel model) {
+        String value = (model.name() + " " + model.platform() + " " + model.groupPlatform() + " " + model.groupName())
+            .toLowerCase(Locale.ROOT);
+        return value.contains("gpt") || value.contains("openai");
     }
 
     private static List<PricedModel> orderedImageModels(List<PricedModel> models) {

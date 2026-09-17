@@ -103,7 +103,7 @@ final class SelfTest {
         List<PricedModel> subscriptionThenImages = ModelPickerDialog.orderedModels(
             List.of(balanceChat, nativeImage, subscriptionChat), "Codex");
         check(subscriptionThenImages.equals(List.of(subscriptionChat, nativeImage, balanceChat)),
-            "image groups sort directly below subscriptions and above ordinary balance groups"); passed++;
+            "image groups sort directly below the first GPT group, including subscriptions"); passed++;
         PricedModel dedicatedImage = new PricedModel("gpt-image-2", "openai", "openai", "Images", 65,
             "image", null, null, List.of(), false, 0d, "", " 生图 ");
         PricedModel ordinaryOpenAI = new PricedModel("gpt-image-2", "openai", "openai", "Images", 65,
