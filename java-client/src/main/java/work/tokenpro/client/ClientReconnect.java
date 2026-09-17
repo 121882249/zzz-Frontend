@@ -67,17 +67,12 @@ final class ClientReconnect {
                     "$p=Get-Process -Id " + process.pid() + " -ErrorAction SilentlyContinue; if($p){[void]$p.CloseMainWindow()}")
                     .redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(ProcessBuilder.Redirect.DISCARD).start();
                 if (!request.waitFor(5, TimeUnit.SECONDS)) { request.destroy(); throw new IOException("无法请求客户端正常退出，设置未修改"); }
-            } else if (!cli && Platform.OS_KIND == Platform.OS.MAC) {
-                String command = process.info().command().orElse("");
-                int appEnd = command.indexOf(".app/");
-                if (appEnd < 0) throw new IOException("无法确认客户端应用路径，请手动退出后重试");
-                String app = command.substring(0, appEnd + 4).replace("\\", "\\\\").replace("\"", "\\\"");
-                Process request = new ProcessBuilder("osascript", "-e", "tell application \"" + app + "\" to quit")
-                    .redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(ProcessBuilder.Redirect.DISCARD).start();
-                if (!request.waitFor(8, TimeUnit.SECONDS) || request.exitValue() != 0) {
-                    request.destroy(); throw new IOException("客户端未同意退出，请手动退出后重试；设置未修改");
-                }
-            } else process.destroy();
+            } else {
+                // On macOS, AppleScript control of another application triggers an
+                // Automation consent prompt. A same-user SIGTERM is sufficient for
+                // the confirmed reconnect flow and does not require that permission.
+                process.destroy();
+            }
             if (!waitForExit(process, 10)) throw new IOException("客户端尚未正常退出，请手动退出后重试；设置未修改");
         }
         if (!(cli ? cliProcesses(store, client.toLowerCase(Locale.ROOT)) : desktopProcesses(client)).isEmpty())

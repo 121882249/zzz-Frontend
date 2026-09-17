@@ -99,6 +99,14 @@ sandbox = "unelevated"
 它与提权沙箱的实现和隔离能力不同，不保证所有依赖提权环境的功能均可用。
 macOS/Linux 不自动改变 Windows 沙箱设置。
 
+macOS 客户端重连使用普通的同用户进程退出和 `open -a` 启动；命令行通过临时
+`.command` 文件在 Terminal 中启动。两条路径都不使用 AppleScript 控制其他应用，因此连接
+模型通道不需要用户授予 TokenPro“自动化”系统权限。临时文件权限为 `0700`，命令结束后自动删除。
+
+连接 TokenPro 时如检测到其他 Codex 中转的当前路由、冲突的 `custom` 服务商或 `openai_base_url`，
+客户端会直接移除这些路由并应用 TokenPro，不保留其他中转的地址、密钥或配置备份。
+不删除对方应用、Codex 登录文件、非活动服务商、项目、MCP、审批策略或沙箱权限。
+
 这个改动解决 TokenPro 的配置切换及重复重置问题，不负责安装 ChatGPT/Codex 的系统组件。
 如果具体 ChatGPT 版本仍要求首次安装或企业管理员授权，应查看其初始化日志，不能通过 TokenPro 保证跳过。
 此构建已做配置往返和真实配置写入测试，故障 Windows 设备仍需实测。

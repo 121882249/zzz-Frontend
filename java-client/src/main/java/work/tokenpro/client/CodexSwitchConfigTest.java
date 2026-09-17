@@ -38,6 +38,22 @@ final class CodexSwitchConfigTest {
         check(CodexSwitchConfig.clean(foreign).equals(foreign), "unrelated provider preserved during restore"); passed++;
         try { CodexSwitchConfig.merge(foreign, ROUTE); throw new AssertionError("foreign provider overwritten"); }
         catch (IllegalStateException expected) { passed++; }
+        String foreignRoute = "openai_base_url='http://127.0.0.1:51427/v1'\nmodel='alias'\nmodel_provider='custom'\n"
+            + "approval_policy='on-request'\n[model_providers.custom]\nbase_url='https://other.example/v1'\nexperimental_bearer_token='secret'\n"
+            + "[model_providers.keep]\nbase_url='https://keep.example/v1'\n[projects.demo]\ntrust_level='trusted'\n";
+        CodexSwitchConfig.ForeignRelayCleanup cleanup = CodexSwitchConfig.foreignRelayCleanup(foreignRoute).orElseThrow();
+        check(!cleanup.cleaned().contains("openai_base_url") && !cleanup.cleaned().contains("other.example")
+            && !cleanup.cleaned().contains("experimental_bearer_token"), "confirmed cleanup removes the active foreign relay and credential"); passed++;
+        check(cleanup.cleaned().contains("approval_policy='on-request'") && cleanup.cleaned().contains("keep.example")
+            && cleanup.cleaned().contains("trust_level='trusted'"), "foreign cleanup preserves permissions, inactive providers and projects"); passed++;
+        check(cleanup.changes().stream().anyMatch(value -> value.contains("custom"))
+            && cleanup.changes().stream().anyMatch(value -> value.contains("127.0.0.1")), "foreign cleanup reports routes without exposing credentials"); passed++;
+        String namedRoutes = "model_provider='active'\n[model_providers.active]\nbase_url='https://active.example/v1'\n"
+            + "[model_providers.inactive]\nbase_url='https://inactive.example/v1'\n";
+        String namedClean = CodexSwitchConfig.foreignRelayCleanup(namedRoutes).orElseThrow().cleaned();
+        check(!namedClean.contains("https://active.example/v1") && namedClean.contains("https://inactive.example/v1"),
+            "only the active named relay is removed"); passed++;
+        check(CodexSwitchConfig.foreignRelayCleanup(ROUTE).isEmpty(), "TokenPro's own route is never treated as foreign"); passed++;
         for (String invalid : List.of("# >>> TokenPro managed >>>\nmodel='x'\n", "note = \"\"\"unfinished\n", "args = [1,2\n")) {
             try { CodexSwitchConfig.clean(invalid); throw new AssertionError("malformed config accepted"); }
             catch (IllegalStateException expected) { passed++; }
@@ -75,7 +91,35 @@ final class CodexSwitchConfigTest {
             check(Files.readString(auth).equals("fixture-official-login"), "official login file remains untouched");
             config.deleteForOfficial();
             check(Files.readString(configPath).equals(restored), "repeated official restore leaves config stable");
-            return 8;
+            String foreignConfig = "openai_base_url='https://relay.example/v1'\nmodel_provider='custom'\n"
+                + "approval_policy='on-request'\n[model_providers.custom]\nbase_url='https://relay.example/v1'\nexperimental_bearer_token='foreign-key'\n";
+            Files.writeString(configPath, foreignConfig);
+            store.write("codex-foreign-relay-backup.toml", "stale-backup");
+            CodexConfig.ForeignRelayPlan plan = CodexConfig.foreignRelayPlan(configPath).orElseThrow();
+            config.apply("https://tokenpro.work/v1", List.of(new PricedModel("gpt-5.4", "openai", "fixture", 1)),
+                "fixture-route-key", "fixture@example.test", plan);
+            String replaced = Files.readString(configPath);
+            check(!replaced.contains("relay.example") && !replaced.contains("foreign-key") && replaced.contains("tokenpro.work"),
+                "actual apply directly replaces a detected foreign relay");
+            check(store.read("codex-foreign-relay-backup.toml").isEmpty()
+                && store.read("codex-last-switch-config.toml").isEmpty(),
+                "direct foreign relay removal retains no route or credential backup");
+            config.deleteForOfficial();
+            String officialAfterForeign = Files.readString(configPath);
+            check(!officialAfterForeign.contains("relay.example") && !officialAfterForeign.contains("tokenpro.work")
+                && officialAfterForeign.contains("approval_policy='on-request'"),
+                "switching official after cleanup never restores the foreign relay");
+            Files.writeString(configPath, foreignConfig);
+            CodexConfig.ForeignRelayPlan stale = CodexConfig.foreignRelayPlan(configPath).orElseThrow();
+            String externallyChanged = foreignConfig + "# changed by another process\n";
+            Files.writeString(configPath, externallyChanged);
+            try {
+                config.apply("https://tokenpro.work/v1", List.of(new PricedModel("gpt-5.4", "openai", "fixture", 1)),
+                    "fixture-route-key", "fixture@example.test", stale);
+                throw new AssertionError("stale cleanup plan accepted");
+            } catch (IllegalStateException expected) { }
+            check(Files.readString(configPath).equals(externallyChanged), "stale cleanup plan cannot overwrite a newer Codex config");
+            return 12;
         } finally {
             try (var paths = Files.walk(root)) { for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path); }
         }

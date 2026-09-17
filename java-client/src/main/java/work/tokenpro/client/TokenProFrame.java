@@ -2092,7 +2092,13 @@ final class TokenProFrame extends JFrame {
         refreshConnectControls();
         String token = accessToken, owner = accountId, accountLabel = string(sessionUser.get("email"));
         String label = app + (cli ? " 命令行" : " 客户端");
+        CodexConfig.ForeignRelayPlan relayPlan = null;
         try {
+            if (app.equals("Codex")) {
+                SecureStore target = cli ? store.cli(command) : store;
+                Path configPath = cli ? target.root().resolve("home/config.toml") : Platform.codexConfig();
+                relayPlan = CodexConfig.foreignRelayPlan(configPath).orElse(null);
+            }
             boolean running = cli ? !ClientReconnect.cliProcesses(store, command).isEmpty()
                 : !ClientReconnect.desktopProcesses(app).isEmpty();
             if (running && !TokenProDialogs.confirm(this, "重新连接 " + label,
@@ -2101,6 +2107,7 @@ final class TokenProFrame extends JFrame {
                 finishConnection(identity); return;
             }
         } catch (Exception e) { finishConnection(identity); error(e); return; }
+        CodexConfig.ForeignRelayPlan relayPlanToApply = relayPlan;
         status("正在核验账户并连接 " + label + "…");
         new SwingWorker<Integer,Void>() {
             protected Integer doInBackground() throws Exception {
@@ -2125,7 +2132,7 @@ final class TokenProFrame extends JFrame {
                     }, () -> {
                         BridgeLifecycle.removeLegacyCodexAdapter(target);
                         CodexConfig config = cli ? new CodexConfig(target, configPath) : codex;
-                        config.apply("https://tokenpro.work/v1", selected, key.key(), accountLabel);
+                        config.apply("https://tokenpro.work/v1", selected, key.key(), accountLabel, relayPlanToApply);
                         saveCodexSelection(target, selected, key, owner);
                         if (cli) CliLauncher.install(store, command);
                     }, () -> startAndAwaitProfile(app, cli), () -> repairCodexHistory(target, configPath,

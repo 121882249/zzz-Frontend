@@ -94,9 +94,10 @@ final class Platform {
             String target = macApplicationTarget(name);
             process = new ProcessBuilder("open", "-a", target).start();
             try {
-                if (!process.waitFor(5, TimeUnit.SECONDS) || process.exitValue() != 0) return false;
-                new ProcessBuilder("osascript", "-e", "tell application \"" + target + "\" to activate").start();
-                return true;
+                // `open -a` already launches and activates the application. Avoid
+                // AppleScript here so macOS never asks the user to let TokenPro
+                // control Codex or Claude through the Automation privacy pane.
+                return process.waitFor(5, TimeUnit.SECONDS) && process.exitValue() == 0;
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
                 return false;
@@ -227,15 +228,37 @@ final class Platform {
             launcher.start();
         } else {
             String command = posixCliCommand(executable.toString(), arguments, environment);
-            if(OS_KIND == OS.MAC) new ProcessBuilder("osascript", "-e", "tell application \"Terminal\" to do script \""
-                + command.replace("\\", "\\\\").replace("\"", "\\\"") + "\"").start();
-            else {
+            if(OS_KIND == OS.MAC) {
+                Path launcher = Files.createTempFile("tokenpro-cli-", ".command");
+                try {
+                    Files.writeString(launcher, macTerminalScript(command), StandardCharsets.UTF_8,
+                        StandardOpenOption.TRUNCATE_EXISTING);
+                    Files.setPosixFilePermissions(launcher, PosixFilePermissions.fromString("rwx------"));
+                    Process opened = new ProcessBuilder("open", "-a", "Terminal", launcher.toString()).start();
+                    if (!opened.waitFor(5, TimeUnit.SECONDS) || opened.exitValue() != 0)
+                        throw new IOException("无法打开终端");
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("打开终端时被中断", interrupted);
+                } catch (IOException failure) {
+                    Files.deleteIfExists(launcher);
+                    throw failure;
+                }
+            } else {
                 String terminal = Stream.of("x-terminal-emulator", "gnome-terminal", "konsole", "xterm")
                     .filter(Platform::commandInstalled).findFirst().orElseThrow(() -> new IOException("没有找到可用终端"));
                 new ProcessBuilder(terminal, terminal.equals("gnome-terminal") ? "--" : "-e",
                     "bash", "-lc", command).start();
             }
         }
+    }
+
+    static String macTerminalScript(String command) {
+        return "#!/bin/sh\n"
+            + "trap 'rm -f -- \"$0\"' EXIT HUP INT TERM\n"
+            + command + "\n"
+            + "status=$?\n"
+            + "exit \"$status\"\n";
     }
 
     static String posixCliCommand(String executable, List<String> arguments, Map<String, String> environment) {

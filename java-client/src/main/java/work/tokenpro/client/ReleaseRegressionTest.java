@@ -41,6 +41,10 @@ final class ReleaseRegressionTest {
         check(posix.contains("'/Users/test/My Tools/claude'") && posix.contains("'it'\\''s safe'"),
             "macOS/Linux launch resolved absolute path with shell escaping"); passed++;
         check(posix.contains("-u ANTHROPIC_API_KEY"), "inherited desktop credential is cleared in CLI"); passed++;
+        String macTerminal=Platform.macTerminalScript(posix);
+        check(macTerminal.startsWith("#!/bin/sh\n") && macTerminal.contains("rm -f -- \"$0\"")
+            && macTerminal.contains(posix) && !macTerminal.contains("osascript"),
+            "macOS terminal launcher is self-cleaning and requires no Automation permission"); passed++;
         String win=CliLauncher.script(Platform.OS.WINDOWS,List.of("C:/Program Files/TokenPro/TokenPro.exe","--codex-cli"));
         check(win.contains("DisableDelayedExpansion") && win.contains("%*") && win.contains("--codex-cli"), "Windows standalone entry preserves arguments"); passed++;
         String unix=CliLauncher.script(Platform.OS.MAC,List.of("/Applications/TokenPro.app/Contents/MacOS/TokenPro","--claude-cli"));

@@ -10,7 +10,9 @@ final class CodexSwitchConfig {
         "# >>> TokenPro managed >>>", "# <<< TokenPro managed <<<",
         "# >>> TokenPro model selection >>>", "# <<< TokenPro model selection <<<",
         "# >>> TokenPro history provider >>>", "# <<< TokenPro history provider <<<");
+    private static final Set<String> BUILTIN_PROVIDERS = Set.of("openai", "ollama", "lmstudio");
     private CodexSwitchConfig() {}
+    record ForeignRelayCleanup(String cleaned, List<String> changes) {}
 
     static String clean(String current) {
         List<Statement> statements = parse(current);
@@ -53,6 +55,102 @@ final class CodexSwitchConfig {
             result.append(statement.raw());
         }
         return result.toString();
+    }
+
+    /** Build an automatic cleanup for only the active/conflicting foreign route. */
+    static Optional<ForeignRelayCleanup> foreignRelayCleanup(String current) {
+        List<Statement> original = parse(current);
+        String profile = activeProfile(original);
+        String activeProvider = assignment(original, profile, "model_provider").orElse("");
+        boolean activeIsTokenPro = providerHost(original, activeProvider).map(CodexSwitchConfig::tokenProHost).orElse(false);
+
+        String ownRouteRemoved = clean(current);
+        List<Statement> statements = parse(ownRouteRemoved);
+        Set<String> removeProviders = new LinkedHashSet<>();
+        List<String> changes = new ArrayList<>();
+
+        if (!activeProvider.isBlank() && !BUILTIN_PROVIDERS.contains(activeProvider) && !activeIsTokenPro) {
+            removeProviders.add(activeProvider);
+            changes.add("当前路由 " + activeProvider + providerHost(statements, activeProvider).map(host -> " (" + host + ")").orElse(""));
+        }
+        if (hasProviderTable(statements, "custom")) {
+            removeProviders.add("custom");
+            String label = "服务商 custom" + providerHost(statements, "custom").map(host -> " (" + host + ")").orElse("");
+            if (changes.stream().noneMatch(value -> value.contains("路由 custom"))) changes.add(label);
+        }
+
+        StringBuilder result = new StringBuilder();
+        List<String> section = List.of();
+        boolean removeSection = false;
+        boolean removedBase = false, removedInlineProviders = false;
+        for (Statement statement : statements) {
+            if (statement.header()) {
+                section = statement.path();
+                removeSection = section.size() >= 2 && section.getFirst().equals("model_providers")
+                    && removeProviders.contains(section.get(1));
+                if (!removeSection) result.append(statement.raw());
+                continue;
+            }
+            if (removeSection) continue;
+            boolean activeScope = section.isEmpty() || section.equals(List.of("profiles", profile));
+            if (activeScope && statement.path().equals(List.of("openai_base_url"))) {
+                if (!removedBase) {
+                    changes.add("OpenAI 代理地址" + scalarHost(statement.raw()).map(host -> " (" + host + ")").orElse(""));
+                    removedBase = true;
+                }
+                continue;
+            }
+            if (section.isEmpty() && statement.path().equals(List.of("model_providers"))) {
+                if (!removedInlineProviders) { changes.add("内联服务商配置"); removedInlineProviders = true; }
+                continue;
+            }
+            result.append(statement.raw());
+        }
+        String cleaned = result.toString();
+        if (changes.isEmpty() || cleaned.equals(current)) return Optional.empty();
+        return Optional.of(new ForeignRelayCleanup(cleaned, List.copyOf(changes)));
+    }
+
+    private static Optional<String> assignment(List<Statement> statements, String profile, String key) {
+        List<String> section = List.of();
+        Optional<String> root = Optional.empty();
+        for (Statement statement : statements) {
+            if (statement.header()) section = statement.path();
+            else if (statement.path().equals(List.of(key))) {
+                if (section.isEmpty()) root = Optional.of(scalar(statement.raw()));
+                else if (section.equals(List.of("profiles", profile))) return Optional.of(scalar(statement.raw()));
+            }
+        }
+        return root;
+    }
+
+    private static boolean hasProviderTable(List<Statement> statements, String id) {
+        return statements.stream().anyMatch(statement -> statement.header()
+            && statement.path().size() >= 2 && statement.path().getFirst().equals("model_providers")
+            && statement.path().get(1).equals(id));
+    }
+
+    private static Optional<String> providerHost(List<Statement> statements, String id) {
+        if (id == null || id.isBlank()) return Optional.empty();
+        List<String> section = List.of();
+        for (Statement statement : statements) {
+            if (statement.header()) section = statement.path();
+            else if (section.equals(List.of("model_providers", id)) && statement.path().equals(List.of("base_url")))
+                return scalarHost(statement.raw());
+        }
+        return Optional.empty();
+    }
+
+    private static Optional<String> scalarHost(String raw) {
+        try {
+            String value = scalar(raw);
+            String host = java.net.URI.create(value).getHost();
+            return host == null || host.isBlank() ? Optional.empty() : Optional.of(host.toLowerCase(Locale.ROOT));
+        } catch (IllegalArgumentException ignored) { return Optional.empty(); }
+    }
+
+    private static boolean tokenProHost(String host) {
+        return host.equals("tokenpro.work") || host.endsWith(".tokenpro.work");
     }
 
     static String merge(String preserved, String generated) {

@@ -20,6 +20,7 @@ final class CodexConfig {
     private final SecureStore store;
     private final Path configPath;
     private final boolean preserveDesktopHistoryProvider;
+    record ForeignRelayPlan(String original, String cleaned, List<String> changes) {}
     CodexConfig(SecureStore store) { this(store, Platform.codexConfig(), true); }
     CodexConfig(SecureStore store, Path configPath) { this(store, configPath, false); }
     private CodexConfig(SecureStore store, Path configPath, boolean preserveDesktopHistoryProvider) {
@@ -28,7 +29,19 @@ final class CodexConfig {
         this.preserveDesktopHistoryProvider = preserveDesktopHistoryProvider;
     }
 
+    static Optional<ForeignRelayPlan> foreignRelayPlan(Path configPath) throws IOException {
+        if (!Files.exists(configPath)) return Optional.empty();
+        String current = Files.readString(configPath);
+        return CodexSwitchConfig.foreignRelayCleanup(current)
+            .map(cleanup -> new ForeignRelayPlan(current, cleanup.cleaned(), cleanup.changes()));
+    }
+
     void apply(String baseUrl, List<PricedModel> models, String key, String accountEmail) throws Exception {
+        apply(baseUrl, models, key, accountEmail, null);
+    }
+
+    void apply(String baseUrl, List<PricedModel> models, String key, String accountEmail,
+               ForeignRelayPlan foreignRelayPlan) throws Exception {
         models = ModelPickerDialog.orderedModels(models, "Codex");
         String url = validateUrl(baseUrl);
         String actor = required(accountEmail, "账户邮箱");
@@ -40,7 +53,13 @@ final class CodexConfig {
         required(primaryModel.name(), "模型 ID");
         Path target = configPath;
         Files.createDirectories(target.getParent());
-        String current = Files.exists(target) ? Files.readString(target) : "";
+        String originalCurrent = Files.exists(target) ? Files.readString(target) : "";
+        String current = originalCurrent;
+        if (foreignRelayPlan != null) {
+            if (!foreignRelayPlan.original().equals(originalCurrent))
+                throw new IllegalStateException("Codex 配置在检测后已变化，为避免误删已取消连接，请重试");
+            current = foreignRelayPlan.cleaned();
+        }
         String preserved = CodexSwitchConfig.clean(current);
         if (Platform.OS_KIND == Platform.OS.WINDOWS) preserved = CodexSwitchConfig.withoutAdministrator(preserved);
         // Image models stay in their own picker group and are also written to
@@ -50,8 +69,14 @@ final class CodexConfig {
         // correlate through the backend's authenticated turn map.
         String block = managedBlock(url, primaryModel, catalog, key.trim(), actor, current, Set.of("custom"));
         String candidate = CodexSwitchConfig.merge(preserved, block);
-        if (!current.equals(candidate)) {
-            store.write("codex-last-switch-config.toml", current);
+        if (!originalCurrent.equals(candidate)) {
+            if (foreignRelayPlan == null) store.write("codex-last-switch-config.toml", originalCurrent);
+            else {
+                // Foreign relay removal is intentionally final: do not retain its
+                // endpoint or credentials in either dedicated or generic backups.
+                store.delete("codex-foreign-relay-backup.toml");
+                store.delete("codex-last-switch-config.toml");
+            }
             writeAtomic(target, candidate);
         }
         // Retire only our old generated catalogs after the new config is committed.
