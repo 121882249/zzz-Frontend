@@ -62,6 +62,12 @@ jobs:
           echo '=== nginx validation and routing ==='
           nginx -t
           nginx -T 2>/dev/null | grep -E '^[[:space:]]*(listen|server_name|proxy_pass|proxy_request_buffering|proxy_buffering|client_max_body_size|client_body_buffer_size|ssl_protocols|limit_req|limit_conn|deny|allow)[[:space:]]' || true
+          echo 'enabled nginx site files:'
+          find /etc/nginx/sites-enabled -maxdepth 1 -type f -o -type l 2>/dev/null | sort || true
+          grep -R -n -E '^[[:space:]]*(listen|server_name)[[:space:]]' /etc/nginx/sites-enabled 2>/dev/null || true
+
+          echo '=== compose identity ==='
+          docker inspect sub2api --format 'project={{index .Config.Labels "com.docker.compose.project"}} service={{index .Config.Labels "com.docker.compose.service"}} directory={{index .Config.Labels "com.docker.compose.project.working_dir"}} files={{index .Config.Labels "com.docker.compose.project.config_files"}}' 2>/dev/null || true
 
           echo '=== firewall ==='
           ufw status verbose 2>/dev/null || true
