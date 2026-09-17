@@ -38,6 +38,12 @@ jobs:
           date -Is
           uptime
           uname -a
+          echo 'global IPv6 addresses:'
+          ip -6 -brief address show scope global || true
+          echo 'IPv6 routes:'
+          ip -6 route show || true
+          curl -6 -sS --connect-timeout 5 --max-time 10 https://api64.ipify.org 2>/dev/null || echo 'no outbound IPv6'
+          echo
 
           echo '=== listeners ==='
           ss -lntp 2>/dev/null | awk 'NR == 1 || /:80 |:443 |:8080 /'
