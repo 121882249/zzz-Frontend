@@ -2,11 +2,9 @@ package work.tokenpro.client;
 
 import javax.swing.*;
 import java.awt.*;
-import java.util.List;
-import java.util.Map;
 
 public final class Main {
-    public static final String VERSION = "1.3.14";
+    public static final String VERSION = "1.3.13";
     private Main() {}
 
     public static void main(String[] args) throws Exception {
@@ -48,10 +46,6 @@ public final class Main {
             SelfTest.run();
             return;
         }
-        if (args.length == 1 && "--repair-codex-route".equals(args[0])) {
-            repairCodexRoute(store);
-            return;
-        }
         if (GraphicsEnvironment.isHeadless()) throw new IllegalStateException("当前环境无法启动桌面界面");
         System.setProperty("apple.awt.application.name", "TokenPro");
         SwingUtilities.invokeLater(() -> {
@@ -78,23 +72,5 @@ public final class Main {
 
     static boolean claudeTokenRequest(String[] args, boolean helperContext) {
         return args.length == 1 && "--claude-token".equals(args[0]) || args.length == 0 && helperContext;
-    }
-
-    private static void repairCodexRoute(SecureStore store) throws Exception {
-        Map<String, Object> session = Json.object(Json.parse(store.read("java-session.json")
-            .orElseThrow(() -> new IllegalStateException("TokenPro 尚未登录"))));
-        String token = String.valueOf(session.getOrDefault("access_token", ""));
-        if (token.isBlank()) throw new IllegalStateException("TokenPro 登录已失效");
-        ApiClient api = new ApiClient();
-        Map<String, Object> user = api.me(token);
-        String email = String.valueOf(user.getOrDefault("email", ""));
-        List<PricedModel> selected = ModelSelectionReconciler.currentModels(
-            TokenProFrame.savedCodexModels(store), api.pricedModels(token), "Codex");
-        if (selected.isEmpty()) throw new IllegalStateException("当前账户没有已选的可用 Codex 模型");
-        ApiClient.ManagedKey key = api.globalKey(token);
-        CodexConfig config = new CodexConfig(store);
-        CodexConfig.ForeignRelayPlan plan = CodexConfig.foreignRelayPlan(Platform.codexConfig()).orElse(null);
-        config.apply("https://tokenpro.work/v1", selected, key.key(), email, plan);
-        System.out.println("Codex TokenPro route repaired with " + selected.size() + " models.");
     }
 }

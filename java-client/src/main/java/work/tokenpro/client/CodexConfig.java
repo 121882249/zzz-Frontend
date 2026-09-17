@@ -39,18 +39,6 @@ final class CodexConfig {
             .map(cleanup -> new ForeignRelayPlan(current, cleanup.cleaned(), cleanup.changes()));
     }
 
-    static boolean tokenProActive(Path configPath) {
-        try {
-            if (!Files.isRegularFile(configPath, LinkOption.NOFOLLOW_LINKS)) return false;
-            String config = Files.readString(configPath);
-            Matcher catalog = MODEL_CATALOG_ASSIGNMENT.matcher(config);
-            if (!config.contains(START) || !config.contains(END) || !catalog.find()) return false;
-            if (!config.matches("(?s).*base_url\\s*=\\s*['\\\"]https://tokenpro\\.work/v1/?['\\\"].*")) return false;
-            Path path = Path.of(catalog.group(2));
-            return Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS);
-        } catch (Exception ignored) { return false; }
-    }
-
     void apply(String baseUrl, List<PricedModel> models, String key, String accountEmail) throws Exception {
         apply(baseUrl, models, key, accountEmail, null);
     }
@@ -196,10 +184,7 @@ final class CodexConfig {
         deleteTreeIfDirectory(legacySkillState);
         deleteReferencedForeignCatalog(codexHome, foreignConfig);
         deleteGenericRelayArtifacts(codexHome);
-        if (codexHome.toAbsolutePath().normalize().equals(Platform.codexConfig().getParent().toAbsolutePath().normalize())) {
-            unregisterTeamoRouterProxyService();
-            stopTeamoRouterProxyService();
-        }
+        stopTeamoRouterProxyService();
     }
 
     private static void deleteReferencedForeignCatalog(Path codexHome, String config) throws IOException {
@@ -259,20 +244,6 @@ final class CodexConfig {
                 try { process.onExit().get(2, TimeUnit.SECONDS); }
                 catch (Exception ignored) { if (process.isAlive()) process.destroyForcibly(); }
             });
-    }
-
-    private static void unregisterTeamoRouterProxyService() {
-        if (Platform.OS_KIND != Platform.OS.MAC) return;
-        Path home = Path.of(System.getProperty("user.home"));
-        Path agent = home.resolve("Library/LaunchAgents/com.teamolab.teamorouter.http-proxy.plist");
-        try {
-            Object uid = Files.getAttribute(home, "unix:uid", LinkOption.NOFOLLOW_LINKS);
-            Process process = new ProcessBuilder("/bin/launchctl", "bootout",
-                "gui/" + uid + "/com.teamolab.teamorouter.http-proxy")
-                .redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(ProcessBuilder.Redirect.DISCARD).start();
-            process.waitFor(3, TimeUnit.SECONDS);
-        } catch (Exception ignored) { /* A missing or already unloaded agent is harmless. */ }
-        try { deleteRegularFile(agent); } catch (IOException ignored) { }
     }
 
     static boolean isTeamoRouterProxyService(ProcessHandle.Info info) {

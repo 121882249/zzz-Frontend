@@ -821,10 +821,6 @@ final class TokenProFrame extends JFrame {
             setDesktopCardState("Codex", officialStatus("Codex"), true);
             return;
         }
-        if (!CodexConfig.tokenProActive(Platform.codexConfig())) {
-            setDesktopCardState("Codex", "配置被其他程序修改，请重新连接", false);
-            return;
-        }
         try {
             Optional<String> raw = store.read("codex-selected.json");
             if (raw.isEmpty()) throw new IllegalStateException("未选择");
