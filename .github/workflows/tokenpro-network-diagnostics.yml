@@ -1,0 +1,81 @@
+name: TokenPro Network Diagnostics
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tokenpro-network-diagnostics
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Configure existing TokenPro deployment credentials
+        env:
+          DEPLOY_KEY: ${{ secrets.TOKENPRO_DEPLOY_KEY }}
+          KNOWN_HOSTS: ${{ secrets.TOKENPRO_KNOWN_HOSTS }}
+        run: |
+          install -d -m 0700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/tokenpro-deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/tokenpro-deploy ~/.ssh/known_hosts
+
+      - name: Inspect network and reverse proxy read-only
+        env:
+          DEPLOY_HOST: ${{ secrets.TOKENPRO_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.TOKENPRO_DEPLOY_USER }}
+        run: |
+          ssh -o BatchMode=yes -o ConnectTimeout=15 -i ~/.ssh/tokenpro-deploy "$DEPLOY_USER@$DEPLOY_HOST" \
+            'sudo -n bash -s' <<'REMOTE'
+          set -u
+          echo '=== identity ==='
+          date -Is
+          uptime
+          uname -a
+
+          echo '=== listeners ==='
+          ss -lntp 2>/dev/null | awk 'NR == 1 || /:80 |:443 |:8080 /'
+
+          echo '=== containers ==='
+          docker ps --format '{{.Names}} | {{.Image}} | {{.Status}} | {{.Ports}}'
+
+          echo '=== local health ==='
+          curl -sS -o /dev/null --connect-timeout 5 --max-time 10 \
+            -w 'backend code=%{http_code} connect=%{time_connect} first=%{time_starttransfer} total=%{time_total}\n' \
+            http://127.0.0.1:8080/health
+          curl --resolve tokenpro.work:443:127.0.0.1 -sS -o /dev/null --connect-timeout 5 --max-time 10 \
+            -w 'nginx code=%{http_code} connect=%{time_connect} tls=%{time_appconnect} first=%{time_starttransfer} total=%{time_total}\n' \
+            https://tokenpro.work/health
+
+          echo '=== nginx validation and routing ==='
+          nginx -t
+          nginx -T 2>/dev/null | grep -E '^[[:space:]]*(listen|server_name|proxy_pass|proxy_request_buffering|proxy_buffering|client_max_body_size|client_body_buffer_size|ssl_protocols|limit_req|limit_conn|deny|allow)[[:space:]]' || true
+
+          echo '=== firewall ==='
+          ufw status verbose 2>/dev/null || true
+          iptables -S INPUT 2>/dev/null || true
+
+          echo '=== tcp state ==='
+          ss -s
+          sysctl net.core.somaxconn net.ipv4.tcp_max_syn_backlog net.ipv4.tcp_syncookies net.ipv4.tcp_fin_timeout 2>/dev/null || true
+          for file in /proc/sys/net/netfilter/nf_conntrack_count /proc/sys/net/netfilter/nf_conntrack_max; do
+            if [ -r "$file" ]; then printf '%s=' "$file"; cat "$file"; fi
+          done
+
+          echo '=== nginx status counts current logs ==='
+          for file in /var/log/nginx/access.log /var/log/nginx/sub2api-access.log; do
+            if [ -r "$file" ]; then
+              echo "file=$file lines=$(wc -l < "$file")"
+              awk '{count[$9]++} END {for (code in count) print code, count[code]}' "$file" | sort -n
+            fi
+          done
+
+          echo '=== nginx warnings last 24h ==='
+          journalctl -u nginx --since '24 hours ago' -p warning --no-pager 2>/dev/null | tail -n 100 || true
+          REMOTE
