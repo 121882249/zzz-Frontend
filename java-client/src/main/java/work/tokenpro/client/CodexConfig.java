@@ -16,6 +16,9 @@ final class CodexConfig {
     private static final String HISTORY_PROVIDER_END = "# <<< TokenPro history provider <<<";
     private static final Pattern MANAGED_ROOT_KEY = Pattern.compile("^(model|model_provider|review_model|model_catalog_json|model_reasoning_effort|model_context_window|model_auto_compact_token_limit)\\s*=.*$");
     private static final Pattern HISTORY_PROVIDER_ID = Pattern.compile("\\\"model_provider\\\"\\s*:\\s*\\\"([A-Za-z0-9_-]{1,64})\\\"");
+    private static final Pattern MODEL_CATALOG_ASSIGNMENT = Pattern.compile("(?m)^model_catalog_json\\s*=\\s*(['\\\"])([^'\\\"]+)\\1\\s*$");
+    private static final Pattern ROOT_MODEL_ASSIGNMENT = Pattern.compile("(?m)^model\\s*=.*$");
+    private static final Pattern REVIEW_MODEL_ASSIGNMENT = Pattern.compile("(?m)^review_model\\s*=.*$");
     private static final Set<String> RESERVED_PROVIDER_IDS = Set.of("openai", "ollama", "lmstudio");
     private final SecureStore store;
     private final Path configPath;
@@ -81,7 +84,8 @@ final class CodexConfig {
         }
         // Switching routes is final: no foreign relay configuration, model
         // cache, backup, or proxy state may survive to be restored later.
-        cleanupStaleForeignModelArtifacts(target.getParent(), foreignRelayPlan != null);
+        cleanupStaleForeignModelArtifacts(target.getParent(), foreignRelayPlan != null,
+            foreignRelayPlan == null ? null : foreignRelayPlan.original());
         // Retire only our old generated catalogs after the new config is committed.
         // Failure is housekeeping, not a reason to restore a previous channel.
         try { pruneModelCatalogs(catalog); store.delete("codex-model-catalog.json"); }
@@ -128,7 +132,27 @@ final class CodexConfig {
         store.delete("codex-selected.json");
         store.delete("codex-official-mode.txt");
         pruneModelCatalogs(null);
-        cleanupStaleForeignModelArtifacts(configPath.getParent(), true);
+        cleanupStaleForeignModelArtifacts(configPath.getParent(), true, current);
+    }
+
+    /** Atomically replace the active TokenPro catalog after stale selections are pruned. */
+    void refreshModelCatalog(List<PricedModel> models) throws Exception {
+        models = ModelPickerDialog.orderedModels(models, "Codex");
+        if (models.isEmpty() || !Files.exists(configPath)) return;
+        String current = Files.readString(configPath);
+        if (!current.contains(START) || !MODEL_CATALOG_ASSIGNMENT.matcher(current).find()) return;
+        Path catalog = writeModelCatalog(models);
+        PricedModel primary = models.stream().filter(model -> !model.isImageGeneration()).findFirst().orElse(models.getFirst());
+        String candidate = MODEL_CATALOG_ASSIGNMENT.matcher(current)
+            .replaceFirst(Matcher.quoteReplacement("model_catalog_json = " + toml(catalog.toString())));
+        candidate = ROOT_MODEL_ASSIGNMENT.matcher(candidate)
+            .replaceFirst(Matcher.quoteReplacement("model = " + toml(routedModelId(primary))));
+        candidate = REVIEW_MODEL_ASSIGNMENT.matcher(candidate)
+            .replaceFirst(Matcher.quoteReplacement("review_model = " + toml(routedModelId(primary))));
+        candidate = candidate.replaceFirst("(\\\"x-tokenpro-group-id\\\"\\s*=\\s*)\\\"[^\\\"]*\\\"",
+            "$1\\\"" + primary.groupId() + "\\\"");
+        writeAtomic(configPath, candidate);
+        pruneModelCatalogs(catalog);
     }
 
     private void pruneModelCatalogs(Path keep) throws IOException {
@@ -140,7 +164,8 @@ final class CodexConfig {
     }
 
     /** Remove known TeamoRouter state. This is deliberately one-way on every channel switch. */
-    private static void cleanupStaleForeignModelArtifacts(Path codexHome, boolean foreignRouteDetected) throws IOException {
+    private static void cleanupStaleForeignModelArtifacts(Path codexHome, boolean foreignRouteDetected,
+                                                            String foreignConfig) throws IOException {
         if (codexHome == null) return;
         Path cache = codexHome.resolve("models_cache.json");
         if (regularFile(cache) && (foreignRouteDetected || containsTeamoRouter(cache))) Files.deleteIfExists(cache);
@@ -157,7 +182,40 @@ final class CodexConfig {
         deleteTreeIfDirectory(legacySkill);
         Path legacySkillState = codexHome.resolve("backups_state/teamorouter-imagegen");
         deleteTreeIfDirectory(legacySkillState);
+        deleteReferencedForeignCatalog(codexHome, foreignConfig);
+        deleteGenericRelayArtifacts(codexHome);
         stopTeamoRouterProxyService();
+    }
+
+    private static void deleteReferencedForeignCatalog(Path codexHome, String config) throws IOException {
+        if (config == null || config.isBlank()) return;
+        Matcher matcher = MODEL_CATALOG_ASSIGNMENT.matcher(config);
+        Path root = codexHome.toAbsolutePath().normalize();
+        while (matcher.find()) {
+            Path referenced;
+            try { referenced = Path.of(matcher.group(2)).toAbsolutePath().normalize(); }
+            catch (InvalidPathException ignored) { continue; }
+            if (referenced.startsWith(root)) deleteRegularFile(referenced);
+        }
+    }
+
+    private static void deleteGenericRelayArtifacts(Path codexHome) throws IOException {
+        deleteRelayNamedChildren(codexHome);
+        for (String directory : List.of("backups_state", "skills")) {
+            Path parent = codexHome.resolve(directory);
+            if (Files.isDirectory(parent, LinkOption.NOFOLLOW_LINKS)) deleteRelayNamedChildren(parent);
+        }
+    }
+
+    private static void deleteRelayNamedChildren(Path parent) throws IOException {
+        try (var children = Files.list(parent)) {
+            for (Path child : children.toList()) {
+                String name = child.getFileName().toString().toLowerCase(Locale.ROOT);
+                if (name.contains("tokenpro") || (!name.contains("router") && !name.contains("relay"))) continue;
+                if (regularFile(child)) Files.deleteIfExists(child);
+                else deleteTreeIfDirectory(child);
+            }
+        }
     }
 
     private static boolean containsTeamoRouter(Path file) {

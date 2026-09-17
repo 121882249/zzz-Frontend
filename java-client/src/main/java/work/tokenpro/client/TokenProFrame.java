@@ -1244,6 +1244,11 @@ final class TokenProFrame extends JFrame {
     private void reconcileModelSelections(List<PricedModel> models, String owner) {
         try {
             int removed = ModelSelectionReconciler.reconcileAll(store, owner, models);
+            if (removed > 0) {
+                refreshReconciledCodexCatalog(store, Platform.codexConfig(), models);
+                SecureStore cliStore = store.cli("codex");
+                refreshReconciledCodexCatalog(cliStore, cliStore.root().resolve("home/config.toml"), models);
+            }
             updateCodexStatus(); updateBridgeStatus();
             updateCommandControls("codex", codexCliInstalled);
             updateCommandControls("claude", claudeCliInstalled);
@@ -1251,6 +1256,12 @@ final class TokenProFrame extends JFrame {
         } catch(Exception failure) {
             status("最新模型列表已加载，但旧选择清理未全部完成：" + ErrorMessages.describe(failure));
         }
+    }
+
+    private static void refreshReconciledCodexCatalog(SecureStore target, Path config,
+                                                        List<PricedModel> available) throws Exception {
+        List<PricedModel> selected = ModelSelectionReconciler.currentModels(savedCodexModels(target), available, "Codex");
+        if (!selected.isEmpty()) new CodexConfig(target, config).refreshModelCatalog(selected);
     }
 
     private void updateSupportedModelCounts(List<PricedModel> models) {
