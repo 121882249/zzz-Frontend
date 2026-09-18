@@ -657,7 +657,7 @@ final class TokenProFrame extends JFrame {
         status("正在重新启动 Codex 并加载官方配置…");
         new SwingWorker<Boolean, Void>() {
             protected Boolean doInBackground() throws Exception {
-                CodexChannelSwitch.run(store, Platform.codexConfig(), "openai", List.of(), () -> {
+                CodexChannelSwitch.run(store, Platform.codexConfig(), CodexChannel.official(), List.of(), () -> {
                     ClientReconnect.stopForSettings(store, "Codex", false);
                 }, () -> {
                     codex.deleteForOfficial();
@@ -817,12 +817,14 @@ final class TokenProFrame extends JFrame {
     }
 
     private void updateCodexStatus() {
-        if (codexOfficialMode()) {
+        CodexChannelState.Detected detected = CodexChannelState.detect(Platform.codexConfig());
+        if ("official".equals(detected.channel())) {
             setDesktopCardState("Codex", officialStatus("Codex"), true);
             return;
         }
         if (!CodexConfig.tokenProActive(Platform.codexConfig())) {
-            setDesktopCardState("Codex", "配置被其他程序修改，请重新连接", false);
+            String channel = "unknown".equals(detected.channel()) ? "配置不完整" : detected.channel();
+            setDesktopCardState("Codex", "当前磁盘渠道：" + channel, false);
             return;
         }
         try {
@@ -837,11 +839,6 @@ final class TokenProFrame extends JFrame {
                 setDesktopCardState("Codex", selectionStatus(1), true);
             }
         } catch (Exception ignored) { setDesktopCardState("Codex", selectionStatus(0), false); }
-    }
-
-    private boolean codexOfficialMode() {
-        try { return store.read("codex-official-mode.txt").filter("official"::equals).isPresent(); }
-        catch (Exception ignored) { return false; }
     }
 
     private void setDesktopCardState(String client, String installedText, boolean canConnect) {
@@ -967,7 +964,8 @@ final class TokenProFrame extends JFrame {
     private int cliSelectedCount(String command) {
         try {
             SecureStore selected = store.cli(command);
-            if (command.equals("codex") && selected.read("codex-official-mode.txt").isPresent()) return 0;
+            if (command.equals("codex") && "official".equals(CodexChannelState.detect(
+                    selected.root().resolve("home/config.toml")).channel())) return 0;
             if(command.equals("claude")) return ClaudeBridgeConfig.load(selected).routes().size();
             Map<String,Object> data = Json.object(Json.parse(selected.read("codex-selected.json").orElse("{}")));
             return data.get("models") instanceof List<?> rows ? rows.size() : 0;
@@ -989,7 +987,8 @@ final class TokenProFrame extends JFrame {
 
     private void startProfile(String app, boolean cli) throws Exception {
         SecureStore target = cli ? store.cli(app.toLowerCase(Locale.ROOT)) : store;
-        boolean official = app.equals("Codex") ? target.read("codex-official-mode.txt").isPresent()
+        Path codexConfig = cli ? target.root().resolve("home/config.toml") : Platform.codexConfig();
+        boolean official = app.equals("Codex") ? "official".equals(CodexChannelState.detect(codexConfig).channel())
             : target.read(ClaudeBridgeConfig.FILE).isEmpty();
         if (!official) {
             if (!app.equals("Codex")) ClaudeBridgeManager.ensureRunning(target);
@@ -1061,7 +1060,7 @@ final class TokenProFrame extends JFrame {
                 ClientReconnect.Action start = () -> startAndAwaitProfile(app, cli);
                 if (app.equals("Codex")) {
                     Path config = cli ? target.root().resolve("home/config.toml") : Platform.codexConfig();
-                    CodexChannelSwitch.run(target, config, "openai", List.of(), stop, () -> {
+                    CodexChannelSwitch.run(target, config, CodexChannel.official(), List.of(), stop, () -> {
                         new CodexConfig(target, config).deleteForOfficial();
                         BridgeLifecycle.removeLegacyCodexAdapter(target);
                         target.write("codex-official-mode.txt", "official");
@@ -2122,9 +2121,12 @@ final class TokenProFrame extends JFrame {
             }
             boolean running = cli ? !ClientReconnect.cliProcesses(store, command).isEmpty()
                 : !ClientReconnect.desktopProcesses(app).isEmpty();
-            if (running && !TokenProDialogs.confirm(this, "重新连接 " + label,
-                "将退出并重启 " + label + "，应用 TokenPro 配置。\n进行中的请求会终止，请先保存。",
-                "退出并重启")) {
+            List<String> notices = new ArrayList<>();
+            if (relayPlan != null) notices.add("检测到其他 Codex 渠道：\n- " + String.join("\n- ", relayPlan.changes())
+                + "\n将只移除其活动配置，不删除对方的认证备份、模型文件或 skills。");
+            if (running) notices.add("将退出并重启 " + label + "；进行中的请求会终止，请先保存。");
+            if (!notices.isEmpty() && !TokenProDialogs.confirm(this, "切换 " + label,
+                String.join("\n\n", notices), running ? "切换并重启" : "切换渠道")) {
                 finishConnection(identity); return;
             }
         } catch (Exception e) { finishConnection(identity); error(e); return; }
@@ -2148,7 +2150,7 @@ final class TokenProFrame extends JFrame {
                 if (!Objects.equals(token, accessToken)) throw new IllegalStateException("账户已变化，连接已取消；设置未修改");
                 if (app.equals("Codex")) {
                     Path configPath = cli ? target.root().resolve("home/config.toml") : Platform.codexConfig();
-                    CodexChannelSwitch.run(target, configPath, "custom", selected.stream().map(CodexConfig::routedModelId).toList(), () -> {
+                    CodexChannelSwitch.run(target, configPath, CodexChannel.tokenPro(), selected.stream().map(CodexConfig::routedModelId).toList(), () -> {
                         ClientReconnect.stopForSettings(store, app, cli);
                     }, () -> {
                         BridgeLifecycle.removeLegacyCodexAdapter(target);

@@ -2,20 +2,39 @@ package work.tokenpro.client;
 
 import java.io.IOException;
 import java.nio.file.*;
+import java.time.Instant;
 import java.util.*;
 
-/** Explicit settings allowlist. No session, rollout, auth or chat database is copied. */
+/** Explicit channel-state allowlist. No session, rollout or chat database is copied. */
 final class ChannelSettingsBackup {
     private final SecureStore backup;
     private final Map<Path, Optional<String>> values = new LinkedHashMap<>();
+    private final Set<Path> trackedRoots = new LinkedHashSet<>();
     ChannelSettingsBackup(SecureStore store, Path config) throws Exception {
         this(store, codexPaths(store, config));
+        trackedRoots.add(store.root().resolve("codex-models").toAbsolutePath().normalize());
+        CodexChannelState.Detected detected = CodexChannelState.detect(config);
+        Map<String,Object> meta = new LinkedHashMap<>();
+        meta.put("schema_version", 1);
+        meta.put("created_at", Instant.now().toString());
+        meta.put("config", config.toAbsolutePath().toString());
+        meta.put("channel", detected.channel());
+        meta.put("model", detected.model());
+        meta.put("model_provider", detected.modelProvider());
+        meta.put("openai_base_url", detected.openAiBaseUrl());
+        meta.put("auth_mode", detected.authMode());
+        meta.put("marker_owners", detected.markerOwners().stream().sorted().toList());
+        backup.write("meta.json", Json.stringify(meta));
     }
-    private static List<Path> codexPaths(SecureStore store, Path config) {
+    private static List<Path> codexPaths(SecureStore store, Path config) throws IOException {
         List<Path> paths = new ArrayList<>();
-        paths.add(config);
+        paths.addAll(List.of(config, CodexChannelState.auth(config), CodexChannelState.modelsCache(config)));
         for (String name : List.of("codex-original.toml", "codex-selected.json", "codex-model-catalog.json",
-                "codex-official-mode.txt")) paths.add(store.root().resolve(name));
+                "codex-official-mode.txt", "codex-last-switch-config.toml")) paths.add(store.root().resolve(name));
+        Path catalogs = store.root().resolve("codex-models");
+        if (Files.isDirectory(catalogs, LinkOption.NOFOLLOW_LINKS)) try (var files = Files.list(catalogs)) {
+            paths.addAll(files.filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)).toList());
+        }
         return paths;
     }
     static List<Path> claudePaths(SecureStore store, boolean cli) throws Exception {
@@ -32,6 +51,10 @@ final class ChannelSettingsBackup {
     }
     ChannelSettingsBackup(SecureStore store, List<Path> paths) throws Exception {
         backup = new SecureStore(store.root().resolve("channel-backups").resolve(UUID.randomUUID().toString()));
+        Platform.privateDirectory(backup.root());
+        Path catalogs = store.root().resolve("codex-models").toAbsolutePath().normalize();
+        if (paths.stream().map(path -> path.toAbsolutePath().normalize()).anyMatch(path -> path.startsWith(catalogs)))
+            trackedRoots.add(catalogs);
         List<Map<String,Object>> manifest = new ArrayList<>();
         int index = 0;
         for (Path path : paths) {
@@ -48,10 +71,17 @@ final class ChannelSettingsBackup {
         backup.write("thread-settings.json", CodexHistorySettings.encode(settings));
     }
     void restore() throws Exception {
+        for (Path root : trackedRoots) {
+            if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) continue;
+            try (var files = Files.list(root)) {
+                for (Path path : files.filter(item -> Files.isRegularFile(item, LinkOption.NOFOLLOW_LINKS)).toList())
+                    if (!values.containsKey(path)) Files.deleteIfExists(path);
+            }
+        }
         for (var entry : values.entrySet()) {
             Path path = entry.getKey();
             if (entry.getValue().isPresent()) {
-                new SecureStore(path.toAbsolutePath().getParent()).write(path.getFileName().toString(), entry.getValue().get());
+                CodexChannelState.writeAtomic(path.toAbsolutePath(), entry.getValue().get());
             } else Files.deleteIfExists(path);
         }
     }

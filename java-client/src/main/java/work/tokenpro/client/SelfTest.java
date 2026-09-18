@@ -31,7 +31,8 @@ final class SelfTest {
             SecureStore officialStore = new SecureStore(officialRoot.resolve("store"));
             Path officialConfig = officialRoot.resolve("home/config.toml");
             Files.createDirectories(officialConfig.getParent()); Files.writeString(officialConfig, "model_provider=\"custom\"\n");
-            Files.writeString(officialConfig.getParent().resolve("auth.json"), "fixture-official-auth");
+            String officialAuth = "{\"auth_mode\":\"chatgpt\",\"tokens\":{\"refresh_token\":\"fixture-refresh\"}}";
+            Files.writeString(officialConfig.getParent().resolve("auth.json"), officialAuth);
             officialStore.write("java-session.json", "fixture-tokenpro-login");
             officialStore.write("codex-selected.json", "selected");
             officialStore.write("codex-model-catalog.json", "catalog");
@@ -45,7 +46,7 @@ final class SelfTest {
                 && officialStore.read("codex-model-catalog.json").isEmpty(), "official switch removes route fields and mapping without deleting config"); passed++;
             check(officialStore.read("codex-image-bridge.json").isEmpty(), "official switch removes legacy bridge file"); passed++;
             check(officialStore.read("codex-cleanup-warning.txt").isEmpty(), "successful cleanup clears prior warning"); passed++;
-            check(Files.readString(officialConfig.getParent().resolve("auth.json")).equals("fixture-official-auth")
+            check(Files.readString(officialConfig.getParent().resolve("auth.json")).equals(officialAuth)
                 && officialStore.read("java-session.json").orElseThrow().equals("fixture-tokenpro-login"), "switching keeps official auth and global-key login"); passed++;
         } finally {
             try (var paths = Files.walk(officialRoot)) {

@@ -52,6 +52,16 @@ final class ErrorAndRestoreTest {
             check(codex.restore() && Files.readString(config).equals(unrelated), "real backup still restores exact original"); passed++;
             SecureStore cli = store.cli("codex");
             check(!new CodexConfig(cli, cli.root().resolve("home/config.toml")).restore(), "unconfigured CLI restore is also idempotent"); passed++;
+            Path guarded = root.resolve("guarded/config.toml"); Files.createDirectories(guarded.getParent());
+            String thirdParty = "# >>> tokenpro-codex\nmodel_provider='custom'\n# <<< tokenpro-codex\n"
+                + "[model_providers.custom]\nbase_url='https://tokenpro.work/v1'\n";
+            Files.writeString(guarded, thirdParty);
+            Files.writeString(guarded.resolveSibling("auth.json"), "{\"auth_mode\":\"apikey\",\"OPENAI_API_KEY\":\"fixture-key\"}");
+            try { new CodexConfig(new SecureStore(root.resolve("guarded-store")), guarded).deleteForOfficial(); throw new AssertionError("missing OAuth backup accepted"); }
+            catch (java.io.IOException expected) {
+                check(Files.readString(guarded).equals(thirdParty) && expected.getMessage().contains("重新登录"),
+                    "official switch stops before config mutation when OAuth cannot be restored"); passed++;
+            }
         } finally { try(var paths=Files.walk(root)){for(Path path:paths.sorted(Comparator.reverseOrder()).toList())Files.deleteIfExists(path);} }
         return passed;
     }

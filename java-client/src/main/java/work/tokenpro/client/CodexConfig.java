@@ -47,7 +47,11 @@ final class CodexConfig {
             if (!config.contains(START) || !config.contains(END) || !catalog.find()) return false;
             if (!config.matches("(?s).*base_url\\s*=\\s*['\\\"]https://tokenpro\\.work/v1/?['\\\"].*")) return false;
             Path path = Path.of(catalog.group(2));
-            return Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS);
+            CodexChannelState.Detected detected = CodexChannelState.detect(configPath);
+            return Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
+                && "custom".equals(detected.modelProvider())
+                && detected.markerOwners().contains("tokenpro")
+                && "apikey".equals(detected.authMode());
         } catch (Exception ignored) { return false; }
     }
 
@@ -84,6 +88,10 @@ final class CodexConfig {
         // correlate through the backend's authenticated turn map.
         String block = managedBlock(url, primaryModel, catalog, key.trim(), actor, current, Set.of("custom"));
         String candidate = CodexSwitchConfig.merge(preserved, block);
+        String latest = Files.exists(target) ? Files.readString(target) : "";
+        if (!originalCurrent.equals(latest))
+            throw new IllegalStateException("Codex 配置在切换期间已被其他程序修改；为避免覆盖，已取消连接，请重试");
+        CodexChannelState.useApiKey(store, target, key);
         if (!originalCurrent.equals(candidate)) {
             if (foreignRelayPlan == null) store.write("codex-last-switch-config.toml", originalCurrent);
             else {
@@ -94,10 +102,7 @@ final class CodexConfig {
             }
             writeAtomic(target, candidate);
         }
-        // Switching routes is final: no foreign relay configuration, model
-        // cache, backup, or proxy state may survive to be restored later.
-        cleanupStaleForeignModelArtifacts(target.getParent(), foreignRelayPlan != null,
-            foreignRelayPlan == null ? null : foreignRelayPlan.original());
+        CodexChannelState.writeChannelCache(target, catalog);
         // Retire only our old generated catalogs after the new config is committed.
         // Failure is housekeeping, not a reason to restore a previous channel.
         try { pruneModelCatalogs(catalog); store.delete("codex-model-catalog.json"); }
@@ -132,8 +137,13 @@ final class CodexConfig {
     /** Remove the TokenPro route without resetting the user's Windows setup or permissions. */
     void deleteForOfficial() throws IOException {
         String current = Files.exists(configPath) ? Files.readString(configPath) : "";
-        String restored = CodexSwitchConfig.clean(current);
+        String restored = CodexSwitchConfig.foreignRelayCleanup(current)
+            .map(CodexSwitchConfig.ForeignRelayCleanup::cleaned).orElseGet(() -> CodexSwitchConfig.clean(current));
         if (Platform.OS_KIND == Platform.OS.WINDOWS) restored = CodexSwitchConfig.withoutAdministrator(restored);
+        CodexChannelState.restoreOfficialAuth(store, configPath);
+        String latest = Files.exists(configPath) ? Files.readString(configPath) : "";
+        if (!current.equals(latest))
+            throw new IOException("Codex 配置在切换期间已被其他程序修改；为避免覆盖，已取消切换，请重试");
         if (!current.equals(restored)) {
             Files.createDirectories(configPath.getParent());
             store.write("codex-last-switch-config.toml", current);
@@ -144,7 +154,7 @@ final class CodexConfig {
         store.delete("codex-selected.json");
         store.delete("codex-official-mode.txt");
         pruneModelCatalogs(null);
-        cleanupStaleForeignModelArtifacts(configPath.getParent(), true, current);
+        CodexChannelState.markOfficialCacheStale(configPath);
     }
 
     /** Atomically replace the active TokenPro catalog after stale selections are pruned. */
@@ -153,18 +163,29 @@ final class CodexConfig {
         if (models.isEmpty() || !Files.exists(configPath)) return;
         String current = Files.readString(configPath);
         if (!current.contains(START) || !MODEL_CATALOG_ASSIGNMENT.matcher(current).find()) return;
-        Path catalog = writeModelCatalog(models);
-        PricedModel primary = models.stream().filter(model -> !model.isImageGeneration()).findFirst().orElse(models.getFirst());
-        String candidate = MODEL_CATALOG_ASSIGNMENT.matcher(current)
-            .replaceFirst(Matcher.quoteReplacement("model_catalog_json = " + toml(catalog.toString())));
-        candidate = ROOT_MODEL_ASSIGNMENT.matcher(candidate)
-            .replaceFirst(Matcher.quoteReplacement("model = " + toml(routedModelId(primary))));
-        candidate = REVIEW_MODEL_ASSIGNMENT.matcher(candidate)
-            .replaceFirst(Matcher.quoteReplacement("review_model = " + toml(routedModelId(primary))));
-        candidate = candidate.replaceFirst("(\\\"x-tokenpro-group-id\\\"\\s*=\\s*)\\\"[^\\\"]*\\\"",
-            "$1\\\"" + primary.groupId() + "\\\"");
-        writeAtomic(configPath, candidate);
-        pruneModelCatalogs(catalog);
+        ChannelSettingsBackup backup = new ChannelSettingsBackup(store, configPath);
+        try {
+            Path catalog = writeModelCatalog(models);
+            PricedModel primary = models.stream().filter(model -> !model.isImageGeneration()).findFirst().orElse(models.getFirst());
+            String candidate = MODEL_CATALOG_ASSIGNMENT.matcher(current)
+                .replaceFirst(Matcher.quoteReplacement("model_catalog_json = " + toml(catalog.toString())));
+            candidate = ROOT_MODEL_ASSIGNMENT.matcher(candidate)
+                .replaceFirst(Matcher.quoteReplacement("model = " + toml(routedModelId(primary))));
+            candidate = REVIEW_MODEL_ASSIGNMENT.matcher(candidate)
+                .replaceFirst(Matcher.quoteReplacement("review_model = " + toml(routedModelId(primary))));
+            candidate = candidate.replaceFirst("(\\\"x-tokenpro-group-id\\\"\\s*=\\s*)\\\"[^\\\"]*\\\"",
+                "$1\\\"" + primary.groupId() + "\\\"");
+            if (!current.equals(Files.readString(configPath)))
+                throw new IOException("Codex 配置在模型刷新期间已被其他程序修改；已取消刷新");
+            writeAtomic(configPath, candidate);
+            CodexChannelState.writeChannelCache(configPath, catalog);
+            pruneModelCatalogs(catalog);
+            CodexChannelState.verify(configPath, CodexChannel.tokenPro());
+        } catch (Exception failure) {
+            try { backup.restore(); }
+            catch (Exception rollback) { failure.addSuppressed(rollback); }
+            throw failure;
+        }
     }
 
     private void pruneModelCatalogs(Path keep) throws IOException {
@@ -173,116 +194,6 @@ final class CodexConfig {
             for (Path path : files.filter(p -> p.getFileName().toString().matches("[a-f0-9-]{36}\\.json")).toList())
                 if (!path.equals(keep)) Files.deleteIfExists(path);
         }
-    }
-
-    /** Remove known TeamoRouter state. This is deliberately one-way on every channel switch. */
-    private static void cleanupStaleForeignModelArtifacts(Path codexHome, boolean foreignRouteDetected,
-                                                            String foreignConfig) throws IOException {
-        if (codexHome == null) return;
-        Path cache = codexHome.resolve("models_cache.json");
-        if (regularFile(cache) && (foreignRouteDetected || containsTeamoRouter(cache))) Files.deleteIfExists(cache);
-        deleteRegularFile(codexHome.resolve("teamorouter-native-model-catalog.json"));
-        deleteRegularFile(codexHome.resolve("teamorouter-http-proxy.json"));
-        deleteRegularFile(codexHome.resolve("teamorouter-http-proxy.log"));
-        deleteRegularFile(codexHome.resolve("teamorouter-http-proxy-service.log"));
-        deleteRegularFile(codexHome.resolve("teamorouter-chatgpt-auth.json"));
-        deleteMatchingRegularFiles(codexHome, "config.toml.teamorouter-backup-*");
-        deleteMatchingRegularFiles(codexHome, "auth.json.teamorouter-backup-*");
-        deleteTreeIfDirectory(codexHome.resolve("backups_state/teamorouter-fast"));
-        deleteTreeIfDirectory(codexHome.resolve("backups_state/teamorouter-history-sync"));
-        Path legacySkill = codexHome.resolve("skills/teamorouter-imagegen");
-        deleteTreeIfDirectory(legacySkill);
-        Path legacySkillState = codexHome.resolve("backups_state/teamorouter-imagegen");
-        deleteTreeIfDirectory(legacySkillState);
-        deleteReferencedForeignCatalog(codexHome, foreignConfig);
-        deleteGenericRelayArtifacts(codexHome);
-        if (codexHome.toAbsolutePath().normalize().equals(Platform.codexConfig().getParent().toAbsolutePath().normalize())) {
-            unregisterTeamoRouterProxyService();
-            stopTeamoRouterProxyService();
-        }
-    }
-
-    private static void deleteReferencedForeignCatalog(Path codexHome, String config) throws IOException {
-        if (config == null || config.isBlank()) return;
-        Matcher matcher = MODEL_CATALOG_ASSIGNMENT.matcher(config);
-        Path root = codexHome.toAbsolutePath().normalize();
-        while (matcher.find()) {
-            Path referenced;
-            try { referenced = Path.of(matcher.group(2)).toAbsolutePath().normalize(); }
-            catch (InvalidPathException ignored) { continue; }
-            if (referenced.startsWith(root)) deleteRegularFile(referenced);
-        }
-    }
-
-    private static void deleteGenericRelayArtifacts(Path codexHome) throws IOException {
-        deleteRelayNamedChildren(codexHome);
-        for (String directory : List.of("backups_state", "skills")) {
-            Path parent = codexHome.resolve(directory);
-            if (Files.isDirectory(parent, LinkOption.NOFOLLOW_LINKS)) deleteRelayNamedChildren(parent);
-        }
-    }
-
-    private static void deleteRelayNamedChildren(Path parent) throws IOException {
-        try (var children = Files.list(parent)) {
-            for (Path child : children.toList()) {
-                String name = child.getFileName().toString().toLowerCase(Locale.ROOT);
-                if (name.contains("tokenpro") || (!name.contains("router") && !name.contains("relay"))) continue;
-                if (regularFile(child)) Files.deleteIfExists(child);
-                else deleteTreeIfDirectory(child);
-            }
-        }
-    }
-
-    private static boolean containsTeamoRouter(Path file) {
-        try { return Files.readString(file, StandardCharsets.UTF_8).toLowerCase(Locale.ROOT).contains("teamorouter"); }
-        catch (IOException ignored) { return false; }
-    }
-
-    private static void deleteRegularFile(Path file) throws IOException {
-        if (regularFile(file)) Files.deleteIfExists(file);
-    }
-
-    private static void deleteMatchingRegularFiles(Path directory, String glob) throws IOException {
-        try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, glob)) {
-            for (Path file : files) deleteRegularFile(file);
-        }
-    }
-
-    private static void deleteTreeIfDirectory(Path directory) throws IOException {
-        if (Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) deleteTree(directory);
-    }
-
-    private static void stopTeamoRouterProxyService() {
-        ProcessHandle.allProcesses().filter(process -> process.pid() != ProcessHandle.current().pid())
-            .filter(process -> isTeamoRouterProxyService(process.info())).forEach(process -> {
-                process.destroy();
-                try { process.onExit().get(2, TimeUnit.SECONDS); }
-                catch (Exception ignored) { if (process.isAlive()) process.destroyForcibly(); }
-            });
-    }
-
-    private static void unregisterTeamoRouterProxyService() {
-        if (Platform.OS_KIND != Platform.OS.MAC) return;
-        Path home = Path.of(System.getProperty("user.home"));
-        Path agent = home.resolve("Library/LaunchAgents/com.teamolab.teamorouter.http-proxy.plist");
-        try {
-            Object uid = Files.getAttribute(home, "unix:uid", LinkOption.NOFOLLOW_LINKS);
-            Process process = new ProcessBuilder("/bin/launchctl", "bootout",
-                "gui/" + uid + "/com.teamolab.teamorouter.http-proxy")
-                .redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(ProcessBuilder.Redirect.DISCARD).start();
-            process.waitFor(3, TimeUnit.SECONDS);
-        } catch (Exception ignored) { /* A missing or already unloaded agent is harmless. */ }
-        try { deleteRegularFile(agent); } catch (IOException ignored) { }
-    }
-
-    static boolean isTeamoRouterProxyService(ProcessHandle.Info info) {
-        String command = info.command().orElse("").toLowerCase(Locale.ROOT);
-        if (!command.endsWith("/teamorouter-desktop") && !command.endsWith("\\teamorouter-desktop.exe")) return false;
-        return Arrays.asList(info.arguments().orElse(new String[0])).contains("--http-proxy-service");
-    }
-
-    private static boolean regularFile(Path file) {
-        return Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS);
     }
 
     static String restoreContent(String current, Optional<String> original, boolean preserveDesktopHistoryProvider) {
@@ -569,13 +480,7 @@ final class CodexConfig {
         // Immutable catalogs keep the previous config internally consistent until
         // the new config's atomic rename completes, without rolling back a channel.
         Path target = store.root().resolve("codex-models").resolve(UUID.randomUUID() + ".json");
-        Files.createDirectories(target.getParent());
-        Path temp = Files.createTempFile(target.getParent(), ".tokenpro-models-", ".json");
-        Files.writeString(temp, Json.stringify(Map.of("models", entries)), StandardCharsets.UTF_8, StandardOpenOption.TRUNCATE_EXISTING);
-        Platform.privateFile(temp);
-        try { Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE); }
-        catch (AtomicMoveNotSupportedException e) { Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING); }
-        Platform.privateFile(target);
+        CodexChannelState.writeAtomic(target, Json.stringify(Map.of("models", entries)));
         return target;
     }
 
@@ -690,7 +595,8 @@ final class CodexConfig {
     }
 
     static String stripManaged(String text) {
-        if (text.contains("# >>> TokenPro model selection >>>")) return CodexSwitchConfig.clean(text);
+        if (text.contains("# >>> TokenPro model selection >>>") || text.contains("# >>> tokenpro-codex"))
+            return CodexSwitchConfig.clean(text);
         int start = text.indexOf(START);
         if (start < 0) return text;
         int end = text.indexOf(END, start);
@@ -789,12 +695,7 @@ final class CodexConfig {
     }
 
     private static void writeAtomic(Path target, String value) throws IOException {
-        Path temp = Files.createTempFile(target.getParent(), ".tokenpro-", ".toml");
-        Files.writeString(temp, value, StandardCharsets.UTF_8, StandardOpenOption.TRUNCATE_EXISTING);
-        Platform.privateFile(temp);
-        try { Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE); }
-        catch (AtomicMoveNotSupportedException e) { Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING); }
-        Platform.privateFile(target);
+        CodexChannelState.writeAtomic(target, value);
     }
 
 }

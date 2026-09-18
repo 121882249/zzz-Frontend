@@ -773,4 +773,10 @@ final class Platform {
             if (OS_KIND != OS.WINDOWS) Files.setPosixFilePermissions(path, PosixFilePermissions.fromString("rw-------"));
         } catch (Exception ignored) {}
     }
+
+    static void privateDirectory(Path path) {
+        try {
+            if (OS_KIND != OS.WINDOWS) Files.setPosixFilePermissions(path, PosixFilePermissions.fromString("rwx------"));
+        } catch (Exception ignored) {}
+    }
 }

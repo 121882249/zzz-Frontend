@@ -4,6 +4,7 @@ import java.nio.file.*;
 import java.util.*;
 
 final class CodexSwitchConfigTest {
+    private static final String OFFICIAL_AUTH = "{\"auth_mode\":\"chatgpt\",\"OPENAI_API_KEY\":null,\"tokens\":{\"refresh_token\":\"fixture-refresh\"}}";
     private static final String ROUTE = "# >>> TokenPro managed >>>\nmodel = \"fixture-model\"\nmodel_provider = \"custom\"\n"
         + "[model_providers.custom]\nbase_url = \"https://tokenpro.work/v1\"\nexperimental_bearer_token = \"fixture-route-key\"\n# <<< TokenPro managed <<<\n";
     private static final String SETTINGS = "approval_policy = \"on-request\"\nsandbox_mode = \"workspace-write\"\n"
@@ -54,7 +55,15 @@ final class CodexSwitchConfigTest {
         check(!namedClean.contains("https://active.example/v1") && namedClean.contains("https://inactive.example/v1"),
             "only the active named relay is removed"); passed++;
         check(CodexSwitchConfig.foreignRelayCleanup(ROUTE).isEmpty(), "TokenPro's own route is never treated as foreign"); passed++;
-        for (String invalid : List.of("# >>> TokenPro managed >>>\nmodel='x'\n", "note = \"\"\"unfinished\n", "args = [1,2\n")) {
+        String teamo = "# >>> teamorouter-codex\nmodel='relay'\nmodel_provider='openai'\n"
+            + "openai_base_url='https://api.teamorouter.cn/v1'\napproval_policy='never'\n# <<< teamorouter-codex\n"
+            + "[projects.demo]\ntrust_level='trusted'\n";
+        CodexSwitchConfig.ForeignRelayCleanup teamoCleanup = CodexSwitchConfig.foreignRelayCleanup(teamo).orElseThrow();
+        check(teamoCleanup.cleaned().equals("[projects.demo]\ntrust_level='trusted'\n")
+            && teamoCleanup.changes().contains("渠道标记 teamorouter"), "foreign owner block is removed while L0 project settings survive"); passed++;
+        check(CodexSwitchConfig.markerOwners(teamo).equals(Set.of("teamorouter")), "active marker owners are detected from disk"); passed++;
+        for (String invalid : List.of("# >>> TokenPro managed >>>\nmodel='x'\n", "# >>> teamorouter-codex\nmodel='x'\n",
+                "note = \"\"\"unfinished\n", "args = [1,2\n")) {
             try { CodexSwitchConfig.clean(invalid); throw new AssertionError("malformed config accepted"); }
             catch (IllegalStateException expected) { passed++; }
         }
@@ -76,10 +85,18 @@ final class CodexSwitchConfigTest {
             Files.createDirectories(configPath.getParent());
             Files.writeString(configPath, SETTINGS);
             Path auth = configPath.resolveSibling("auth.json");
-            Files.writeString(auth, "fixture-official-login");
+            Files.writeString(auth, OFFICIAL_AUTH);
             CodexConfig config = new CodexConfig(store, configPath);
             config.apply("https://tokenpro.work/v1", List.of(new PricedModel("gpt-5.4", "openai", "fixture", 1)), "fixture-route-key", "fixture@example.test");
             String applied = Files.readString(configPath);
+            check(Files.readString(auth).contains("\"auth_mode\":\"apikey\""), "TokenPro activation installs API-key auth");
+            check(store.read(CodexChannelState.OFFICIAL_AUTH_FILE).orElseThrow().equals(OFFICIAL_AUTH),
+                "official OAuth login has an independent private copy");
+            check(Files.readString(configPath.resolveSibling("models_cache.json")).contains(CodexConfig.routedModelId(new PricedModel("gpt-5.4", "openai", "fixture", 1))),
+                "TokenPro activation refreshes the active model cache");
+            if (Platform.OS_KIND != Platform.OS.WINDOWS)
+                check(Files.getPosixFilePermissions(auth).equals(Set.of(java.nio.file.attribute.PosixFilePermission.OWNER_READ,
+                    java.nio.file.attribute.PosixFilePermission.OWNER_WRITE)), "Codex auth is written with mode 0600");
             check(CodexConfig.tokenProActive(configPath), "fresh TokenPro route is recognized as active");
             check(applied.contains("trust_level = \"trusted\"") && applied.contains("args = [\n  \"--name\""), "actual apply preserves project and MCP settings");
             check(applied.contains("sandbox_mode = \"workspace-write\"") && applied.contains("approval_policy = \"on-request\""), "actual apply preserves permission policy");
@@ -99,7 +116,9 @@ final class CodexSwitchConfigTest {
             check(!CodexConfig.tokenProActive(configPath), "official route is not reported as TokenPro active");
             check(!restored.contains("fixture-route-key") && !restored.contains("model_provider = \"custom\""), "actual official restore removes TokenPro authentication and route");
             check(restored.contains("sandbox_private_desktop = true") && restored.contains("trust_level = \"trusted\""), "official restore retains Windows and project state");
-            check(Files.readString(auth).equals("fixture-official-login"), "official login file remains untouched");
+            check(Files.readString(auth).equals(OFFICIAL_AUTH), "official OAuth login is restored from TokenPro's private copy");
+            check(Files.readString(configPath.resolveSibling("models_cache.json")).contains("1970-01-01T00:00:00Z"),
+                "official restore marks the model cache stale for Codex to refresh");
             config.deleteForOfficial();
             check(Files.readString(configPath).equals(restored), "repeated official restore leaves config stable");
             String foreignConfig = "openai_base_url='https://relay.example/v1'\nmodel_provider='custom'\n"
@@ -142,14 +161,14 @@ final class CodexSwitchConfigTest {
             check(store.read("codex-foreign-relay-backup.toml").isEmpty()
                 && store.read("codex-last-switch-config.toml").isEmpty(),
                 "direct foreign relay removal retains no route or credential backup");
-            check(!Files.exists(foreignCache) && !Files.exists(foreignCatalog) && !Files.exists(referencedForeignCatalog) && !Files.exists(foreignBackupCatalog),
-                "foreign relay model cache and catalogs are removed with the route");
-            check(!Files.exists(foreignHistoryState.getParent()) && List.of(proxyConfig, proxyLog, proxyServiceLog, relayAuth, relayConfigBackup, relayAuthBackup).stream().noneMatch(Files::exists),
-                "foreign relay proxy, auth, history state, and backups are removed with the route");
-            check(!Files.exists(genericRelayFile) && !Files.exists(genericRouterBackup.getParent()),
-                "generic router and relay named artifacts are removed");
-            check(!Files.exists(legacyImageSkill.getParent()) && !Files.exists(legacyImageState.getParent()),
-                "obsolete foreign relay image skill and state are removed");
+            check(Files.exists(foreignCache) && Files.exists(foreignCatalog) && Files.exists(referencedForeignCatalog) && Files.exists(foreignBackupCatalog),
+                "switching does not delete another channel's cache or catalogs");
+            check(Files.exists(foreignHistoryState) && List.of(proxyConfig, proxyLog, proxyServiceLog, relayAuth, relayConfigBackup, relayAuthBackup).stream().allMatch(Files::exists),
+                "switching preserves another channel's proxy, auth, history state, and backups");
+            check(Files.exists(genericRelayFile) && Files.exists(genericRouterBackup),
+                "generic router and relay named artifacts are preserved");
+            check(Files.exists(legacyImageSkill) && Files.exists(legacyImageState),
+                "another channel's skill and state remain owned by that channel");
             config.deleteForOfficial();
             String officialAfterForeign = Files.readString(configPath);
             check(!officialAfterForeign.contains("relay.example") && !officialAfterForeign.contains("tokenpro.work")
@@ -165,7 +184,7 @@ final class CodexSwitchConfigTest {
                 throw new AssertionError("stale cleanup plan accepted");
             } catch (IllegalStateException expected) { }
             check(Files.readString(configPath).equals(externallyChanged), "stale cleanup plan cannot overwrite a newer Codex config");
-            return 14;
+            return 20;
         } finally {
             try (var paths = Files.walk(root)) { for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path); }
         }

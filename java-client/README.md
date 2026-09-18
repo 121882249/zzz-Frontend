@@ -85,7 +85,9 @@ cd java-client
 
 Windows 切换 TokenPro 或恢复官方通道时，保留现有 `config.toml` 中的项目、MCP、审批策略及其他用户设置，
 只替换模型选择字段和 TokenPro 管理的服务商配置。恢复官方不再删除整份文件。
-切换前的文件保存在当前 TokenPro 配置目录的 `codex-last-switch-config.toml`，方便排查和回退。
+每次切换前会快照 `config.toml`、`auth.json`、`models_cache.json`、模型选择和 TokenPro 模型目录；
+写入、磁盘校验或客户端重启任一步失败，都会恢复快照并重新打开原渠道。
+官方 OAuth 登录态另存于 TokenPro 私有目录，切回官方时校验并恢复；副本不可用时要求重新登录，不伪造成功状态。
 
 按非管理员兼容需求，Windows 切换同时设置：
 
@@ -104,8 +106,10 @@ macOS 客户端重连使用普通的同用户进程退出和 `open -a` 启动；
 模型通道不需要用户授予 TokenPro“自动化”系统权限。临时文件权限为 `0700`，命令结束后自动删除。
 
 连接 TokenPro 时如检测到其他 Codex 中转的当前路由、冲突的 `custom` 服务商或 `openai_base_url`，
-客户端会直接移除这些路由并应用 TokenPro，不保留其他中转的地址、密钥或配置备份。
-不删除对方应用、Codex 登录文件、非活动服务商、项目、MCP、审批策略或沙箱权限。
+客户端会显示检测到的渠道 owner、活动 provider 和代理地址，确认后只从共享 `config.toml` 移除活动路由。
+不会删除对方应用、LaunchAgent、认证备份、模型文件、skills、非活动服务商、项目、MCP、审批策略或沙箱权限。
+渠道状态始终由磁盘上的 `model_provider`、`openai_base_url`、provider `base_url` 与 `auth_mode` 联合判定，
+不再信任 TokenPro 自己上一次保存的状态标记。
 
 这个改动解决 TokenPro 的配置切换及重复重置问题，不负责安装 ChatGPT/Codex 的系统组件。
 如果具体 ChatGPT 版本仍要求首次安装或企业管理员授权，应查看其初始化日志，不能通过 TokenPro 保证跳过。

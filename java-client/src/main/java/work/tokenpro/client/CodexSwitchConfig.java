@@ -1,6 +1,8 @@
 package work.tokenpro.client;
 
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** Edits route-owned TOML statements while retaining unrelated configuration verbatim. */
 final class CodexSwitchConfig {
@@ -10,12 +12,13 @@ final class CodexSwitchConfig {
         "# >>> TokenPro managed >>>", "# <<< TokenPro managed <<<",
         "# >>> TokenPro model selection >>>", "# <<< TokenPro model selection <<<",
         "# >>> TokenPro history provider >>>", "# <<< TokenPro history provider <<<");
+    private static final Pattern CHANNEL_MARKER = Pattern.compile("^# (>>>|<<<) ([A-Za-z0-9_-]{1,64})-codex$");
     private static final Set<String> BUILTIN_PROVIDERS = Set.of("openai", "ollama", "lmstudio");
     private CodexSwitchConfig() {}
     record ForeignRelayCleanup(String cleaned, List<String> changes) {}
 
     static String clean(String current) {
-        List<Statement> statements = parse(current);
+        List<Statement> statements = parse(stripChannelMarkerBlocks(current));
         String profile = activeProfile(statements);
         Set<List<String>> owned = new HashSet<>();
         List<String> section = List.of();
@@ -68,6 +71,8 @@ final class CodexSwitchConfig {
         List<Statement> statements = parse(ownRouteRemoved);
         Set<String> removeProviders = new LinkedHashSet<>();
         List<String> changes = new ArrayList<>();
+        markerOwners(current).stream().filter(owner -> !"tokenpro".equals(owner))
+            .forEach(owner -> changes.add("渠道标记 " + owner));
 
         if (!activeProvider.isBlank() && !BUILTIN_PROVIDERS.contains(activeProvider) && !activeIsTokenPro) {
             removeProviders.add(activeProvider);
@@ -109,6 +114,53 @@ final class CodexSwitchConfig {
         String cleaned = result.toString();
         if (changes.isEmpty() || cleaned.equals(current)) return Optional.empty();
         return Optional.of(new ForeignRelayCleanup(cleaned, List.copyOf(changes)));
+    }
+
+    static Set<String> markerOwners(String current) {
+        LinkedHashSet<String> owners = new LinkedHashSet<>();
+        for (Statement statement : parse(current)) {
+            Matcher marker = CHANNEL_MARKER.matcher(statement.raw().strip());
+            if (marker.matches() && ">>>".equals(marker.group(1))) owners.add(marker.group(2).toLowerCase(Locale.ROOT));
+        }
+        return Set.copyOf(owners);
+    }
+
+    private static String stripChannelMarkerBlocks(String current) {
+        StringBuilder result = new StringBuilder();
+        String active = null;
+        for (Statement statement : parse(current)) {
+            Matcher marker = CHANNEL_MARKER.matcher(statement.raw().strip());
+            if (marker.matches()) {
+                String owner = marker.group(2).toLowerCase(Locale.ROOT);
+                if (">>>".equals(marker.group(1))) {
+                    if (active != null) throw malformed();
+                    active = owner;
+                } else {
+                    if (active == null || !active.equals(owner)) throw malformed();
+                    active = null;
+                }
+                continue;
+            }
+            if (active == null) result.append(statement.raw());
+        }
+        if (active != null) throw malformed();
+        return result.toString();
+    }
+
+    static Optional<String> rootValue(String current, String key) {
+        List<Statement> statements = parse(current);
+        return assignment(statements, activeProfile(statements), key);
+    }
+
+    static Optional<String> providerValue(String current, String id, String key) {
+        if (id == null || id.isBlank()) return Optional.empty();
+        List<String> section = List.of();
+        for (Statement statement : parse(current)) {
+            if (statement.header()) section = statement.path();
+            else if (section.equals(List.of("model_providers", id)) && statement.path().equals(List.of(key)))
+                return Optional.of(scalar(statement.raw()));
+        }
+        return Optional.empty();
     }
 
     private static Optional<String> assignment(List<Statement> statements, String profile, String key) {
@@ -159,8 +211,8 @@ final class CodexSwitchConfig {
                 || (statement.path().size() >= 2 && statement.path().subList(0, 2).equals(List.of("model_providers", "custom"))))
                 throw new IllegalStateException("已有非 TokenPro 的 custom 服务商配置，请先更名；原配置未修改");
         }
-        String rootStart = "# >>> TokenPro model selection >>>\n";
-        String rootEnd = "# <<< TokenPro model selection <<<\n";
+        String rootStart = "# >>> tokenpro-codex\n";
+        String rootEnd = "# <<< tokenpro-codex\n";
         String body = generated.replace("# >>> TokenPro managed >>>\n", "").replace("# <<< TokenPro managed <<<\n", "");
         int generatedTables = firstTable(body);
         String root = body.substring(0, generatedTables);
