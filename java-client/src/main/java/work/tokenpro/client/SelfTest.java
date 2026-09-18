@@ -22,6 +22,13 @@ final class SelfTest {
         check(Json.stringify(value).contains("\"TokenPro\""), "JSON writer"); passed++;
         check("邮箱或密码错误".equals(ApiClient.responseMessage("{\"message\":\"邮箱或密码错误\"}")), "API error message is preserved"); passed++;
         check(ApiClient.isUnauthorized(new ApiClient.ApiException(401, "expired")), "HTTP 401 is recognized as an expired login"); passed++;
+        ApiClient.ManagedKey globalKey = ApiClient.managedGlobalKey(Map.of(
+            "id", 73L, "key", "tp-global-fixture", "key_type", "global", "status", "active"));
+        check(globalKey.id() == 73L && globalKey.key().equals("tp-global-fixture"), "dedicated global-key response is accepted"); passed++;
+        try { ApiClient.managedGlobalKey(Map.of("id", 73L, "key", "tp-global-fixture", "key_type", "group", "status", "active")); throw new AssertionError("ordinary key accepted as global"); }
+        catch (IllegalStateException expected) { check(expected.getMessage().contains("类型"), "ordinary keys cannot replace the global key"); passed++; }
+        try { ApiClient.managedGlobalKey(Map.of("id", 73L, "key", "tp-***", "key_type", "global", "status", "active")); throw new AssertionError("masked global key accepted"); }
+        catch (IllegalStateException expected) { check(expected.getMessage().contains("完整"), "masked global credentials are rejected"); passed++; }
         check(BridgeLifecycle.legacyCodexAdapterProcess(new String[]{"--codex-image-bridge"}, "--codex-image-bridge"),
             "obsolete Codex helper process is identified by its exact retired flag"); passed++;
         check(!BridgeLifecycle.legacyCodexAdapterProcess(new String[]{"--codex-image-bridge-worker"}, "--codex-image-bridge"),

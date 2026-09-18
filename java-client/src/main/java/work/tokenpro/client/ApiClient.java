@@ -262,24 +262,43 @@ final class ApiClient {
     }
 
     ManagedKey globalKey(String token) throws Exception {
+        try {
+            return managedGlobalKey(request("/global-key", "GET", null, token));
+        } catch (ApiException failure) {
+            // Servers predating the dedicated credential contract expose the
+            // same key only through the paginated collection. Do not mask any
+            // other server-side failure with a legacy lookup.
+            if (failure.status() != 404) throw failure;
+        }
+        return legacyGlobalKey(token);
+    }
+
+    private ManagedKey legacyGlobalKey(String token) throws Exception {
         for (int page = 1; page <= 100; page++) {
             Map<String, Object> result = request("/keys?page=" + page + "&page_size=100", "GET", null, token);
             List<?> items = result.get("items") instanceof List<?> list ? list : List.of();
             for (Object raw : items) {
                 Map<String, Object> item = Json.object(raw);
                 if (!"global".equalsIgnoreCase(text(item.get("key_type")))) continue;
-                if (!"active".equals(text(item.get("status")))) throw new IllegalStateException("TokenPro 全局 Key 已停用");
                 Long id = integer(item.get("id"));
                 if (id == null) throw new IllegalStateException("TokenPro 全局 Key 缺少编号");
-                Map<String, Object> detail = key(token, id);
-                if (!"global".equalsIgnoreCase(text(detail.get("key_type")))) throw new IllegalStateException("TokenPro 全局 Key 类型异常");
-                String key = text(detail.get("key"));
-                validateKey(key, "全局 Key");
-                return new ManagedKey(id, key);
+                return managedGlobalKey(key(token, id));
             }
             if (items.size() < 100) break;
         }
         throw new IllegalStateException("当前账户还没有全局 Key，请稍后刷新后重试");
+    }
+
+    static ManagedKey managedGlobalKey(Map<String, Object> detail) {
+        if (!"global".equalsIgnoreCase(text(detail.get("key_type"))))
+            throw new IllegalStateException("TokenPro 全局 Key 类型异常");
+        if (!"active".equals(text(detail.get("status"))))
+            throw new IllegalStateException("TokenPro 全局 Key 已停用");
+        Long id = integer(detail.get("id"));
+        if (id == null || id <= 0) throw new IllegalStateException("TokenPro 全局 Key 缺少编号");
+        String key = text(detail.get("key"));
+        validateKey(key, "全局 Key");
+        return new ManagedKey(id, key);
     }
 
     ManagedKey claudeManagedKey(String token, long initialGroupId) throws Exception {
