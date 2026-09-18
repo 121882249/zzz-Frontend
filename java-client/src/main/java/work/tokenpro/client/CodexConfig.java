@@ -171,8 +171,12 @@ final class CodexConfig {
                 .replaceFirst(Matcher.quoteReplacement("model_catalog_json = " + toml(catalog.toString())));
             candidate = ROOT_MODEL_ASSIGNMENT.matcher(candidate)
                 .replaceFirst(Matcher.quoteReplacement("model = " + toml(routedModelId(primary))));
-            candidate = REVIEW_MODEL_ASSIGNMENT.matcher(candidate)
-                .replaceFirst(Matcher.quoteReplacement("review_model = " + toml(routedModelId(primary))));
+            // Do not pin Codex background work (for example automatic thread
+            // titles/reviews) to the model that happened to be primary when
+            // TokenPro was connected. When the user changes the active model
+            // later, an explicit review_model would keep billing the stale
+            // model alongside the selected one.
+            candidate = REVIEW_MODEL_ASSIGNMENT.matcher(candidate).replaceFirst("");
             candidate = candidate.replaceFirst("(\\\"x-tokenpro-group-id\\\"\\s*=\\s*)\\\"[^\\\"]*\\\"",
                 "$1\\\"" + primary.groupId() + "\\\"");
             if (!current.equals(Files.readString(configPath)))
@@ -368,8 +372,7 @@ final class CodexConfig {
         String routedModel = routedModelId(model);
         out.append(START).append('\n');
         out.append("model = ").append(toml(routedModel)).append('\n');
-        out.append("model_provider = \"custom\"\n");
-        out.append("review_model = ").append(toml(routedModel)).append("\n\n");
+        out.append("model_provider = \"custom\"\n\n");
         out.append("model_context_window = 372000\nmodel_auto_compact_token_limit = 372000\n");
         // Keep the TokenPro route on the Responses API without invoking Codex's
         // first-party OpenAI login path. That path replaces the supplied key and

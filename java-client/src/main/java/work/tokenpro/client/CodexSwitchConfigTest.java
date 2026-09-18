@@ -106,8 +106,8 @@ final class CodexSwitchConfigTest {
             config.refreshModelCatalog(List.of(refreshedModel));
             String refreshed = Files.readString(configPath);
             check(refreshed.contains("model = \"" + CodexConfig.routedModelId(refreshedModel) + "\"")
-                && refreshed.contains("review_model = \"" + CodexConfig.routedModelId(refreshedModel) + "\""),
-                "catalog refresh updates the active and review models immediately");
+                && !refreshed.contains("review_model"),
+                "catalog refresh updates the active model without pinning background work to a stale model");
             try (var catalogs = Files.list(store.root().resolve("codex-models"))) {
                 check(catalogs.filter(Files::isRegularFile).count() == 1, "catalog refresh retires the stale TokenPro catalog");
             }
