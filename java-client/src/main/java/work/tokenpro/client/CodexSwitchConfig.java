@@ -6,7 +6,7 @@ import java.util.regex.Pattern;
 
 /** Edits route-owned TOML statements while retaining unrelated configuration verbatim. */
 final class CodexSwitchConfig {
-    private static final Set<String> ROUTE_KEYS = Set.of("model", "model_provider", "review_model", "model_catalog_json",
+    private static final Set<String> ROUTE_KEYS = Set.of("model", "model_provider", "openai_base_url", "review_model", "model_catalog_json",
         "model_reasoning_effort", "model_context_window", "model_auto_compact_token_limit", "service_tier");
     private static final Map<String,String> MARKERS = Map.of(
         "# >>> TokenPro managed >>>", "# <<< TokenPro managed <<<",
@@ -78,12 +78,6 @@ final class CodexSwitchConfig {
             removeProviders.add(activeProvider);
             changes.add("当前路由 " + activeProvider + providerHost(statements, activeProvider).map(host -> " (" + host + ")").orElse(""));
         }
-        if (hasProviderTable(statements, "custom")) {
-            removeProviders.add("custom");
-            String label = "服务商 custom" + providerHost(statements, "custom").map(host -> " (" + host + ")").orElse("");
-            if (changes.stream().noneMatch(value -> value.contains("路由 custom"))) changes.add(label);
-        }
-
         StringBuilder result = new StringBuilder();
         List<String> section = List.of();
         boolean removeSection = false;
@@ -176,12 +170,6 @@ final class CodexSwitchConfig {
         return root;
     }
 
-    private static boolean hasProviderTable(List<Statement> statements, String id) {
-        return statements.stream().anyMatch(statement -> statement.header()
-            && statement.path().size() >= 2 && statement.path().getFirst().equals("model_providers")
-            && statement.path().get(1).equals(id));
-    }
-
     private static Optional<String> providerHost(List<Statement> statements, String id) {
         if (id == null || id.isBlank()) return Optional.empty();
         List<String> section = List.of();
@@ -206,11 +194,6 @@ final class CodexSwitchConfig {
     }
 
     static String merge(String preserved, String generated) {
-        for (Statement statement : parse(preserved)) {
-            if ((!statement.header() && statement.path().equals(List.of("model_providers")))
-                || (statement.path().size() >= 2 && statement.path().subList(0, 2).equals(List.of("model_providers", "custom"))))
-                throw new IllegalStateException("已有非 TokenPro 的 custom 服务商配置，请先更名；原配置未修改");
-        }
         String rootStart = "# >>> tokenpro-codex\n";
         String rootEnd = "# <<< tokenpro-codex\n";
         String body = generated.replace("# >>> TokenPro managed >>>\n", "").replace("# <<< TokenPro managed <<<\n", "");
@@ -219,7 +202,8 @@ final class CodexSwitchConfig {
         String tables = body.substring(generatedTables);
         int preservedTables = firstTable(preserved);
         String result = newline(preserved.substring(0, preservedTables)) + rootStart + newline(root) + rootEnd
-            + newline(preserved.substring(preservedTables)) + "# >>> TokenPro managed >>>\n" + newline(tables) + "# <<< TokenPro managed <<<\n";
+            + newline(preserved.substring(preservedTables));
+        if (!tables.isBlank()) result += "# >>> TokenPro managed >>>\n" + newline(tables) + "# <<< TokenPro managed <<<\n";
         return result;
     }
 

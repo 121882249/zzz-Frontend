@@ -7,8 +7,7 @@ import java.util.*;
 final class CodexChannelSwitch {
     static int run(SecureStore store, Path config, CodexChannel target, List<String> models,
                    ClientReconnect.Action stop, ClientReconnect.Action write,
-                   ClientReconnect.Action start, ClientReconnect.Action repair) throws Exception {
-        CodexHistoryRepair.cancel(config);
+                   ClientReconnect.Action start) throws Exception {
         CodexChannelState.captureOfficialAuth(store, config);
         ChannelSettingsBackup backup = new ChannelSettingsBackup(store, config);
         boolean stopped = false;
@@ -34,7 +33,6 @@ final class CodexChannelSwitch {
             throw new IOException("Codex 渠道切换失败：" + Objects.toString(failure.getMessage(), failure.getClass().getSimpleName())
                 + "；已恢复原配置并重新打开原渠道", failure);
         }
-        try { repair.run(); } catch (Exception ignored) { /* History repair never blocks an active channel. */ }
         return models.size();
     }
 }

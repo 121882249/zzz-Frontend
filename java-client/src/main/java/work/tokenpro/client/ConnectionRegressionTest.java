@@ -128,11 +128,6 @@ final class ConnectionRegressionTest {
             check(Platform.desktopProcessMatches(os, "Codex", codex) && !Platform.desktopProcessMatches(os, "Claude", codex), os + " Codex isolation"); passed++;
             check(Platform.desktopProcessMatches(os, "Claude", claude) && !Platform.desktopProcessMatches(os, "Codex", claude), os + " Claude isolation"); passed++;
         }
-        String provider = CodexConfig.providerConfiguration("custom", "https://tokenpro.work/v1", "fixture", "test", 16L);
-        check(provider.contains("requires_openai_auth = false") && provider.contains("base_url = \"https://tokenpro.work/v1\"")
-            && provider.contains("x-tokenpro-group-id\" = \"16\""), "Codex connects directly with a same-group routing hint"); passed++;
-        try { CodexConfig.providerConfiguration("openai", "https://tokenpro.work/v1", "fixture", "test", null); throw new AssertionError("reserved provider overwritten"); }
-        catch (IllegalArgumentException expected) { passed++; }
         for (Object content : List.of(List.of(), List.of(Map.of("type", "text", "text", "  ")),
             List.of(Map.of("type", "thinking", "thinking", "not a final answer")))) {
             try { ClaudeAdapter.requireResponseContent(Map.of("content",content)); throw new AssertionError("empty buffered response accepted"); }

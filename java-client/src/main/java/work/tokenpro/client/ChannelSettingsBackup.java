@@ -67,9 +67,6 @@ final class ChannelSettingsBackup {
         }
         backup.write("manifest.json", Json.stringify(manifest));
     }
-    void history(List<CodexHistorySettings.Setting> settings) throws Exception {
-        backup.write("thread-settings.json", CodexHistorySettings.encode(settings));
-    }
     void restore() throws Exception {
         for (Path root : trackedRoots) {
             if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) continue;

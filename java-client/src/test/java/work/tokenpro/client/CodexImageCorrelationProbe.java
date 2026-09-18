@@ -84,7 +84,7 @@ public final class CodexImageCorrelationProbe {
                 "http://127.0.0.1:" + server.getAddress().getPort() + "/v1",
                 selections,
                 "fixture-key", "fixture@example.com");
-            try (var rpc = new CodexHistorySettings.Rpc(home)) {
+            try (var rpc = new CodexAppServerRpc(home)) {
                 List<String> threads = new ArrayList<>();
                 for (String marker : List.of("ALPHA", "BETA")) {
                     String model = CodexConfig.routedModelId(selections.get(marker.equals("ALPHA") ? 0 : 1));

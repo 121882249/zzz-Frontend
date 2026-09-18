@@ -663,8 +663,7 @@ final class TokenProFrame extends JFrame {
                     codex.deleteForOfficial();
                     BridgeLifecycle.removeLegacyCodexAdapter(store);
                     store.write("codex-official-mode.txt", "official");
-                }, () -> startAndAwaitProfile("Codex", false),
-                    () -> repairCodexHistory(store, Platform.codexConfig(), "openai", List.of()));
+                }, () -> startAndAwaitProfile("Codex", false));
                 return true;
             }
             protected void done() {
@@ -1012,17 +1011,6 @@ final class TokenProFrame extends JFrame {
         ClientReconnect.awaitStarted(store, app, cli);
     }
 
-    private void repairCodexHistory(SecureStore target, Path config, String provider, List<String> models) {
-        CodexHistoryRepair.schedule(target, config, provider, models,
-            message -> {
-                String cleanup = "";
-                try { cleanup = target.read("codex-cleanup-warning.txt").map(value -> "；" + value).orElse(""); }
-                catch (Exception ignored) {}
-                String summary = message + cleanup;
-                SwingUtilities.invokeLater(() -> status(summary));
-            });
-    }
-
     private void connectionFailure(String app, boolean cli, Throwable wrapped) {
         Throwable failure = wrapped.getCause() == null ? wrapped : wrapped.getCause();
         if (failure instanceof ManualStartRequiredException) {
@@ -1030,13 +1018,6 @@ final class TokenProFrame extends JFrame {
             else updateBridgeStatus();
             status(failure.getMessage());
             TokenProDialogs.info(this, "配置已完成，请手动启动", failure.getMessage());
-            return;
-        }
-        if (failure instanceof ChannelSwitchCompletedWarningException) {
-            if (cli) updateCommandControls(app.toLowerCase(Locale.ROOT), true);
-            else updateBridgeStatus();
-            status(failure.getMessage());
-            TokenProDialogs.info(this, "渠道已切换，部分旧对话未同步", failure.getMessage());
             return;
         }
         error(failure);
@@ -1064,7 +1045,7 @@ final class TokenProFrame extends JFrame {
                         new CodexConfig(target, config).deleteForOfficial();
                         BridgeLifecycle.removeLegacyCodexAdapter(target);
                         target.write("codex-official-mode.txt", "official");
-                    }, start, () -> repairCodexHistory(target, config, "openai", List.of()));
+                    }, start);
                 } else {
                     ChannelSettingsBackup.switchClaude(target, cli, stop, () -> {
                         if (!cli) ClaudeDesktopConfig.restoreOfficial(target);
@@ -1177,7 +1158,6 @@ final class TokenProFrame extends JFrame {
         accountId = string(user.get("id"));
         password.setText("");
         status("就绪");
-        try { if (!emailValue.isBlank()) codex.updateActor(emailValue); } catch (Exception ignored) {}
         refreshSupportedModelCounts();
         if (loadSubscriptions) refreshSubscriptions();
     }
@@ -1894,7 +1874,7 @@ final class TokenProFrame extends JFrame {
         button.setFocusPainted(false);
         button.setIcon(resourceIconContained("WebCog.png", 15, 15, true));
         button.setIconTextGap(7);
-        button.setToolTipText("选择模型或切换官方配置，切换时自动处理旧对话设置");
+        button.setToolTipText("选择模型或切换官方配置；不会扫描或改写历史对话");
         button.setHorizontalAlignment(SwingConstants.CENTER);
         button.setBorder(new EmptyBorder(0, 12, 0, 12));
         sizeComponent(button, 112, 42);
@@ -2158,8 +2138,7 @@ final class TokenProFrame extends JFrame {
                         config.apply("https://tokenpro.work/v1", selected, key.key(), accountLabel, relayPlanToApply);
                         saveCodexSelection(target, selected, key, owner);
                         if (cli) CliLauncher.install(store, command);
-                    }, () -> startAndAwaitProfile(app, cli), () -> repairCodexHistory(target, configPath,
-                        "custom", selected.stream().map(CodexConfig::routedModelId).toList()));
+                    }, () -> startAndAwaitProfile(app, cli));
                     return selected.size();
                 }
                 ChannelSettingsBackup.switchClaude(target, cli, () -> {
@@ -2182,7 +2161,7 @@ final class TokenProFrame extends JFrame {
                     else updateCommandControls(command, true);
                     status(label + " 已启动，已配置 " + count + " 个模型；费用以 TokenPro 用量记录为准");
                     if (app.equals("Codex") && !cli) TokenProDialogs.info(TokenProFrame.this, "连接完成",
-                        "TokenPro 配置已启用，客户端已重启。\n旧对话修复已在后台启动，结束后报告结果；聊天正文保持不变。\n实际网络连接以发送请求后的结果为准。");
+                        "TokenPro 配置已启用，客户端已重启。\n已采用 Codex 内置渠道切换，不扫描或改写历史对话。\n实际网络连接以发送请求后的结果为准。");
                     lastAccountRefresh = 0; refreshAccountSilently();
                 } catch (Exception e) { connectionFailure(app, cli, e); }
             }

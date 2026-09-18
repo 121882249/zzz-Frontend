@@ -5,7 +5,9 @@ import java.util.*;
 
 final class CodexSwitchConfigTest {
     private static final String OFFICIAL_AUTH = "{\"auth_mode\":\"chatgpt\",\"OPENAI_API_KEY\":null,\"tokens\":{\"refresh_token\":\"fixture-refresh\"}}";
-    private static final String ROUTE = "# >>> TokenPro managed >>>\nmodel = \"fixture-model\"\nmodel_provider = \"custom\"\n"
+    private static final String ROUTE = "# >>> TokenPro managed >>>\nmodel = \"fixture-model\"\nmodel_provider = \"openai\"\n"
+        + "openai_base_url = \"https://tokenpro.work/v1\"\n# <<< TokenPro managed <<<\n";
+    private static final String LEGACY_ROUTE = "# >>> TokenPro managed >>>\nmodel = \"fixture-model\"\nmodel_provider = \"custom\"\n"
         + "[model_providers.custom]\nbase_url = \"https://tokenpro.work/v1\"\nexperimental_bearer_token = \"fixture-route-key\"\n# <<< TokenPro managed <<<\n";
     private static final String SETTINGS = "approval_policy = \"on-request\"\nsandbox_mode = \"workspace-write\"\n"
         + "instructions = \"\"\"Keep this text:\n[windows]\n# >>> TokenPro managed >>>\n\"\"\"\n"
@@ -32,13 +34,13 @@ final class CodexSwitchConfigTest {
         check(CodexSwitchConfig.withoutAdministrator("windows.sandbox = 'elevated'\n[features]\na = true\n").equals("windows.sandbox = \"unelevated\"\n[features]\na = true\n"), "dotted sandbox assignment avoids duplicate table"); passed++;
         check(CodexSwitchConfig.withoutAdministrator("[\"windows\"] # comment\n'sandbox' = 'elevated'\n").equals("[\"windows\"] # comment\nsandbox = \"unelevated\"\n"), "quoted keys and comments supported"); passed++;
         check(CodexSwitchConfig.clean("\uFEFFapproval_policy = 'on-request'\nmodel='old'\n").equals("\uFEFFapproval_policy = 'on-request'\n"), "UTF-8 BOM preserved with user settings"); passed++;
-        String oldWithWindowsInside = ROUTE.replace("# <<< TokenPro managed <<<", "[windows]\nsandbox='elevated'\n# <<< TokenPro managed <<<");
+        String oldWithWindowsInside = LEGACY_ROUTE.replace("# <<< TokenPro managed <<<", "[windows]\nsandbox='elevated'\n# <<< TokenPro managed <<<");
         check(CodexSwitchConfig.clean(oldWithWindowsInside).equals("[windows]\nsandbox='elevated'\n"), "user Windows settings inside legacy markers survive migration"); passed++;
         check(CodexSwitchConfig.clean("model_provider='custom'\n[model_providers.custom]\nbase_url='https://tokenpro.work/v1'\nexperimental_bearer_token='old-key'\n[windows]\nsandbox='elevated'\n").equals("[windows]\nsandbox='elevated'\n"), "unmarked legacy TokenPro route removed"); passed++;
         String foreign = "[model_providers.custom]\nbase_url='https://other.example/v1'\n";
         check(CodexSwitchConfig.clean(foreign).equals(foreign), "unrelated provider preserved during restore"); passed++;
-        try { CodexSwitchConfig.merge(foreign, ROUTE); throw new AssertionError("foreign provider overwritten"); }
-        catch (IllegalStateException expected) { passed++; }
+        check(CodexSwitchConfig.merge(foreign, ROUTE).contains("https://other.example/v1"),
+            "built-in OpenAI routing no longer conflicts with an inactive user custom provider"); passed++;
         String foreignRoute = "openai_base_url='http://127.0.0.1:51427/v1'\nmodel='alias'\nmodel_provider='custom'\n"
             + "approval_policy='on-request'\n[model_providers.custom]\nbase_url='https://other.example/v1'\nexperimental_bearer_token='secret'\n"
             + "[model_providers.keep]\nbase_url='https://keep.example/v1'\n[projects.demo]\ntrust_level='trusted'\n";
@@ -47,8 +49,8 @@ final class CodexSwitchConfigTest {
             && !cleanup.cleaned().contains("experimental_bearer_token"), "confirmed cleanup removes the active foreign relay and credential"); passed++;
         check(cleanup.cleaned().contains("approval_policy='on-request'") && cleanup.cleaned().contains("keep.example")
             && cleanup.cleaned().contains("trust_level='trusted'"), "foreign cleanup preserves permissions, inactive providers and projects"); passed++;
-        check(cleanup.changes().stream().anyMatch(value -> value.contains("custom"))
-            && cleanup.changes().stream().anyMatch(value -> value.contains("127.0.0.1")), "foreign cleanup reports routes without exposing credentials"); passed++;
+        check(cleanup.changes().stream().anyMatch(value -> value.contains("custom")),
+            "foreign cleanup reports the replaced provider without exposing credentials"); passed++;
         String namedRoutes = "model_provider='active'\n[model_providers.active]\nbase_url='https://active.example/v1'\n"
             + "[model_providers.inactive]\nbase_url='https://inactive.example/v1'\n";
         String namedClean = CodexSwitchConfig.foreignRelayCleanup(namedRoutes).orElseThrow().cleaned();
@@ -89,6 +91,11 @@ final class CodexSwitchConfigTest {
             CodexConfig config = new CodexConfig(store, configPath);
             config.apply("https://tokenpro.work/v1", List.of(new PricedModel("gpt-5.4", "openai", "fixture", 1)), "fixture-route-key", "fixture@example.test");
             String applied = Files.readString(configPath);
+            check(applied.contains("model_provider = \"openai\"")
+                && applied.contains("openai_base_url = \"https://tokenpro.work/v1\"")
+                && !applied.contains("[model_providers.custom]")
+                && !applied.contains("experimental_bearer_token"),
+                "TokenPro uses Codex's built-in OpenAI provider without a persistent custom alias");
             check(Files.readString(auth).contains("\"auth_mode\":\"apikey\""), "TokenPro activation installs API-key auth");
             check(store.read(CodexChannelState.OFFICIAL_AUTH_FILE).orElseThrow().equals(OFFICIAL_AUTH),
                 "official OAuth login has an independent private copy");
@@ -114,7 +121,7 @@ final class CodexSwitchConfigTest {
             config.deleteForOfficial();
             String restored = Files.readString(configPath);
             check(!CodexConfig.tokenProActive(configPath), "official route is not reported as TokenPro active");
-            check(!restored.contains("fixture-route-key") && !restored.contains("model_provider = \"custom\""), "actual official restore removes TokenPro authentication and route");
+            check(!restored.contains("tokenpro.work") && !restored.contains("model_provider = \"openai\""), "actual official restore removes TokenPro endpoint and route");
             check(restored.contains("sandbox_private_desktop = true") && restored.contains("trust_level = \"trusted\""), "official restore retains Windows and project state");
             check(Files.readString(auth).equals(OFFICIAL_AUTH), "official OAuth login is restored from TokenPro's private copy");
             check(Files.readString(configPath.resolveSibling("models_cache.json")).contains("1970-01-01T00:00:00Z"),

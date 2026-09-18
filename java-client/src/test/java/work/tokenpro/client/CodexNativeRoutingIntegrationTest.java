@@ -80,8 +80,9 @@ public final class CodexNativeRoutingIntegrationTest {
             Files.writeString(fallbackCatalog, Json.stringify(Map.of("models", List.of(fallback))));
             Files.writeString(fallbackHome.resolve("config.toml"), "model=" + Json.stringify(chatRoute)
                 + "\nmodel_provider=\"custom\"\nmodel_catalog_json=" + Json.stringify(fallbackCatalog.toString()) + "\n"
-                + CodexConfig.providerConfiguration("custom", "http://127.0.0.1:" + server.getAddress().getPort() + "/v1", "fixture-key", "fixture@example.com", null));
-            try (var rpc = new CodexHistorySettings.Rpc(fallbackHome)) {
+                + "[model_providers.custom]\nname=\"fixture\"\nbase_url=\"http://127.0.0.1:" + server.getAddress().getPort()
+                + "/v1\"\nwire_api=\"responses\"\nrequires_openai_auth=false\nexperimental_bearer_token=\"fixture-key\"\nsupports_websockets=false\n");
+            try (var rpc = new CodexAppServerRpc(fallbackHome)) {
                 var catalog = rpc.call("model/list", Map.of());
                 require(ClaudeAdapter.list(catalog.get("data")).stream().map(Json::object).anyMatch(row -> chatRoute.equals(row.get("model"))),
                     "offline fallback catalog is not accepted by installed Codex");
@@ -91,7 +92,7 @@ public final class CodexNativeRoutingIntegrationTest {
                 "http://127.0.0.1:" + server.getAddress().getPort() + "/v1",
                 imageOnly ? List.of(new PricedModel("gpt-image-2.5-flare", "openai", "Images", 65)) : List.of(new PricedModel("gpt-6-astra", "openai", "Chat", 16), new PricedModel("gpt-image-2.5-flare", "openai", "Images", 65)),
                 "fixture-key", "fixture@example.com");
-            try (var rpc = new CodexHistorySettings.Rpc(home)) {
+            try (var rpc = new CodexAppServerRpc(home)) {
                 var result = rpc.call("thread/start", Map.of("cwd", root.toString(), "approvalPolicy", "never", "sandbox", "read-only"));
                 String id = Objects.toString(Json.object(result.get("thread")).get("id"));
                 rpc.call("turn/start", Map.of("threadId", id, "input", List.of(Map.of("type", "text", "text", "Generate the test image"))));

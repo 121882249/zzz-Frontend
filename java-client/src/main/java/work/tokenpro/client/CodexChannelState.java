@@ -121,8 +121,10 @@ final class CodexChannelState {
         } else {
             if (!target.modelProvider().equals(detected.modelProvider()))
                 problems.add("model_provider 应为 " + target.modelProvider() + "，实际为 " + label(detected.modelProvider()));
-            if (!sameUrl(target.baseUrl(), detected.providerBaseUrl()))
-                problems.add("活动服务商 base_url 与目标渠道不一致");
+            String activeUrl = "openai".equals(target.modelProvider())
+                ? detected.openAiBaseUrl() : detected.providerBaseUrl();
+            if (!sameUrl(target.baseUrl(), activeUrl))
+                problems.add("活动渠道 base_url 与目标渠道不一致");
             if (!detected.markerOwners().contains(target.markerOwner()))
                 problems.add(target.name() + " 渠道标记已被其他程序覆盖");
         }

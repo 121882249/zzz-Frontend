@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 public final class Main {
-    public static final String VERSION = "1.3.17";
+    public static final String VERSION = "1.3.18";
     private Main() {}
 
     public static void main(String[] args) throws Exception {
@@ -96,7 +96,7 @@ public final class Main {
         CodexConfig.ForeignRelayPlan plan = CodexConfig.foreignRelayPlan(Platform.codexConfig()).orElse(null);
         CodexChannelSwitch.run(store, Platform.codexConfig(), CodexChannel.tokenPro(),
             selected.stream().map(CodexConfig::routedModelId).toList(), () -> {},
-            () -> config.apply("https://tokenpro.work/v1", selected, key.key(), email, plan), () -> {}, () -> {});
+            () -> config.apply("https://tokenpro.work/v1", selected, key.key(), email, plan), () -> {});
         System.out.println("Codex TokenPro route repaired with " + selected.size() + " models.");
     }
 }

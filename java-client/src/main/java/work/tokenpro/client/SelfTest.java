@@ -12,7 +12,6 @@ final class SelfTest {
         String manifestVersion = Main.class.getPackage().getImplementationVersion();
         check(manifestVersion == null || Main.VERSION.equals(manifestVersion), "JAR manifest version matches the application version"); passed++;
         passed += ChannelSwitchTest.run();
-        passed += CodexHistoryRepairTest.run();
         Map<String, Object> value = Json.object(Json.parse("{\"name\":\"TokenPro\",\"items\":[1,true,null],\"n\":12}"));
         check("TokenPro".equals(value.get("name")), "JSON string"); passed++;
         check(value.get("items") instanceof List<?> list && list.size() == 3, "JSON array"); passed++;
@@ -68,32 +67,6 @@ final class SelfTest {
         String restoredConfig = CodexConfig.restoreRootOverrides(liveConfig, config);
         check(restoredConfig.startsWith("model = \"old\"\nmodel_provider = \"openai\"\n"), "official root model settings restored"); passed++;
         check(restoredConfig.contains("apps = false") && restoredConfig.contains("[new_setting]"), "restore preserves newer Codex settings"); passed++;
-        String compatibleOfficial = CodexConfig.restoreWithHistoryCompatibility(config);
-        check(compatibleOfficial.contains("model_provider = \"openai\"") && compatibleOfficial.contains("[model_providers.custom]"), "official defaults retain TokenPro history provider"); passed++;
-        check(!compatibleOfficial.contains("model_catalog_json") && compatibleOfficial.contains("requires_openai_auth = true"), "official history alias uses native OpenAI catalog and login"); passed++;
-        check(compatibleOfficial.contains("apps = true") && !compatibleOfficial.contains("experimental_bearer_token"), "official restore preserves settings without TokenPro credentials"); passed++;
-        String staleTokenProBackup = "model = \"relay-model\"\nmodel_provider = \"custom\"\n[features]\napps = true\n";
-        String repairedOfficial = CodexConfig.restoreWithHistoryCompatibility(staleTokenProBackup);
-        check(!repairedOfficial.contains("model_provider = \"custom\"") && repairedOfficial.contains("[model_providers.custom]"), "stale TokenPro backup falls back to official provider"); passed++;
-        String otherRelayHistory = CodexConfig.restoreWithHistoryCompatibility(config, Set.of("other-relay", "openai", "../unsafe"));
-        check(otherRelayHistory.contains("[model_providers.other-relay]") && !otherRelayHistory.contains("[model_providers.openai]"), "missing third-party history providers receive safe official aliases"); passed++;
-        String restoredThirdPartyDefault = CodexConfig.restoreWithHistoryCompatibility("model = \"relay-model\"\nmodel_provider = \"other-relay\"\n[features]\napps = true\n", Set.of("other-relay"));
-        check(restoredThirdPartyDefault.startsWith("[features]") && restoredThirdPartyDefault.contains("[model_providers.other-relay]"), "official restore removes a third-party default but preserves its conversation alias"); passed++;
-        String upgradedWithoutBackup = CodexConfig.restoreContent(sample, Optional.empty(), true);
-        check(upgradedWithoutBackup.equals("before\nafter\n\n# >>> TokenPro history provider >>>\n[model_providers.custom]\nname = \"OpenAI\"\nwire_api = \"responses\"\nrequires_openai_auth = true\nsupports_websockets = true\nsupports_standalone_web_search = true\n# <<< TokenPro history provider <<<\n"), "desktop restore without backup keeps old TokenPro conversations resolvable"); passed++;
-        check(CodexConfig.restoreContent(sample, Optional.empty(), false).equals("before\nafter\n"), "CLI restore without backup remains isolated from desktop compatibility"); passed++;
-        Path providerHistory = Files.createTempDirectory("tokenpro-provider-history-");
-        Path providerSession = providerHistory.resolve("2026/09/13/rollout.jsonl");
-        Files.createDirectories(providerSession.getParent());
-        Files.writeString(providerSession, "{\"session_meta\":{\"model_provider\":\"other-relay\"}}\n{\"model_provider\":\"openai\"}\n{\"model_provider\":\"unsafe/id\"}\n");
-        Set<String> providerIds = CodexConfig.historicalProviderIds(providerHistory);
-        check(providerIds.equals(new LinkedHashSet<>(List.of("custom", "other-relay"))), "Codex history scanner keeps safe non-built-in provider ids"); passed++;
-        String tokenProRelayAlias = CodexConfig.providerConfiguration("other-relay", "https://tokenpro.work/v1", "fixture", "user@example.com", null);
-        check(tokenProRelayAlias.contains("[model_providers.other-relay]") && tokenProRelayAlias.contains("base_url = \"https://tokenpro.work/v1\"") && tokenProRelayAlias.contains("requires_openai_auth = false"), "third-party history providers can follow the active TokenPro route"); passed++;
-        Files.delete(providerSession); Files.delete(providerSession.getParent()); Files.delete(providerSession.getParent().getParent()); Files.delete(providerSession.getParent().getParent().getParent()); Files.delete(providerHistory);
-        String userCustom = "model_provider = \"custom\"\n[model_providers.custom]\nname = \"Private\"\nbase_url = \"https://example.test/v1\"\n";
-        String preservedCustom = CodexConfig.restoreWithHistoryCompatibility(userCustom);
-        check(preservedCustom.indexOf("[model_providers.custom]") == preservedCustom.lastIndexOf("[model_providers.custom]") && preservedCustom.contains("name = \"Private\""), "existing custom provider is not duplicated"); passed++;
         check("https://tokenpro.work/v1".equals(CodexConfig.providerBaseUrl("https://tokenpro.work/v1")), "Codex provider keeps v1 route"); passed++;
         check("tp-g16-Z3B0LTUuNi1zb2w".equals(CodexConfig.routedModelId(
             new PricedModel("gpt-5.6-sol", "openai", "GPT", 16))), "direct Codex model slug pins its exact group"); passed++;
@@ -145,12 +118,6 @@ final class SelfTest {
             "token", 0.000001d, null, List.of(), false, 0d, "", "");
         check("openai".equals(compositeGroupModel.platform()) && "composite".equals(compositeGroupModel.groupPlatform()),
             "model routing platform and visual group platform remain independent"); passed++;
-        String nativeProvider = CodexConfig.providerConfiguration("custom", "https://tokenpro.work/v1", "fixture", "user@example.com", null);
-        check(!nativeProvider.contains("x-tokenpro-image-mode") && !nativeProvider.contains("x-tokenpro-group-id") && !nativeProvider.contains("x-tokenpro-image-route"),
-            "shared provider leaves native delivery to the authenticated group policy"); passed++;
-        String managedActor = "# >>> TokenPro managed >>>\n[model_providers.custom]\nname = \"Codex\"\nhttp_headers = { \"x-openai-actor-authorization\" = \"Codex\" }\n# <<< TokenPro managed <<<\n";
-        String emailActor = CodexConfig.withActor(managedActor, "user@example.com");
-        check(emailActor.contains("name = \"user@example.com\"") && emailActor.contains("\"x-openai-actor-authorization\" = \"user@example.com\""), "existing Codex actor migrates to account email"); passed++;
         check(Platform.dataDirectory().endsWith("TokenPro"), "platform data directory"); passed++;
         Map<String, String> windowsEnvironment = Map.of(
             "LOCALAPPDATA", "C:\\Users\\Test\\AppData\\Local",

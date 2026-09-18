@@ -34,7 +34,7 @@ final class ChannelSwitchTest {
         try {
             CodexChannelSwitch.run(store, config, CodexChannel.tokenPro(), List.of("model"), () -> steps.add("stop"), () -> {
                 steps.add("write"); Files.writeString(config, "partial"); throw new Exception("injected write failure");
-            }, () -> steps.add("start"), () -> steps.add("repair"));
+            }, () -> steps.add("start"));
             throw new AssertionError("failure was hidden");
         } catch (Exception expected) {
             require(steps.equals(List.of("stop", "write", "stop", "start")), "failed write restores and restarts the previous channel");
@@ -43,19 +43,19 @@ final class ChannelSwitchTest {
         }
         steps.clear();
         CodexChannelSwitch.run(store, config, CodexChannel.tokenPro(), List.of("model"), () -> steps.add("stop"),
-            () -> { steps.add("write"); writeCustom(config, "model"); }, () -> steps.add("start"), () -> steps.add("repair"));
-        require(steps.equals(List.of("stop", "write", "start", "repair")), "restart precedes background repair");
+            () -> { steps.add("write"); writeOpenAi(config, "model"); }, () -> steps.add("start"));
+        require(steps.equals(List.of("stop", "write", "start")), "switch stops after the verified restart without history maintenance");
         String activeConfig = Files.readString(config);
-        require(CodexChannelState.detect(config).channel().equals("named-provider:custom:tokenpro.work"),
-            "named provider state is detected from provider endpoint and API-key auth");
+        require(CodexChannelState.detect(config).channel().equals("override-openai:tokenpro.work"),
+            "built-in OpenAI provider state is detected from root endpoint and API-key auth");
         steps.clear();
         int[] overwritingStarts = {0};
         try {
             CodexChannelSwitch.run(store, config, CodexChannel.tokenPro(), List.of("model"), () -> steps.add("stop"),
-                () -> { steps.add("write"); writeCustom(config, "replacement-model"); }, () -> {
+                () -> { steps.add("write"); writeOpenAi(config, "replacement-model"); }, () -> {
                     steps.add("start");
                     if (overwritingStarts[0]++ == 0) Files.writeString(config, "model_provider='openai'\n");
-                }, () -> steps.add("repair"));
+                });
             throw new AssertionError("post-start overwrite was hidden");
         } catch (IOException expected) {
             require(expected.getMessage().contains("已恢复原配置"), "post-start overwrite reports a completed rollback");
@@ -67,8 +67,8 @@ final class ChannelSwitchTest {
         int[] starts = {0};
         try {
             CodexChannelSwitch.run(store, config, CodexChannel.tokenPro(), List.of("model"), () -> steps.add("stop"),
-                () -> { steps.add("write"); writeCustom(config, "replacement-model"); },
-                () -> { steps.add("start"); if (starts[0]++ == 0) throw new IOException("launcher unavailable"); }, () -> steps.add("repair"));
+                () -> { steps.add("write"); writeOpenAi(config, "replacement-model"); },
+                () -> { steps.add("start"); if (starts[0]++ == 0) throw new IOException("launcher unavailable"); });
             throw new AssertionError("startup failure was hidden");
         } catch (IOException expected) {
             require(expected.getMessage().contains("已恢复原配置"), "startup failure reports completed rollback");
@@ -79,7 +79,7 @@ final class ChannelSwitchTest {
         try {
             CodexChannelSwitch.run(store, config, CodexChannel.tokenPro(), List.of("model"),
                 () -> { steps.add("stop"); throw new IOException("busy"); }, () -> steps.add("write"),
-                () -> steps.add("start"), () -> steps.add("repair"));
+                () -> steps.add("start"));
             throw new AssertionError("stop failure was hidden");
         } catch (IOException expected) {
             require(expected.getMessage().contains("配置未修改") && steps.equals(List.of("stop")),
@@ -96,20 +96,16 @@ final class ChannelSwitchTest {
         }
         require(steps.equals(List.of("stop", "write", "start")), "Claude startup failure does not run rollback");
         require(store.read(ClaudeBridgeConfig.FILE).orElse("").equals("new channel"), "Claude channel survives startup failure");
-        List<CodexHistorySettings.Setting> settings = List.of(new CodexHistorySettings.Setting("synthetic", "openai", "gpt"));
-        require(CodexHistorySettings.decode(CodexHistorySettings.encode(settings)).equals(settings), "association snapshot roundtrip");
-        ChannelSwitchCompletedWarningException warning = new ChannelSwitchCompletedWarningException(2, new IOException("stale thread"));
-        require(warning.getMessage().contains("渠道配置已生效") && warning.getMessage().contains("不会回滚") && warning.getMessage().contains("2 个旧对话"), "partial history migration is a completed switch warning");
         require(OfficialConnectionCheck.proxy(Map.of("HTTPS_PROXY", "http://127.0.0.1:9999")).type() == Proxy.Type.HTTP, "HTTP proxy recognized");
         require(OfficialConnectionCheck.proxy(Map.of("ALL_PROXY", "socks5://127.0.0.1:9999")).type() == Proxy.Type.SOCKS, "SOCKS proxy recognized");
         try { OfficialConnectionCheck.proxy(Map.of("HTTPS_PROXY", "invalid")); throw new AssertionError("bad proxy accepted"); }
         catch (java.io.IOException expected) {}
         require(ClientReconnect.managedCliMatches("codex", "/bin/codex", List.of("-c", "tokenpro_profile=/scope/catalog.json"), "/scope/catalog.json"), "official CLI profile remains identifiable");
-        return 24;
+        return 22;
     }
-    private static void writeCustom(Path config, String model) throws Exception {
-        Files.writeString(config, "# >>> tokenpro-codex\nmodel=\"" + model + "\"\nmodel_provider=\"custom\"\n"
-            + "# <<< tokenpro-codex\n[model_providers.custom]\nbase_url=\"https://tokenpro.work/v1\"\n");
+    private static void writeOpenAi(Path config, String model) throws Exception {
+        Files.writeString(config, "# >>> tokenpro-codex\nmodel=\"" + model + "\"\nmodel_provider=\"openai\"\n"
+            + "openai_base_url=\"https://tokenpro.work/v1\"\n# <<< tokenpro-codex\n");
         Files.writeString(config.resolveSibling("auth.json"), "{\"auth_mode\":\"apikey\",\"OPENAI_API_KEY\":\"fixture-key\"}");
         Files.writeString(config.resolveSibling("models_cache.json"), "{\"models\":[{\"slug\":\"" + model + "\"}]}");
     }
