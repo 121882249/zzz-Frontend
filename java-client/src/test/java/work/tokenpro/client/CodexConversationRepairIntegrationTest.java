@@ -27,8 +27,8 @@ public final class CodexConversationRepairIntegrationTest {
             Files.writeString(archivedSession, archivedInitial);
 
             CodexConversationRepair.Result result = CodexConversationRepair.repair(root, "openai", "gpt-5.6-sol");
-            require(result.discovered() == 2 && result.repaired() == 1 && result.visibleRepaired() == 1
-                && result.archivedDiscovered() == 1 && result.failed() == 0,
+            require(result.discovered() == 1 && result.repaired() == 1 && result.visibleRepaired() == 1
+                && result.archivedDiscovered() == 0 && result.failed() == 0,
                 "legacy provider was not repaired: " + result);
             try (CodexAppServerRpc rpc = new CodexAppServerRpc(root)) {
                 Map<String,Object> resumed = rpc.call("thread/resume", Map.of("threadId", id, "excludeTurns", true));
@@ -53,7 +53,7 @@ public final class CodexConversationRepairIntegrationTest {
                 experimental_bearer_token="fixture-key"
                 """);
             CodexConversationRepair.Result custom = CodexConversationRepair.repair(root, "custom", "gpt-5.5");
-            require(custom.repaired() == 1 && custom.failed() == 0 && custom.archivedDiscovered() == 1,
+            require(custom.repaired() == 1 && custom.failed() == 0 && custom.archivedDiscovered() == 0,
                 "reverse custom repair failed: " + custom);
             try (CodexAppServerRpc rpc = new CodexAppServerRpc(root)) {
                 Map<String,Object> resumed = rpc.call("thread/resume", Map.of("threadId", id, "excludeTurns", true));

@@ -708,12 +708,10 @@ final class TokenProFrame extends JFrame {
                     try {
                         CodexConversationRepair.Result result = get();
                         updateCodexStatus();
-                        status("历史对话修复完成：成功 " + result.visibleRepaired() + "，跳过归档 "
-                            + result.archivedDiscovered() + "、内部 " + result.internalDiscovered() + "，失败 " + result.failed()
+                        status("当前对话修复完成：成功 " + result.visibleRepaired() + "，失败 " + result.failed()
                             + (result.failureReasons().isEmpty() ? "" : "（" + result.failureReasons() + "）"));
-                        String detail = "已修复 " + result.visibleRepaired() + " 个，跳过归档 "
-                            + result.archivedDiscovered() + " 个、内部任务 " + result.internalDiscovered()
-                            + " 个，失败 " + result.failed() + " 个"
+                        String detail = "当前对话修复成功 " + result.visibleRepaired() + " 个，失败 "
+                            + result.failed() + " 个"
                             + (result.failureReasons().isEmpty() ? "。" : "，原因：" + result.failureReasons().keySet().iterator().next() + "。");
                         TokenProDialogs.info(TokenProFrame.this, "修复完成", detail);
                     } catch (Exception error) {

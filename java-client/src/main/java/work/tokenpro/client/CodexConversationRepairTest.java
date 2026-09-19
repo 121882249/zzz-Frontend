@@ -19,7 +19,8 @@ final class CodexConversationRepairTest {
                 String id = Objects.toString(params.get("threadId"), "");
                 if (method.equals("thread/list")) {
                     boolean archived = Boolean.TRUE.equals(params.get("archived"));
-                    List<String> ids = providers.keySet().stream().filter(value -> archivedIds.contains(value) == archived).toList();
+                    if (archived) throw new AssertionError("archived conversations must not be listed");
+                    List<String> ids = List.of("already", "custom", "broken");
                     return Map.of("data", ids.stream().map(value -> {
                         Map<String,Object> row = new LinkedHashMap<>();
                         row.put("id", value); row.put("modelProvider", providers.get(value));
@@ -49,19 +50,19 @@ final class CodexConversationRepairTest {
             public void close() { closed.incrementAndGet(); }
         };
         CodexConversationRepair.Result result = CodexConversationRepair.repair(factory, "openai", "tp-g57-fixture");
-        require(result.discovered() == 6 && result.visibleDiscovered() == 3 && result.alreadyTarget() == 1
+        require(result.discovered() == 3 && result.visibleDiscovered() == 3 && result.alreadyTarget() == 1
             && result.attempted() == 2, "only active visible non-target conversations are selected");
         require(result.repaired() == 1 && result.failed() == 1 && result.failedThreadIds().equals(List.of("broken")),
             "individual failures do not block other conversations");
         require(result.visibleRepaired() == 1 && result.internalRepaired() == 0
-            && result.archivedDiscovered() == 2 && result.internalDiscovered() == 1,
-            "archived conversations and internal tasks are reported as skipped");
+            && result.archivedDiscovered() == 0 && result.internalDiscovered() == 0,
+            "archived conversations and internal tasks are not scanned");
         require("openai".equals(providers.get("custom")) && "tokenpro_direct".equals(providers.get("direct"))
             && "custom".equals(providers.get("guardian"))
             && "tp-g57-fixture".equals(models.get("custom")), "provider and current route model are persisted");
         require(archivedIds.equals(Set.of("direct", "uppercase")), "archived conversations keep their original state");
         require("openai".equals(result.provider()), "selected target provider is reported");
-        require(closed.get() == 5, "batch app-server sessions are reused and closed");
+        require(closed.get() == 3, "batch app-server sessions are reused and closed");
         return 6;
     }
 

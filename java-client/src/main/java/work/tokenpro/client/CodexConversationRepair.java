@@ -14,8 +14,7 @@ import java.util.regex.Pattern;
 /** Explicit user-triggered migration of all Codex threads to the selected active provider. */
 final class CodexConversationRepair {
     private static final List<String> SOURCE_KINDS = List.of(
-        "cli", "vscode", "exec", "appServer", "subAgent", "subAgentReview", "subAgentCompact",
-        "subAgentThreadSpawn", "subAgentOther", "unknown");
+        "cli", "vscode", "exec", "appServer", "unknown");
 
     interface Rpc extends AutoCloseable {
         Map<String,Object> call(String method, Map<String,Object> params) throws Exception;
@@ -28,8 +27,7 @@ final class CodexConversationRepair {
                   int internalRepaired, int failed, List<String> failedThreadIds,
                   Map<String,Integer> failureReasons, String provider, String model) {
         String summary() {
-            return "修复 " + visibleRepaired + " 个，跳过归档 " + archivedDiscovered
-                + " 个、内部任务 " + internalDiscovered + " 个，失败 " + failed + " 个。";
+            return "当前对话修复成功 " + visibleRepaired + " 个，失败 " + failed + " 个。";
         }
     }
 
@@ -139,7 +137,7 @@ final class CodexConversationRepair {
 
     private static LinkedHashMap<String,ThreadRecord> listThreads(Factory factory) throws Exception {
         LinkedHashMap<String,ThreadRecord> result = new LinkedHashMap<>();
-        for (boolean archived : List.of(false, true)) {
+        for (boolean archived : List.of(false)) {
             try (Rpc rpc = factory.open()) {
                 String cursor = null;
                 Set<String> seenCursors = new HashSet<>();
