@@ -3,7 +3,7 @@ package work.tokenpro.client;
 import java.util.*;
 
 final class ModelCapabilitiesTest {
-    static int run() {
+    static int run() throws Exception {
         int passed = 0;
         PricedModel opus = new PricedModel("claude-opus-5", "anthropic", "Group A", 10);
         PricedModel opusOther = new PricedModel("claude-opus-5", "anthropic", "Group B", 11);
@@ -49,6 +49,33 @@ final class ModelCapabilitiesTest {
         Map<String, Object> prepared = ClaudeAdapter.prepareHistory(history, route);
         List<?> content = (List<?>) Json.object(((List<?>) prepared.get("messages")).getFirst()).get("content");
         check("opaque".equals(Json.object(content.getFirst()).get("signature")), "migrated native alias retains existing thinking signatures"); passed++;
+        java.nio.file.Path historyRoot = java.nio.file.Files.createTempDirectory("tokenpro-claude-history-");
+        try {
+            SecureStore historyStore = new SecureStore(historyRoot);
+            PricedModel previous = new PricedModel("gemini-old", "gemini", "Old", 20);
+            PricedModel current = new PricedModel("gpt-current", "openai", "Current", 21);
+            ClaudeBridgeConfig oldConfig = ClaudeBridgeConfig.createWithHistory(historyStore, "1", "unused", key, List.of(previous));
+            oldConfig.save(historyStore);
+            ClaudeBridgeConfig next = ClaudeBridgeConfig.createWithHistory(historyStore, "1", "unused", key, List.of(current));
+            check(next.routes().size() == 1 && next.compatibilityRoutes().size() == 1
+                && next.route(oldConfig.routes().getFirst().alias()) != null,
+                "old Claude conversation route remains hidden but callable"); passed++;
+            next.save(historyStore);
+            historyStore.delete(ClaudeBridgeConfig.FILE);
+            ClaudeBridgeConfig afterOfficial = ClaudeBridgeConfig.createWithHistory(historyStore, "1", "unused", key,
+                List.of(new PricedModel("claude-sonnet-5", "anthropic", "Current", 22)));
+            check(afterOfficial.compatibilityRoutes().size() == 2,
+                "route compatibility survives an official-channel switch"); passed++;
+            ClaudeBridgeConfig otherAccount = ClaudeBridgeConfig.createWithHistory(historyStore, "2", "unused", key, List.of(current));
+            check(otherAccount.compatibilityRoutes().isEmpty(), "route history never crosses accounts"); passed++;
+            historyStore.write(ClaudeBridgeConfig.HISTORY_FILE, "{invalid");
+            check(ClaudeBridgeConfig.createWithHistory(historyStore, "1", "unused", key, List.of(current)).compatibilityRoutes().isEmpty(),
+                "damaged optional route history never blocks a channel switch"); passed++;
+        } finally {
+            try (var paths = java.nio.file.Files.walk(historyRoot)) {
+                for (var path : paths.sorted(java.util.Comparator.reverseOrder()).toList()) java.nio.file.Files.deleteIfExists(path);
+            }
+        }
         return passed;
     }
     private static void check(boolean ok, String label) { if (!ok) throw new AssertionError(label); }

@@ -39,7 +39,8 @@ final class ChannelSettingsBackup {
     }
     static List<Path> claudePaths(SecureStore store, boolean cli) throws Exception {
         List<Path> paths = new ArrayList<>();
-        for (String name : List.of(ClaudeBridgeConfig.FILE, ClaudeCliConfig.FILE, "claude-desktop-state.json")) paths.add(store.root().resolve(name));
+        for (String name : List.of(ClaudeBridgeConfig.FILE, ClaudeBridgeConfig.HISTORY_FILE,
+                ClaudeCliConfig.FILE, "claude-desktop-state.json")) paths.add(store.root().resolve(name));
         if (!cli) for (Path library : ClaudeDesktopConfig.libraries()) {
             paths.add(library.getParent().resolve("claude_desktop_config.json"));
             paths.add(library.resolve("_meta.json"));

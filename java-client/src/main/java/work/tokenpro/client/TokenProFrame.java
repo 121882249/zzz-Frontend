@@ -2252,8 +2252,8 @@ final class TokenProFrame extends JFrame {
                     ClientReconnect.stopForSettings(store, app, cli);
                     ClaudeBridgeManager.stop(target);
                 }, () -> {
-                    ClaudeBridgeConfig config = cli ? ClaudeBridgeConfig.createCli(owner, token, key, selected)
-                        : ClaudeBridgeConfig.create(owner, token, key, selected);
+                    ClaudeBridgeConfig config = cli ? ClaudeBridgeConfig.createCliWithHistory(target, owner, token, key, selected)
+                        : ClaudeBridgeConfig.createWithHistory(target, owner, token, key, selected);
                     config.save(target);
                     if (cli) ClaudeCliConfig.install(target, selected, config);
                     else ClaudeDesktopConfig.install(target, config, accountLabel);
