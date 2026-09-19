@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.*;
 
-/** Explicit user-triggered migration of legacy Codex threads to the built-in OpenAI provider. */
+/** Explicit user-triggered migration of all Codex threads to the selected active provider. */
 final class CodexConversationRepair {
     private static final List<String> SOURCE_KINDS = List.of(
         "cli", "vscode", "exec", "appServer", "subAgent", "subAgentReview", "subAgentCompact",
@@ -16,17 +16,17 @@ final class CodexConversationRepair {
     }
     interface Factory { Rpc open() throws Exception; }
 
-    record Result(int discovered, int alreadyOpenAi, int attempted, int repaired, int failed,
-                  List<String> failedThreadIds, String model) {
+    record Result(int discovered, int alreadyTarget, int attempted, int repaired, int failed,
+                  List<String> failedThreadIds, String provider, String model) {
         String summary() {
-            return "共发现 " + discovered + " 个历史对话；已是 openai " + alreadyOpenAi
+            return "共发现 " + discovered + " 个历史对话；已是 " + provider + " " + alreadyTarget
                 + " 个，修复成功 " + repaired + " 个，失败 " + failed + " 个。";
         }
     }
 
     private CodexConversationRepair() {}
 
-    static Result repair(Path home, String requestedModel) throws Exception {
+    static Result repair(Path home, String targetProvider, String requestedModel) throws Exception {
         return repair(() -> {
             CodexAppServerRpc delegate = new CodexAppServerRpc(home);
             return new Rpc() {
@@ -35,18 +35,20 @@ final class CodexConversationRepair {
                 }
                 public void close() throws Exception { delegate.close(); }
             };
-        }, requestedModel);
+        }, targetProvider, requestedModel);
     }
 
-    static Result repair(Factory factory, String requestedModel) throws Exception {
+    static Result repair(Factory factory, String targetProvider, String requestedModel) throws Exception {
+        targetProvider = Objects.requireNonNullElse(targetProvider, "").trim();
+        if (targetProvider.isBlank()) throw new IllegalArgumentException("目标 provider 不能为空");
         LinkedHashMap<String,String> providers = listThreads(factory);
         String model = resolveModel(factory, requestedModel);
-        if (model.isBlank()) throw new IOException("无法确认当前 openai 模型，未修改历史对话");
+        if (model.isBlank()) throw new IOException("无法确认当前渠道模型，未修改历史对话");
 
-        int alreadyOpenAi = 0;
+        int alreadyTarget = 0;
         List<String> targets = new ArrayList<>();
         for (Map.Entry<String,String> entry : providers.entrySet()) {
-            if ("openai".equals(entry.getValue())) alreadyOpenAi++;
+            if (targetProvider.equals(entry.getValue())) alreadyTarget++;
             else targets.add(entry.getKey());
         }
 
@@ -58,9 +60,9 @@ final class CodexConversationRepair {
                 if (rpc == null) rpc = factory.open();
                 try {
                 Map<String,Object> resumed = rpc.call("thread/resume", Map.of(
-                    "threadId", id, "modelProvider", "openai", "model", model, "excludeTurns", true));
-                if (!"openai".equals(Objects.toString(resumed.get("modelProvider"), "")))
-                    throw new IOException("Codex 未接受 openai provider");
+                    "threadId", id, "modelProvider", targetProvider, "model", model, "excludeTurns", true));
+                if (!targetProvider.equals(Objects.toString(resumed.get("modelProvider"), "")))
+                    throw new IOException("Codex 未接受目标 provider");
                 rpc.call("thread/settings/update", Map.of("threadId", id, "model", model));
                 unsubscribe(rpc, id);
                 candidates.add(id);
@@ -81,7 +83,7 @@ final class CodexConversationRepair {
                 if (rpc == null) rpc = factory.open();
                 try {
                 Map<String,Object> actual = rpc.call("thread/resume", Map.of("threadId", id, "excludeTurns", true));
-                if (!"openai".equals(Objects.toString(actual.get("modelProvider"), ""))
+                if (!targetProvider.equals(Objects.toString(actual.get("modelProvider"), ""))
                     || !model.equals(Objects.toString(actual.get("model"), "")))
                     throw new IOException("修复结果未持久保存");
                 unsubscribe(rpc, id);
@@ -95,8 +97,8 @@ final class CodexConversationRepair {
         } finally {
             closeQuietly(rpc);
         }
-        return new Result(providers.size(), alreadyOpenAi, targets.size(), repaired, failures.size(),
-            List.copyOf(new LinkedHashSet<>(failures)), model);
+        return new Result(providers.size(), alreadyTarget, targets.size(), repaired, failures.size(),
+            List.copyOf(new LinkedHashSet<>(failures)), targetProvider, model);
     }
 
     private static LinkedHashMap<String,String> listThreads(Factory factory) throws Exception {

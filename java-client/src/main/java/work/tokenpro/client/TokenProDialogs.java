@@ -17,23 +17,27 @@ final class TokenProDialogs {
     private TokenProDialogs() {}
 
     static boolean confirm(Component owner, String title, String message, String confirmText) {
-        return show(owner, title, message, confirmText, true, Tone.WARNING).accepted;
+        return show(owner, title, message, confirmText, true, Tone.WARNING, null).accepted;
+    }
+
+    static String choose(Component owner, String title, String message, String leftText, String rightText) {
+        return show(owner, title, message, rightText, false, Tone.WARNING, leftText).choice;
     }
 
     static void info(Component owner, String title, String message) {
-        show(owner, title, message, "知道了", false, Tone.INFO);
+        show(owner, title, message, "知道了", false, Tone.INFO, null);
     }
 
     static void warning(Component owner, String title, String message) {
-        show(owner, title, message, "知道了", false, Tone.WARNING);
+        show(owner, title, message, "知道了", false, Tone.WARNING, null);
     }
 
     static void error(Component owner, String title, String message) {
-        show(owner, title, message, "确定", false, Tone.ERROR);
+        show(owner, title, message, "确定", false, Tone.ERROR, null);
     }
 
     private static DialogResult show(Component owner, String title, String message, String primaryText,
-                                     boolean cancellable, Tone tone) {
+                                     boolean cancellable, Tone tone, String alternateText) {
         Window window = owner == null ? null : SwingUtilities.getWindowAncestor(owner);
         JDialog dialog = window == null ? new JDialog((Frame) null, true)
             : new JDialog(window, Dialog.ModalityType.APPLICATION_MODAL);
@@ -76,13 +80,17 @@ final class TokenProDialogs {
         surface.add(content, BorderLayout.CENTER);
 
         JPanel actions = transparent(new FlowLayout(FlowLayout.RIGHT, 10, 0));
-        if (cancellable) {
+        if (alternateText != null) {
+            JButton alternate = new DialogButton(alternateText, false);
+            alternate.addActionListener(event -> { result.choice = alternateText; dialog.dispose(); });
+            actions.add(alternate);
+        } else if (cancellable) {
             JButton cancel = new DialogButton("取消", false);
             cancel.addActionListener(event -> dialog.dispose());
             actions.add(cancel);
         }
         JButton primary = new DialogButton(primaryText, true);
-        primary.addActionListener(event -> { result.accepted = true; dialog.dispose(); });
+        primary.addActionListener(event -> { result.accepted = true; result.choice = primaryText; dialog.dispose(); });
         actions.add(primary);
         surface.add(actions, BorderLayout.SOUTH);
 
@@ -104,17 +112,17 @@ final class TokenProDialogs {
 
     static String compactMessage(String message) {
         if (message == null || message.isBlank()) return "";
-        String[] rawLines = message.strip().split("\\R+");
-        java.util.List<String> lines = new java.util.ArrayList<>();
-        for (String raw : rawLines) {
-            String line = raw.replaceAll("[\\t ]+", " ").trim();
-            if (!line.isBlank()) lines.add(line);
+        String text = message.strip().replaceAll("\\s+", " ");
+        int sentenceEnd = -1;
+        for (int index = 0; index < text.length(); index++) {
+            char value = text.charAt(index);
+            if (value == '。' || value == '！' || value == '？' || value == '!' || value == '?') {
+                sentenceEnd = index + 1;
+                break;
+            }
         }
-        if (lines.isEmpty()) return "";
-        if (lines.size() == 1) return clipToUnits(lines.getFirst(), 56);
-        String first = clipToUnits(lines.getFirst(), 28);
-        String remainder = String.join(" ", lines.subList(1, lines.size()));
-        return first + "\n" + clipToUnits(remainder, 28);
+        if (sentenceEnd > 0) text = text.substring(0, sentenceEnd);
+        return clipToUnits(text, 48);
     }
 
     private static String clipToUnits(String text, int maxUnits) {
@@ -157,7 +165,7 @@ final class TokenProDialogs {
     }
 
     private enum Tone { INFO, WARNING, ERROR }
-    private static final class DialogResult { boolean accepted; }
+    private static final class DialogResult { boolean accepted; String choice; }
 
     private static final class DialogSurface extends JPanel {
         private final Tone tone;

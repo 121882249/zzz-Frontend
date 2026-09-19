@@ -393,7 +393,7 @@ final class TokenProFrame extends JFrame {
         menu.add(official);
         itemCount++;
         if (repairConversations != null) {
-            CosmosMenuButton repair = new CosmosMenuButton("一键修复历史对话", "embedded:repair",
+            CosmosMenuButton repair = new CosmosMenuButton("修复历史对话", "embedded:repair",
                 STATUS_PENDING, new Color(126, 91, 42, 145));
             repair.addActionListener(event -> { hideModelMenu(); repairConversations.run(); });
             menu.add(repair);
@@ -661,18 +661,27 @@ final class TokenProFrame extends JFrame {
         Path configPath = Platform.codexConfig();
         try {
             String current = Files.exists(configPath) ? Files.readString(configPath) : "";
-            String provider = CodexSwitchConfig.rootValue(current, "model_provider").orElse("openai");
-            if (!"openai".equals(provider))
-                throw new IllegalStateException("请先切换到 TokenPro 或 OpenAI 官方配置，再修复历史对话");
-            if (!TokenProDialogs.confirm(this, "一键修复历史对话",
-                "将退出并重启 Codex，把未归档和已归档历史对话的 provider 全部统一为 openai。\n"
-                    + "对话正文不会修改，也不会发送任何消息；修复时会逐个恢复任务，macOS 可能询问旧项目目录权限。",
-                "修复全部对话")) return;
+            String activeProvider = CodexSwitchConfig.rootValue(current, "model_provider").orElse("openai");
+            String choice = TokenProDialogs.choose(this, "修复历史对话",
+                "选择当前渠道，将全部历史对话统一到该渠道并自动重启 Codex。", "CCSwitch", "OpenAI");
+            if (choice == null) return;
+            String targetProvider;
+            if ("OpenAI".equals(choice)) {
+                if (!"openai".equals(activeProvider))
+                    throw new IllegalStateException("请先切换到 TokenPro 或 OpenAI 官方渠道");
+                targetProvider = "openai";
+            } else {
+                if ("openai".equals(activeProvider)
+                    || CodexSwitchConfig.providerValue(current, activeProvider, "base_url").isEmpty())
+                    throw new IllegalStateException("请先在 CCSwitch 中切换到需要使用的渠道");
+                targetProvider = activeProvider;
+            }
             String model = CodexSwitchConfig.rootValue(current, "model").orElse("");
+            String targetLabel = "OpenAI".equals(choice) ? "OpenAI" : "CCSwitch";
             String identity = "codex-conversation-repair";
             if (!connectingClients.begin(identity)) return;
             refreshConnectControls();
-            status("正在修复全部 Codex 历史对话…");
+            status("正在把历史对话修复为 " + targetLabel + "…");
             new SwingWorker<CodexConversationRepair.Result,Void>() {
                 protected CodexConversationRepair.Result doInBackground() throws Exception {
                     boolean stopped = false;
@@ -681,7 +690,7 @@ final class TokenProFrame extends JFrame {
                     try {
                         ClientReconnect.stopForSettings(store, "Codex", false);
                         stopped = true;
-                        result = CodexConversationRepair.repair(configPath.getParent(), model);
+                        result = CodexConversationRepair.repair(configPath.getParent(), targetProvider, model);
                     } catch (Exception error) {
                         failure = error;
                     }
@@ -700,9 +709,9 @@ final class TokenProFrame extends JFrame {
                         CodexConversationRepair.Result result = get();
                         updateCodexStatus();
                         status("历史对话修复完成：成功 " + result.repaired() + "，失败 " + result.failed());
-                        String detail = result.summary() + "\n统一模型：" + result.model()
-                            + (result.failed() == 0 ? "" : "\n失败任务可再次点击修复重试。");
-                        TokenProDialogs.info(TokenProFrame.this, "历史对话修复完成", detail);
+                        String detail = "已修复为 " + targetLabel + "：成功 " + result.repaired()
+                            + " 个，失败 " + result.failed() + " 个，Codex 已自动重启。";
+                        TokenProDialogs.info(TokenProFrame.this, "修复完成", detail);
                     } catch (Exception error) {
                         connectionFailure("Codex", false, error);
                     }

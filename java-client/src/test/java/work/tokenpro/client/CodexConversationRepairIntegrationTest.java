@@ -21,7 +21,7 @@ public final class CodexConversationRepairIntegrationTest {
                     "type", "user_message", "message", "Preserve fixture conversation", "images", List.of()))) + "\n";
             Files.writeString(session, initial);
 
-            CodexConversationRepair.Result result = CodexConversationRepair.repair(root, "gpt-5.6-sol");
+            CodexConversationRepair.Result result = CodexConversationRepair.repair(root, "openai", "gpt-5.6-sol");
             require(result.discovered() == 1 && result.repaired() == 1 && result.failed() == 0,
                 "legacy provider was not repaired: " + result);
             try (CodexAppServerRpc rpc = new CodexAppServerRpc(root)) {
@@ -30,8 +30,26 @@ public final class CodexConversationRepairIntegrationTest {
                 require("gpt-5.6-sol".equals(resumed.get("model")), "repair changed the requested target model");
                 rpc.call("thread/unsubscribe", Map.of("threadId", id));
             }
+            Files.writeString(root.resolve("config.toml"), """
+                model="gpt-5.5"
+                model_provider="custom"
+                [model_providers.custom]
+                name="CCSwitch fixture"
+                base_url="http://127.0.0.1:1/v1"
+                wire_api="responses"
+                requires_openai_auth=false
+                experimental_bearer_token="fixture-key"
+                """);
+            CodexConversationRepair.Result custom = CodexConversationRepair.repair(root, "custom", "gpt-5.5");
+            require(custom.repaired() == 1 && custom.failed() == 0, "reverse custom repair failed: " + custom);
+            try (CodexAppServerRpc rpc = new CodexAppServerRpc(root)) {
+                Map<String,Object> resumed = rpc.call("thread/resume", Map.of("threadId", id, "excludeTurns", true));
+                require("custom".equals(resumed.get("modelProvider")), "provider did not persist as custom");
+                require("gpt-5.5".equals(resumed.get("model")), "custom repair changed the target model");
+                rpc.call("thread/unsubscribe", Map.of("threadId", id));
+            }
             require(Files.readString(session).startsWith(initial), "repair rewrote original conversation records");
-            System.out.println("Installed Codex persisted the openai provider without sending a user turn.");
+            System.out.println("Installed Codex persisted both openai and custom repair targets without sending a user turn.");
         } finally {
             try (var paths = Files.walk(root)) {
                 for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path);

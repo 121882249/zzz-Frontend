@@ -27,7 +27,9 @@ final class ErrorAndRestoreTest {
         check(!ErrorMessages.safe("Bearer secret-access-token password=secret-password sk-fixture-secret").contains("secret"), "credentials are hidden from errors"); passed++;
         check(ErrorMessages.safe("很长".repeat(200)).length() <= 121, "oversized error details are compacted"); passed++;
         String compact = TokenProDialogs.compactMessage("第一行提示文字".repeat(10) + "\n" + "第二行提示文字".repeat(10) + "\n第三行不应出现");
-        check(compact.split("\\R", -1).length <= 2 && compact.endsWith("…") && !compact.contains("第三行"), "dialog body is limited to two lines"); passed++;
+        check(!compact.contains("\n") && compact.endsWith("…") && !compact.contains("第三行"), "dialog body is one compact sentence"); passed++;
+        check("只显示第一句话。".equals(TokenProDialogs.compactMessage("只显示第一句话。第二句话不应显示。")),
+            "all dialog bodies stop after the first sentence"); passed++;
         javax.swing.JScrollPane component = ErrorMessages.messageComponent(new IllegalStateException("恢复配置测试"));
         javax.swing.JTextArea text = (javax.swing.JTextArea)component.getViewport().getView();
         check(text.getForeground().getRed() > 200 && text.getBackground().getRed() < 30 && text.getLineWrap(), "error message is readable on the dark background"); passed++;
