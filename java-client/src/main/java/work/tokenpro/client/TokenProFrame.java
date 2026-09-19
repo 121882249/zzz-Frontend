@@ -649,7 +649,7 @@ final class TokenProFrame extends JFrame {
         try {
             boolean running = !ClientReconnect.desktopProcesses("Codex").isEmpty();
             if (running && !TokenProDialogs.confirm(this, "切换官方配置",
-                "将退出并重启 Codex，切换至官方配置。\n进行中的请求会终止，请先保存。",
+                "将切回官方并重启 Codex，当前请求会终止，请先保存。",
                 "切换并重启")) return;
             // Official mode clears the TokenPro selection and its generated config.
             restartOfficialCodex();
@@ -663,7 +663,7 @@ final class TokenProFrame extends JFrame {
             String current = Files.exists(configPath) ? Files.readString(configPath) : "";
             String activeProvider = CodexSwitchConfig.rootValue(current, "model_provider").orElse("openai");
             String choice = TokenProDialogs.choose(this, "修复历史对话",
-                "选择当前渠道，将全部历史对话统一到该渠道并自动重启 Codex。", "CCSwitch", "OpenAI");
+                "选择当前渠道，仅修复未归档的普通对话并重启 Codex，请先保存。", "CCSwitch", "OpenAI");
             if (choice == null) return;
             String targetProvider;
             if ("OpenAI".equals(choice)) {
@@ -711,8 +711,7 @@ final class TokenProFrame extends JFrame {
                         status("当前对话修复完成：成功 " + result.visibleRepaired() + "，失败 " + result.failed()
                             + (result.failureReasons().isEmpty() ? "" : "（" + result.failureReasons() + "）"));
                         String detail = "当前对话修复成功 " + result.visibleRepaired() + " 个，失败 "
-                            + result.failed() + " 个"
-                            + (result.failureReasons().isEmpty() ? "。" : "，原因：" + result.failureReasons().keySet().iterator().next() + "。");
+                            + result.failed() + " 个。";
                         TokenProDialogs.info(TokenProFrame.this, "修复完成", detail);
                     } catch (Exception error) {
                         connectionFailure("Codex", false, error);
@@ -1091,7 +1090,7 @@ final class TokenProFrame extends JFrame {
             if (cli) updateCommandControls(app.toLowerCase(Locale.ROOT), true);
             else updateBridgeStatus();
             status(failure.getMessage());
-            TokenProDialogs.info(this, "配置已完成，请手动启动", failure.getMessage());
+            TokenProDialogs.info(this, "请手动启动", "配置已完成，请手动启动 " + app + (cli ? " 命令行。" : " 客户端。"));
             return;
         }
         error(failure);
@@ -1099,8 +1098,8 @@ final class TokenProFrame extends JFrame {
 
     private void switchOfficialProfile(String app, boolean cli) {
         String label = app + (cli ? " 命令行" : " 客户端");
-        if (!TokenProDialogs.confirm(this, "切换官方配置", "将正常退出并重启 " + label
-            + (app.equals("Codex") ? "。\n移除渠道配置并清空已选模型，保留 Windows 和其他用户设置。" : "。\n只备份设置，聊天内容保持不变。"), "切换并重启")) return;
+        if (!TokenProDialogs.confirm(this, "切换官方配置", "将切回官方并重启 " + label
+            + "，当前请求会终止，请先保存。", "切换并重启")) return;
         String identity = app.toLowerCase(Locale.ROOT) + (cli ? "-cli" : "-desktop");
         if (!connectingClients.begin(identity)) return;
         refreshConnectControls();
@@ -1775,7 +1774,7 @@ final class TokenProFrame extends JFrame {
                 try {
                     Path installer = get();
                     setUpdateProgress(100);
-                    String restart = TokenProDialogs.choose(TokenProFrame.this, "更新完成",
+                    String restart = TokenProDialogs.chooseWithSecondary(TokenProFrame.this, "更新已准备好",
                         "新版本已准备好，请选择重启时间。", "稍后重启", "立即重启");
                     if ("立即重启".equals(restart)) {
                         setUpdateButtonState("checking", "正在完成更新…");
@@ -2210,12 +2209,11 @@ final class TokenProFrame extends JFrame {
             }
             boolean running = cli ? !ClientReconnect.cliProcesses(store, command).isEmpty()
                 : !ClientReconnect.desktopProcesses(app).isEmpty();
-            List<String> notices = new ArrayList<>();
-            if (relayPlan != null) notices.add("检测到其他 Codex 渠道：\n- " + String.join("\n- ", relayPlan.changes())
-                + "\n将只移除其活动配置，不删除对方的认证备份、模型文件或 skills。");
-            if (running) notices.add("将退出并重启 " + label + "；进行中的请求会终止，请先保存。");
-            if (!notices.isEmpty() && !TokenProDialogs.confirm(this, "切换 " + label,
-                String.join("\n\n", notices), running ? "切换并重启" : "切换渠道")) {
+            String notice = running
+                ? "将切换至 TokenPro 并重启 " + label + "，当前请求会终止，请先保存。"
+                : "将当前渠道切换至 TokenPro，保留聊天内容。";
+            if ((relayPlan != null || running) && !TokenProDialogs.confirm(this, "切换 " + label,
+                notice, running ? "切换并重启" : "切换渠道")) {
                 finishConnection(identity); return;
             }
         } catch (Exception e) { finishConnection(identity); error(e); return; }
@@ -2270,7 +2268,7 @@ final class TokenProFrame extends JFrame {
                     else updateCommandControls(command, true);
                     status(label + " 已启动，已配置 " + count + " 个模型；费用以 TokenPro 用量记录为准");
                     if (app.equals("Codex") && !cli) TokenProDialogs.info(TokenProFrame.this, "连接完成",
-                        "TokenPro 配置已启用，客户端已重启。\n已采用 Codex 内置渠道切换，不扫描或改写历史对话。\n实际网络连接以发送请求后的结果为准。");
+                        "TokenPro 配置已启用，客户端已重启。");
                     lastAccountRefresh = 0; refreshAccountSilently();
                 } catch (Exception e) { connectionFailure(app, cli, e); }
             }

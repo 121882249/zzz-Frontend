@@ -291,7 +291,8 @@ final class WindowsUpdater {
                     # exited and can no longer explain a replacement/rollback failure.
                     if($job.showErrors -and $acknowledged) {
                         Add-Type -AssemblyName System.Windows.Forms
-                        [void][System.Windows.Forms.MessageBox]::Show(('更新失败：'+$failure+[Environment]::NewLine+'原程序和配置未更改。'),'TokenPro 更新')
+                        $notice=if($changed -and -not $restored){'更新失败且恢复未完成，请重新安装客户端。'}else{'更新未完成，请重新打开客户端后重试。'}
+                        [void][System.Windows.Forms.MessageBox]::Show($notice,'TokenPro 更新')
                     }
                 }
                 Write-Error $failure -ErrorAction Continue

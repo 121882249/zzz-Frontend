@@ -17,28 +17,33 @@ final class TokenProDialogs {
     private TokenProDialogs() {}
 
     static boolean confirm(Component owner, String title, String message, String confirmText) {
-        return show(owner, title, message, confirmText, true, Tone.WARNING, null).accepted;
+        return show(owner, title, message, confirmText, true, Tone.WARNING, null, false).accepted;
     }
 
     static String choose(Component owner, String title, String message, String leftText, String rightText) {
-        return show(owner, title, message, rightText, false, Tone.WARNING, leftText).choice;
+        return show(owner, title, message, rightText, false, Tone.WARNING, leftText, true).choice;
+    }
+
+    static String chooseWithSecondary(Component owner, String title, String message, String leftText, String rightText) {
+        return show(owner, title, message, rightText, false, Tone.INFO, leftText, false).choice;
     }
 
     static void info(Component owner, String title, String message) {
-        show(owner, title, message, "知道了", false, Tone.INFO, null);
+        show(owner, title, message, "知道了", false, Tone.INFO, null, false);
     }
 
     static void warning(Component owner, String title, String message) {
-        show(owner, title, message, "知道了", false, Tone.WARNING, null);
+        show(owner, title, message, "知道了", false, Tone.WARNING, null, false);
     }
 
     static void error(Component owner, String title, String message) {
-        show(owner, title, message, "确定", false, Tone.ERROR, null);
+        show(owner, title, message, "确定", false, Tone.ERROR, null, false);
     }
 
     private static DialogResult show(Component owner, String title, String message, String primaryText,
-                                     boolean cancellable, Tone tone, String alternateText) {
-        Window window = owner == null ? null : SwingUtilities.getWindowAncestor(owner);
+                                     boolean cancellable, Tone tone, String alternateText, boolean alternatePrimary) {
+        Window window = owner instanceof Window ? (Window) owner
+            : owner == null ? null : SwingUtilities.getWindowAncestor(owner);
         JDialog dialog = window == null ? new JDialog((Frame) null, true)
             : new JDialog(window, Dialog.ModalityType.APPLICATION_MODAL);
         dialog.setUndecorated(true);
@@ -81,7 +86,7 @@ final class TokenProDialogs {
 
         JPanel actions = transparent(new FlowLayout(FlowLayout.RIGHT, 10, 0));
         if (alternateText != null) {
-            JButton alternate = new DialogButton(alternateText, true);
+            JButton alternate = new DialogButton(alternateText, alternatePrimary);
             alternate.addActionListener(event -> { result.choice = alternateText; dialog.dispose(); });
             actions.add(alternate);
         } else if (cancellable) {
@@ -122,7 +127,7 @@ final class TokenProDialogs {
             }
         }
         if (sentenceEnd > 0) text = text.substring(0, sentenceEnd);
-        return clipToUnits(text, 48);
+        return clipToUnits(text, 44);
     }
 
     private static String clipToUnits(String text, int maxUnits) {
@@ -205,7 +210,7 @@ final class TokenProDialogs {
                 String symbol = "i";
                 FontMetrics metrics = g.getFontMetrics();
                 g.drawString(symbol, (getWidth() - metrics.stringWidth(symbol)) / 2,
-                    (getHeight() - metrics.getHeight()) / 2 + metrics.getAscent());
+                    (42 - metrics.getHeight()) / 2 + metrics.getAscent());
             } else {
                 int center = getWidth() / 2;
                 g.setStroke(new BasicStroke(2.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
@@ -226,17 +231,23 @@ final class TokenProDialogs {
             setForeground(primary ? Color.WHITE : new Color(211, 220, 247));
             setMargin(new Insets(0, 0, 0, 0));
             setBorder(new EmptyBorder(0, 20, 0, 20));
-            int textWidth = getFontMetrics(getFont()).stringWidth(text);
-            setPreferredSize(new Dimension(Math.max(148, textWidth + 48), 38));
+            setOpaque(false);
             setBorderPainted(false);
             setContentAreaFilled(false);
             setFocusPainted(false);
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         }
 
+        @Override public Dimension getPreferredSize() {
+            FontMetrics metrics = getFontMetrics(getFont());
+            return new Dimension(Math.max(148, metrics.stringWidth(getText()) + 48),
+                Math.max(38, metrics.getHeight() + 18));
+        }
+
         @Override protected void paintComponent(Graphics graphics) {
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
             boolean hover = getModel().isRollover();
             if (primary) g.setPaint(new GradientPaint(0, 0,
                 hover ? new Color(127, 108, 255) : new Color(105, 88, 247), getWidth(), 0,
