@@ -9,6 +9,8 @@ TokenPro now follows Codex's lightweight built-in channel model. A switch owns o
 
 TokenPro does not list, resume, migrate, rewrite, or back up Codex conversations. The old history-repair implementation and its app-server migration tests were removed. This avoids touching conversation working directories under macOS Documents/Desktop and avoids carrying a legacy provider identity between channels.
 
+The Codex desktop channel menu also exposes a separate, explicit **一键修复历史对话** action. It is never invoked by a normal channel switch. After confirmation, it stops Codex, migrates both active and archived threads whose provider is not exactly `openai`, persists the current route model through Codex's app-server settings API, verifies the result with a fresh app-server session, and restarts Codex. It does not submit a turn or directly edit rollout JSONL/SQLite files. Because the user explicitly requested a full repair, Codex may ask for access to historical project directories during this manual operation.
+
 The TokenPro activation block uses Codex's built-in provider:
 
 ```toml
@@ -32,6 +34,11 @@ Validation on 2026-09-18:
 - Installed Codex `0.155.0-alpha.9` was run with an isolated temporary `CODEX_HOME` against a loopback fixture.
 - The fixture received the exact `tp-g41-...` model slug and `Authorization: Bearer <global key>` through `model_provider = "openai"`.
 - No real upstream model was called and no user Codex profile or conversation was opened.
+
+Additional validation on 2026-09-19:
+
+- 523 headless checks passed.
+- The installed Codex migrated an isolated synthetic `custom` conversation to `openai`, persisted the selected model, sent no user turn, and retained the original conversation records byte-for-byte.
 
 Run with JDK 21:
 

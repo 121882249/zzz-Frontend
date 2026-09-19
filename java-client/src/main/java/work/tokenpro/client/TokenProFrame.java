@@ -350,7 +350,7 @@ final class TokenProFrame extends JFrame {
                 status("请先安装 " + iconName + " 客户端");
                 return;
             }
-            showModelMenu(menu, chooseModel, restore);
+            showModelMenu(menu, chooseModel, restore, iconName.equals("Codex") ? this::repairCodexConversations : null);
         });
         if (iconName.equals("Codex")) codexModelMenuButton = menu; else claudeModelMenuButton = menu;
         state.setFont(appFont(11, Font.BOLD)); state.setHorizontalAlignment(SwingConstants.RIGHT);
@@ -370,7 +370,7 @@ final class TokenProFrame extends JFrame {
         actions.add(launch); card.add(actions, BorderLayout.EAST); return card;
     }
 
-    private void showModelMenu(JButton anchor, Runnable chooseModel, Runnable restore) {
+    private void showModelMenu(JButton anchor, Runnable chooseModel, Runnable restore, Runnable repairConversations) {
         hideModelMenu();
         JLayeredPane layered = getLayeredPane();
         JPanel overlay = new JPanel(null);
@@ -392,6 +392,13 @@ final class TokenProFrame extends JFrame {
         official.addActionListener(event -> { hideModelMenu(); restore.run(); });
         menu.add(official);
         itemCount++;
+        if (repairConversations != null) {
+            CosmosMenuButton repair = new CosmosMenuButton("一键修复历史对话", "embedded:repair",
+                STATUS_PENDING, new Color(126, 91, 42, 145));
+            repair.addActionListener(event -> { hideModelMenu(); repairConversations.run(); });
+            menu.add(repair);
+            itemCount++;
+        }
 
         int width = 210;
         int height = 8 + itemCount * 38;
@@ -449,7 +456,7 @@ final class TokenProFrame extends JFrame {
             if(!(codexCli ? codexCliInstalled : claudeCliInstalled)) {
                 status("请先安装 " + iconName + " 命令行工具"); return;
             }
-            showModelMenu(menu, () -> chooseModels(iconName, true, false), () -> restoreCli(command));
+            showModelMenu(menu, () -> chooseModels(iconName, true, false), () -> restoreCli(command), null);
         });
         if(codexCli) codexCliModelMenuButton = menu; else claudeCliModelMenuButton = menu;
         state.setFont(appFont(11, Font.BOLD)); state.setHorizontalAlignment(SwingConstants.RIGHT);
@@ -648,6 +655,62 @@ final class TokenProFrame extends JFrame {
             restartOfficialCodex();
         }
         catch (Exception ex) { error(ex); }
+    }
+
+    private void repairCodexConversations() {
+        Path configPath = Platform.codexConfig();
+        try {
+            String current = Files.exists(configPath) ? Files.readString(configPath) : "";
+            String provider = CodexSwitchConfig.rootValue(current, "model_provider").orElse("openai");
+            if (!"openai".equals(provider))
+                throw new IllegalStateException("请先切换到 TokenPro 或 OpenAI 官方配置，再修复历史对话");
+            if (!TokenProDialogs.confirm(this, "一键修复历史对话",
+                "将退出并重启 Codex，把未归档和已归档历史对话的 provider 全部统一为 openai。\n"
+                    + "对话正文不会修改，也不会发送任何消息；修复时会逐个恢复任务，macOS 可能询问旧项目目录权限。",
+                "修复全部对话")) return;
+            String model = CodexSwitchConfig.rootValue(current, "model").orElse("");
+            String identity = "codex-conversation-repair";
+            if (!connectingClients.begin(identity)) return;
+            refreshConnectControls();
+            status("正在修复全部 Codex 历史对话…");
+            new SwingWorker<CodexConversationRepair.Result,Void>() {
+                protected CodexConversationRepair.Result doInBackground() throws Exception {
+                    boolean stopped = false;
+                    Exception failure = null;
+                    CodexConversationRepair.Result result = null;
+                    try {
+                        ClientReconnect.stopForSettings(store, "Codex", false);
+                        stopped = true;
+                        result = CodexConversationRepair.repair(configPath.getParent(), model);
+                    } catch (Exception error) {
+                        failure = error;
+                    }
+                    if (stopped) try {
+                        startAndAwaitProfile("Codex", false);
+                    } catch (Exception restart) {
+                        if (failure == null) failure = restart;
+                        else failure.addSuppressed(restart);
+                    }
+                    if (failure != null) throw failure;
+                    return result;
+                }
+                protected void done() {
+                    finishConnection(identity);
+                    try {
+                        CodexConversationRepair.Result result = get();
+                        updateCodexStatus();
+                        status("历史对话修复完成：成功 " + result.repaired() + "，失败 " + result.failed());
+                        String detail = result.summary() + "\n统一模型：" + result.model()
+                            + (result.failed() == 0 ? "" : "\n失败任务可再次点击修复重试。");
+                        TokenProDialogs.info(TokenProFrame.this, "历史对话修复完成", detail);
+                    } catch (Exception error) {
+                        connectionFailure("Codex", false, error);
+                    }
+                }
+            }.execute();
+        } catch (Exception error) {
+            error(error);
+        }
     }
 
     private void restartOfficialCodex() {
@@ -1874,7 +1937,7 @@ final class TokenProFrame extends JFrame {
         button.setFocusPainted(false);
         button.setIcon(resourceIconContained("WebCog.png", 15, 15, true));
         button.setIconTextGap(7);
-        button.setToolTipText("选择模型或切换官方配置；不会扫描或改写历史对话");
+        button.setToolTipText("选择模型、切换官方配置，或手动修复历史对话");
         button.setHorizontalAlignment(SwingConstants.CENTER);
         button.setBorder(new EmptyBorder(0, 12, 0, 12));
         sizeComponent(button, 112, 42);
