@@ -224,9 +224,10 @@ final class TokenProDialogs {
             setUI(new BasicButtonUI());
             setFont(font(12, Font.BOLD));
             setForeground(primary ? Color.WHITE : new Color(211, 220, 247));
-            setMargin(new Insets(0, 16, 0, 16));
+            setMargin(new Insets(0, 0, 0, 0));
+            setBorder(new EmptyBorder(0, 20, 0, 20));
             int textWidth = getFontMetrics(getFont()).stringWidth(text);
-            setPreferredSize(new Dimension(Math.max(112, textWidth + 40), 38));
+            setPreferredSize(new Dimension(Math.max(148, textWidth + 48), 38));
             setBorderPainted(false);
             setContentAreaFilled(false);
             setFocusPainted(false);
@@ -244,8 +245,14 @@ final class TokenProDialogs {
             g.fillRoundRect(0, 0, getWidth(), getHeight(), 13, 13);
             g.setColor(primary ? new Color(170, 178, 255, 105) : new Color(137, 158, 220, 90));
             g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 13, 13);
+            g.setFont(getFont());
+            g.setColor(isEnabled() ? getForeground() : new Color(170, 179, 207));
+            FontMetrics metrics = g.getFontMetrics();
+            String text = getText();
+            int x = Math.max(0, (getWidth() - metrics.stringWidth(text)) / 2);
+            int y = (getHeight() - metrics.getHeight()) / 2 + metrics.getAscent();
+            g.drawString(text, x, y);
             g.dispose();
-            super.paintComponent(graphics);
         }
     }
 }
