@@ -23,10 +23,12 @@ final class WindowsUpdaterTest {
             check(!WindowsUpdater.script().contains("RunAs") && !WindowsUpdater.script().contains("taskkill") && !WindowsUpdater.script().contains("timeout /T"), "no elevation, process killing or stdin-dependent waits"); passed++;
             check(WindowsUpdater.script().contains("[IO.File]::Replace") && WindowsUpdater.script().contains("baseSha256") && WindowsUpdater.script().contains("rollback-"), "atomic replacement with verification and backup"); passed++;
             check(WindowsUpdater.script().contains("$acknowledged") && WindowsUpdater.script().contains("$job.showErrors -and $acknowledged"), "pre-readiness failures stay in the live application instead of showing a second dialog"); passed++;
+            check(WindowsUpdater.script().contains("$waitSeconds -gt 0") && WindowsUpdater.script().contains("$null -ne $deadline"), "deferred update may wait for a later user restart"); passed++;
             check(!WindowsUpdater.script().contains("CreateShortcut") && !WindowsUpdater.script().contains("migrated"), "in-place update neither migrates nor changes shortcuts"); passed++;
             check(Arrays.stream(WindowsUpdater.class.getDeclaredMethods()).noneMatch(m -> m.getName().equals("migrateImage")), "legacy migration implementation removed"); passed++;
             check(Arrays.stream(Updater.class.getDeclaredMethods()).noneMatch(m -> m.getName().equals("installWindowsIncremental") || m.getName().equals("installWindows")), "legacy Windows batch implementations removed"); passed++;
             Map<String,Object> example = WindowsUpdater.job(source.resolve("app/TokenPro.jar"), source.resolve("app/TokenPro.jar"), source.resolve("TokenPro.exe"), 0, root);
+            check(Objects.equals(example.get("waitSeconds"), 90), "immediate Windows update keeps a bounded exit wait"); passed++;
             String broker = WindowsUpdater.elevationCommand(root.resolve("job.json"), example).getLast();
             check(broker.contains("-Verb RunAs") && !broker.contains("ExecutionPolicy") && !broker.contains("taskkill"), "UAC uses Windows consent, no security changes or process killing"); passed++;
             java.util.regex.Matcher payload = java.util.regex.Pattern.compile("'Hidden','-EncodedCommand','([^']+)'").matcher(broker);

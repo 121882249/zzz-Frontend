@@ -1,8 +1,15 @@
 package work.tokenpro.client;
 
 import java.io.IOException;
-import java.nio.file.Path;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** Explicit user-triggered migration of all Codex threads to the selected active provider. */
 final class CodexConversationRepair {
@@ -16,17 +23,28 @@ final class CodexConversationRepair {
     }
     interface Factory { Rpc open() throws Exception; }
 
-    record Result(int discovered, int alreadyTarget, int attempted, int repaired, int failed,
-                  List<String> failedThreadIds, String provider, String model) {
+    record Result(int discovered, int visibleDiscovered, int internalDiscovered, int archivedDiscovered,
+                  int alreadyTarget, int attempted, int repaired, int visibleRepaired,
+                  int internalRepaired, int archivedRepaired, int failed, List<String> failedThreadIds,
+                  Map<String,Integer> failureReasons, String provider, String model) {
         String summary() {
-            return "共发现 " + discovered + " 个历史对话；已是 " + provider + " " + alreadyTarget
-                + " 个，修复成功 " + repaired + " 个，失败 " + failed + " 个。";
+            return "可见对话修复 " + visibleRepaired + " 个，内部任务 " + internalRepaired
+                + " 个，失败 " + failed + " 个。";
         }
     }
+
+    private static final Pattern PROVIDER_FIELD = Pattern.compile("(\\\"model_provider\\\"\\s*:\\s*\\\")([^\\\"]*)(\\\")");
+    private record ThreadRecord(String id, String provider, String model, String path,
+                                boolean archived, boolean internal) {}
+    private record Failure(String id, String reason) {}
+    private record MetadataBackup(Path original, Path backup) {}
+    private interface MetadataEditor { MetadataBackup update(ThreadRecord thread, String provider) throws Exception; }
 
     private CodexConversationRepair() {}
 
     static Result repair(Path home, String targetProvider, String requestedModel) throws Exception {
+        Path backupRoot = home.resolve("backups_state/tokenpro-conversation-repair/"
+            + System.currentTimeMillis() + "-" + UUID.randomUUID());
         return repair(() -> {
             CodexAppServerRpc delegate = new CodexAppServerRpc(home);
             return new Rpc() {
@@ -35,39 +53,73 @@ final class CodexConversationRepair {
                 }
                 public void close() throws Exception { delegate.close(); }
             };
-        }, targetProvider, requestedModel);
+        }, metadataEditor(home, backupRoot), targetProvider, requestedModel);
     }
 
     static Result repair(Factory factory, String targetProvider, String requestedModel) throws Exception {
+        return repair(factory, (thread, provider) -> null, targetProvider, requestedModel);
+    }
+
+    private static Result repair(Factory factory, MetadataEditor editor, String targetProvider,
+                                 String requestedModel) throws Exception {
         targetProvider = Objects.requireNonNullElse(targetProvider, "").trim();
         if (targetProvider.isBlank()) throw new IllegalArgumentException("目标 provider 不能为空");
-        LinkedHashMap<String,String> providers = listThreads(factory);
+        if (!targetProvider.matches("[A-Za-z0-9._-]+")) throw new IllegalArgumentException("目标 provider 格式无效");
+        LinkedHashMap<String,ThreadRecord> providers = listThreads(factory);
         String model = resolveModel(factory, requestedModel);
         if (model.isBlank()) throw new IOException("无法确认当前渠道模型，未修改历史对话");
 
         int alreadyTarget = 0;
-        List<String> targets = new ArrayList<>();
-        for (Map.Entry<String,String> entry : providers.entrySet()) {
-            if (targetProvider.equals(entry.getValue())) alreadyTarget++;
-            else targets.add(entry.getKey());
+        List<ThreadRecord> targets = new ArrayList<>();
+        for (ThreadRecord thread : providers.values()) {
+            if (targetProvider.equals(thread.provider()) && model.equals(thread.model())) alreadyTarget++;
+            else targets.add(thread);
         }
 
-        List<String> candidates = new ArrayList<>();
-        List<String> failures = new ArrayList<>();
+        List<ThreadRecord> candidates = new ArrayList<>();
+        List<Failure> failures = new ArrayList<>();
         Rpc rpc = null;
         try {
-            for (String id : targets) {
-                if (rpc == null) rpc = factory.open();
+            for (ThreadRecord thread : targets) {
+                boolean temporarilyUnarchived = false;
+                boolean restoredArchive = false;
+                boolean modelUpdated = false;
+                MetadataBackup backup = null;
                 try {
-                Map<String,Object> resumed = rpc.call("thread/resume", Map.of(
-                    "threadId", id, "modelProvider", targetProvider, "model", model, "excludeTurns", true));
-                if (!targetProvider.equals(Objects.toString(resumed.get("modelProvider"), "")))
-                    throw new IOException("Codex 未接受目标 provider");
-                rpc.call("thread/settings/update", Map.of("threadId", id, "model", model));
-                unsubscribe(rpc, id);
-                candidates.add(id);
+                    backup = editor.update(thread, targetProvider);
+                    if (rpc == null) rpc = factory.open();
+                    if (thread.archived()) {
+                        rpc.call("thread/unarchive", Map.of("threadId", thread.id()));
+                        temporarilyUnarchived = true;
+                    }
+                    Map<String,Object> resumed = rpc.call("thread/resume", Map.of(
+                        "threadId", thread.id(), "modelProvider", targetProvider, "model", model, "excludeTurns", true));
+                    if (!targetProvider.equals(Objects.toString(resumed.get("modelProvider"), "")))
+                        throw new IOException("Codex 未接受目标 provider");
+                    rpc.call("thread/settings/update", Map.of("threadId", thread.id(), "model", model));
+                    modelUpdated = true;
+                    unsubscribe(rpc, thread.id());
+                    if (thread.archived()) {
+                        rpc.call("thread/archive", Map.of("threadId", thread.id()));
+                        restoredArchive = true;
+                    }
+                    candidates.add(thread);
                 } catch (Exception failure) {
-                    failures.add(id);
+                    if (temporarilyUnarchived && !restoredArchive) {
+                        try {
+                            unsubscribe(rpc, thread.id());
+                            rpc.call("thread/archive", Map.of("threadId", thread.id()));
+                        } catch (Exception restoreFailure) {
+                            failure.addSuppressed(new IOException("恢复归档状态失败", restoreFailure));
+                        }
+                    }
+                    if (!modelUpdated && backup != null) {
+                        try { restore(backup); }
+                        catch (Exception restoreFailure) {
+                            failure.addSuppressed(new IOException("恢复对话元数据失败", restoreFailure));
+                        }
+                    }
+                    failures.add(new Failure(thread.id(), failureReason(failure)));
                     closeQuietly(rpc);
                     rpc = null;
                 }
@@ -76,33 +128,33 @@ final class CodexConversationRepair {
             closeQuietly(rpc);
         }
 
-        int repaired = 0;
-        rpc = null;
-        try {
-            for (String id : candidates) {
-                if (rpc == null) rpc = factory.open();
-                try {
-                Map<String,Object> actual = rpc.call("thread/resume", Map.of("threadId", id, "excludeTurns", true));
-                if (!targetProvider.equals(Objects.toString(actual.get("modelProvider"), ""))
-                    || !model.equals(Objects.toString(actual.get("model"), "")))
-                    throw new IOException("修复结果未持久保存");
-                unsubscribe(rpc, id);
-                repaired++;
-                } catch (Exception failure) {
-                    failures.add(id);
-                    closeQuietly(rpc);
-                    rpc = null;
-                }
+        LinkedHashMap<String,ThreadRecord> verified = listThreads(factory);
+        List<ThreadRecord> repaired = new ArrayList<>();
+        for (ThreadRecord candidate : candidates) {
+            ThreadRecord actual = verified.get(candidate.id());
+            if (actual != null && targetProvider.equals(actual.provider()) && model.equals(actual.model())
+                && actual.archived() == candidate.archived()) {
+                repaired.add(candidate);
+            } else {
+                failures.add(new Failure(candidate.id(), "修复结果未持久保存"));
             }
-        } finally {
-            closeQuietly(rpc);
         }
-        return new Result(providers.size(), alreadyTarget, targets.size(), repaired, failures.size(),
-            List.copyOf(new LinkedHashSet<>(failures)), targetProvider, model);
+        LinkedHashMap<String,Integer> reasons = new LinkedHashMap<>();
+        for (Failure failure : failures) reasons.merge(failure.reason(), 1, Integer::sum);
+        int visibleDiscovered = (int) providers.values().stream().filter(thread -> !thread.internal()).count();
+        int internalDiscovered = providers.size() - visibleDiscovered;
+        int archivedDiscovered = (int) providers.values().stream().filter(ThreadRecord::archived).count();
+        int visibleRepaired = (int) repaired.stream().filter(thread -> !thread.internal()).count();
+        int internalRepaired = repaired.size() - visibleRepaired;
+        int archivedRepaired = (int) repaired.stream().filter(ThreadRecord::archived).count();
+        return new Result(providers.size(), visibleDiscovered, internalDiscovered, archivedDiscovered,
+            alreadyTarget, targets.size(), repaired.size(), visibleRepaired, internalRepaired,
+            archivedRepaired, failures.size(), failures.stream().map(Failure::id).distinct().toList(),
+            Collections.unmodifiableMap(reasons), targetProvider, model);
     }
 
-    private static LinkedHashMap<String,String> listThreads(Factory factory) throws Exception {
-        LinkedHashMap<String,String> result = new LinkedHashMap<>();
+    private static LinkedHashMap<String,ThreadRecord> listThreads(Factory factory) throws Exception {
+        LinkedHashMap<String,ThreadRecord> result = new LinkedHashMap<>();
         for (boolean archived : List.of(false, true)) {
             try (Rpc rpc = factory.open()) {
                 String cursor = null;
@@ -118,7 +170,10 @@ final class CodexConversationRepair {
                     for (Object raw : ClaudeAdapter.list(page.get("data"))) {
                         Map<String,Object> row = Json.object(raw);
                         String id = Objects.toString(row.get("id"), "").trim();
-                        if (!id.isBlank()) result.putIfAbsent(id, Objects.toString(row.get("modelProvider"), ""));
+                        if (!id.isBlank()) result.putIfAbsent(id, new ThreadRecord(id,
+                            Objects.toString(row.get("modelProvider"), ""),
+                            Objects.toString(row.get("model"), ""), Objects.toString(row.get("path"), ""),
+                            archived, internalThread(row)));
                     }
                     cursor = page.get("nextCursor") instanceof String value && !value.isBlank() ? value : null;
                     if (cursor != null && !seenCursors.add(cursor))
@@ -127,6 +182,93 @@ final class CodexConversationRepair {
             }
         }
         return result;
+    }
+
+    private static MetadataEditor metadataEditor(Path home, Path backupRoot) throws IOException {
+        Path realHome = home.toRealPath();
+        return (thread, provider) -> {
+            if (thread.path().isBlank()) throw new IOException("Codex 未返回对话文件路径");
+            Path original = Path.of(thread.path()).toRealPath();
+            Path sessions = realHome.resolve("sessions");
+            Path archived = realHome.resolve("archived_sessions");
+            if (!original.startsWith(sessions) && !original.startsWith(archived))
+                throw new IOException("对话文件不在 Codex 历史目录中");
+            Files.createDirectories(backupRoot);
+            Path backup = backupRoot.resolve(thread.id() + ".jsonl");
+            Files.copy(original, backup, StandardCopyOption.COPY_ATTRIBUTES);
+            replaceProvider(original, provider);
+            return new MetadataBackup(original, backup);
+        };
+    }
+
+    private static void replaceProvider(Path file, String provider) throws Exception {
+        Path temporary = Files.createTempFile(file.getParent(), ".tokenpro-provider-", ".tmp");
+        try {
+            Set<PosixFilePermission> permissions = null;
+            try { permissions = Files.getPosixFilePermissions(file); } catch (UnsupportedOperationException ignored) {}
+            try (InputStream input = Files.newInputStream(file); OutputStream output = Files.newOutputStream(temporary,
+                    StandardOpenOption.TRUNCATE_EXISTING)) {
+                ByteArrayOutputStream firstLine = new ByteArrayOutputStream();
+                int value;
+                boolean newline = false;
+                while ((value = input.read()) >= 0) {
+                    if (value == '\n') { newline = true; break; }
+                    firstLine.write(value);
+                }
+                byte[] bytes = firstLine.toByteArray();
+                boolean carriageReturn = bytes.length > 0 && bytes[bytes.length - 1] == '\r';
+                String line = new String(bytes, 0, carriageReturn ? bytes.length - 1 : bytes.length,
+                    StandardCharsets.UTF_8);
+                Map<String,Object> record = Json.object(Json.parse(line));
+                if (!"session_meta".equals(Objects.toString(record.get("type"), "")))
+                    throw new IOException("对话文件缺少 session_meta");
+                Matcher matcher = PROVIDER_FIELD.matcher(line);
+                if (!matcher.find()) throw new IOException("对话文件缺少 model_provider");
+                String updated = matcher.replaceFirst(Matcher.quoteReplacement(matcher.group(1) + provider + matcher.group(3)));
+                output.write(updated.getBytes(StandardCharsets.UTF_8));
+                if (carriageReturn) output.write('\r');
+                if (newline) output.write('\n');
+                input.transferTo(output);
+            }
+            if (permissions != null) Files.setPosixFilePermissions(temporary, permissions);
+            moveReplace(temporary, file);
+        } finally {
+            Files.deleteIfExists(temporary);
+        }
+    }
+
+    private static void restore(MetadataBackup backup) throws IOException {
+        Path temporary = Files.createTempFile(backup.original().getParent(), ".tokenpro-restore-", ".tmp");
+        try {
+            Files.copy(backup.backup(), temporary, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
+            moveReplace(temporary, backup.original());
+        } finally {
+            Files.deleteIfExists(temporary);
+        }
+    }
+
+    private static void moveReplace(Path source, Path target) throws IOException {
+        try { Files.move(source, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING); }
+        catch (AtomicMoveNotSupportedException ignored) {
+            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    private static boolean internalThread(Map<String,Object> row) {
+        if (row.get("parentThreadId") instanceof String parent && !parent.isBlank()) return true;
+        Object source = row.get("source");
+        if (source instanceof Map<?,?> map && map.containsKey("subAgent")) return true;
+        return Objects.toString(source, "").toLowerCase(Locale.ROOT).contains("subagent");
+    }
+
+    private static String failureReason(Exception failure) {
+        String message = Objects.toString(failure.getMessage(), "").toLowerCase(Locale.ROOT);
+        if (message.contains("is archived") || message.contains("unarchive")) return "归档状态处理失败";
+        if (message.contains("provider") && message.contains("not found")) return "渠道配置不存在";
+        if (message.contains("permission") || message.contains("denied") || message.contains("权限")) return "目录权限不足";
+        if (message.contains("timeout") || message.contains("超时")) return "Codex 响应超时";
+        String safe = ErrorMessages.safe(Objects.toString(failure.getMessage(), "未知错误"));
+        return safe.isBlank() ? "未知错误" : safe;
     }
 
     private static String resolveModel(Factory factory, String requested) throws Exception {

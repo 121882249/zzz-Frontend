@@ -12,17 +12,26 @@ final class WindowsUpdater {
     private WindowsUpdater() {}
 
     static void installDelta(Path update, String version) throws Exception {
+        installDelta(update, version, false);
+    }
+
+    static void installDelta(Path update, String version, boolean deferred) throws Exception {
         if (!version.matches("[0-9]+\\.[0-9]+\\.[0-9]+")) throw new IOException("更新版本号无效");
         String launcher = ProcessHandle.current().info().command().orElseThrow(() -> new IOException("找不到启动程序"));
         Path root = Path.of(launcher).toAbsolutePath().normalize().getParent();
         validateImage(root);
         Path target = root.resolve("app/TokenPro.jar");
         Path merged = Updater.mergeUpdate(target, update);
-        install(merged, ProcessHandle.current().pid(), target, launcher, version);
+        install(merged, ProcessHandle.current().pid(), target, launcher, version, deferred);
         Files.deleteIfExists(update);
     }
 
     static void install(Path merged, long parentPid, Path currentJar, String launcher, String version) throws Exception {
+        install(merged, parentPid, currentJar, launcher, version, false);
+    }
+
+    static void install(Path merged, long parentPid, Path currentJar, String launcher, String version,
+                        boolean deferred) throws Exception {
         Path executable = Path.of(launcher).toAbsolutePath().normalize();
         if (!executable.getFileName().toString().equalsIgnoreCase("TokenPro.exe"))
             throw new IOException("请从 TokenPro 应用中更新，而不是开发用 Java 命令");
@@ -36,6 +45,7 @@ final class WindowsUpdater {
         Platform.privateFile(jobRoot);
         Map<String,Object> job = job(merged, target, executable, parentPid, jobRoot);
         job.put("version", version);
+        job.put("waitSeconds", deferred ? 0 : 90);
         job.put("result", Platform.dataDirectory().resolve("windows-update-result.json").toString());
         Path jobFile = jobRoot.resolve("job.json");
         Files.writeString(jobFile, Json.stringify(job), StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
@@ -68,6 +78,7 @@ final class WindowsUpdater {
         job.put("launcher", launcher.toAbsolutePath().normalize().toString());
         job.put("parentPid", parentPid);
         job.put("parentStarted", ProcessHandle.of(parentPid).flatMap(p -> p.info().startInstant()).map(i -> i.toEpochMilli()).orElse(0L));
+        job.put("waitSeconds", 90);
         job.put("sourceSha256", sha256(source));
         job.put("baseSha256", sha256(target));
         job.put("version", Main.VERSION);
@@ -245,13 +256,14 @@ final class WindowsUpdater {
                 if(Test-Path -LiteralPath $cancel){throw '更新准备等待超时，已安全取消'}
                 Save-Json $ready @{ready=$true}
                 $acknowledged=$true
-                $deadline=[DateTime]::UtcNow.AddSeconds(90)
+                $waitSeconds=[int]$job.waitSeconds
+                $deadline=if($waitSeconds -gt 0){[DateTime]::UtcNow.AddSeconds($waitSeconds)}else{$null}
                 while([long]$job.parentPid -gt 0) {
                     $parent=Get-Process -Id ([int]$job.parentPid) -ErrorAction SilentlyContinue
                     if(-not $parent){break}
                     $started=([DateTimeOffset]$parent.StartTime.ToUniversalTime()).ToUnixTimeMilliseconds()
                     if([long]$job.parentStarted -gt 0 -and [Math]::Abs($started-[long]$job.parentStarted) -gt 2000){break}
-                    if((Test-Path -LiteralPath $cancel) -or [DateTime]::UtcNow -gt $deadline){throw '等待程序退出超时，未强制关闭任何程序'}
+                    if((Test-Path -LiteralPath $cancel) -or ($null -ne $deadline -and [DateTime]::UtcNow -gt $deadline)){throw '等待程序退出超时，未强制关闭任何程序'}
                     Start-Sleep -Milliseconds 150
                 }
                 if(Test-Path -LiteralPath $cancel){throw '更新已取消'}

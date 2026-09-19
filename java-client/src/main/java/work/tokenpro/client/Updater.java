@@ -35,8 +35,12 @@ final class Updater {
     }
 
     static void installIncremental(Path update, String version) throws Exception {
+        installIncremental(update, version, false);
+    }
+
+    static void installIncremental(Path update, String version, boolean deferred) throws Exception {
         if (Platform.OS_KIND == Platform.OS.WINDOWS) {
-            WindowsUpdater.installDelta(update, version);
+            WindowsUpdater.installDelta(update, version, deferred);
             return;
         }
         long pid = ProcessHandle.current().pid();

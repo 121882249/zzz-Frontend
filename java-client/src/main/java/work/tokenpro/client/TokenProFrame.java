@@ -708,9 +708,13 @@ final class TokenProFrame extends JFrame {
                     try {
                         CodexConversationRepair.Result result = get();
                         updateCodexStatus();
-                        status("历史对话修复完成：成功 " + result.repaired() + "，失败 " + result.failed());
-                        String detail = "已修复为 " + targetLabel + "：成功 " + result.repaired()
-                            + " 个，失败 " + result.failed() + " 个，Codex 已自动重启。";
+                        status("历史对话修复完成：可见 " + result.visibleRepaired() + "，内部 "
+                            + result.internalRepaired() + "，失败 " + result.failed()
+                            + (result.failureReasons().isEmpty() ? "" : "（" + result.failureReasons() + "）"));
+                        String detail = "已修复可见对话 " + result.visibleRepaired() + " 个（归档 "
+                            + result.archivedRepaired() + " 个）、内部任务 " + result.internalRepaired()
+                            + " 个，失败 " + result.failed() + " 个"
+                            + (result.failureReasons().isEmpty() ? "。" : "，原因：" + result.failureReasons().keySet().iterator().next() + "。");
                         TokenProDialogs.info(TokenProFrame.this, "修复完成", detail);
                     } catch (Exception error) {
                         connectionFailure("Codex", false, error);
@@ -1656,14 +1660,16 @@ final class TokenProFrame extends JFrame {
         text = text.replace("更新失败，点击重试", "更新失败 · 重试");
         boolean latest = "latest".equals(state);
         boolean checking = "checking".equals(state);
-        if (loginView != null) loginView.setUpdateState(state, text, !latest && !checking);
+        boolean pending = "pending".equals(state);
+        if (loginView != null) loginView.setUpdateState(state, text, !latest && !checking && !pending);
         if (updateButton == null) return;
         updateButton.putClientProperty("tokenpro.updateState", state);
         updateButton.setText(text);
-        updateButton.setEnabled(!latest && !checking);
-        updateButton.setCursor(latest || checking ? Cursor.getDefaultCursor() : Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        updateButton.setEnabled(!latest && !checking && !pending);
+        updateButton.setCursor(latest || checking || pending ? Cursor.getDefaultCursor() : Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         updateButton.setIcon(headerUpdateIcon(state));
-        updateButton.setToolTipText(latest ? "当前已更新至最新版本" : checking ? "正在核对云端版本" : "点击在线更新至最新版本");
+        updateButton.setToolTipText(latest ? "当前已更新至最新版本" : pending ? "退出 TokenPro 后自动完成更新"
+            : checking ? "正在核对云端版本" : "点击在线更新至最新版本");
         updateButton.repaint();
     }
 
@@ -1770,10 +1776,16 @@ final class TokenProFrame extends JFrame {
             protected void done() {
                 try {
                     Path installer = get();
-                    setUpdateButtonState("checking", "正在完成更新…");
                     setUpdateProgress(100);
-                    status("正在完成 TokenPro " + release.version() + " 更新，程序即将重启…");
-                    finishUpdate(installer, release);
+                    String restart = TokenProDialogs.choose(TokenProFrame.this, "更新完成",
+                        "新版本已准备好，请选择重启时间。", "稍后重启", "立即重启");
+                    if ("立即重启".equals(restart)) {
+                        setUpdateButtonState("checking", "正在完成更新…");
+                        status("正在完成 TokenPro " + release.version() + " 更新，程序即将重启…");
+                        finishUpdate(installer, release);
+                    } else {
+                        deferUpdate(installer, release);
+                    }
                 } catch (Exception ex) {
                     updateInProgress.set(false);
                     if (updateButton != null) updateButton.setEnabled(true);
@@ -1804,6 +1816,33 @@ final class TokenProFrame extends JFrame {
                     Throwable cause = ex.getCause() == null ? ex : ex.getCause();
                     status("更新失败，已尝试恢复原有连接：" + cause.getMessage()
                         + (cause.getSuppressed().length > 0 ? "；部分桥接未恢复，请点击连接重试" : ""));
+                }
+            }
+        }.execute();
+    }
+
+    private void deferUpdate(Path installer, ReleaseInfo release) {
+        setUpdateButtonState("checking", "正在准备重启…");
+        new SwingWorker<Void,Void>() {
+            protected Void doInBackground() throws Exception {
+                if (release.hasIncrementalUpdate()) Updater.installIncremental(installer, release.version(), true);
+                else Updater.install(installer);
+                return null;
+            }
+            protected void done() {
+                try {
+                    get();
+                    updateInProgress.set(false);
+                    availableUpdate = null;
+                    setUpdateButtonState("pending", "等待重启 v" + release.version());
+                    setUpdateProgress(-1);
+                    status("更新已准备好，退出 TokenPro 后会自动完成并重新打开");
+                } catch (Exception ex) {
+                    updateInProgress.set(false);
+                    setUpdateButtonState("check", "更新失败，点击重试  ⚠");
+                    setUpdateProgress(-1);
+                    Throwable cause = ex.getCause() == null ? ex : ex.getCause();
+                    status("更新准备失败：" + Objects.toString(cause.getMessage(), cause.getClass().getSimpleName()));
                 }
             }
         }.execute();

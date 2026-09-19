@@ -81,7 +81,7 @@ final class TokenProDialogs {
 
         JPanel actions = transparent(new FlowLayout(FlowLayout.RIGHT, 10, 0));
         if (alternateText != null) {
-            JButton alternate = new DialogButton(alternateText, false);
+            JButton alternate = new DialogButton(alternateText, true);
             alternate.addActionListener(event -> { result.choice = alternateText; dialog.dispose(); });
             actions.add(alternate);
         } else if (cancellable) {
@@ -224,7 +224,9 @@ final class TokenProDialogs {
             setUI(new BasicButtonUI());
             setFont(font(12, Font.BOLD));
             setForeground(primary ? Color.WHITE : new Color(211, 220, 247));
-            setPreferredSize(new Dimension(primary ? 108 : 88, 38));
+            setMargin(new Insets(0, 16, 0, 16));
+            int textWidth = getFontMetrics(getFont()).stringWidth(text);
+            setPreferredSize(new Dimension(Math.max(112, textWidth + 40), 38));
             setBorderPainted(false);
             setContentAreaFilled(false);
             setFocusPainted(false);
