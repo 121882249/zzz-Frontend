@@ -163,7 +163,9 @@ final class ConnectionRegressionTest {
                 Map<String,Object> meta = Json.object(Json.parse(Files.readString(library.resolve("_meta.json"))));
                 Path profilePath = library.resolve(meta.get("appliedId") + ".json");
                 Map<String,Object> profile = Json.object(Json.parse(Files.readString(profilePath)));
-                check(ClaudeAdapter.list(profile.get("inferenceModels")).size() == models.size(), "saved picker count matches bridge in every install path"); passed++;
+                List<Map<String,Object>> savedModels = ClaudeAdapter.list(profile.get("inferenceModels")).stream().map(Json::object).toList();
+                check(savedModels.size() == models.size(), "saved picker count matches bridge in every install path"); passed++;
+                check(savedModels.stream().allMatch(row -> "max".equals(row.get("maxEffort"))), "Claude picker exposes the full effort range for every bridged model"); passed++;
                 profile.put("inferenceModels", List.of()); Files.writeString(profilePath, Json.stringify(profile));
                 try { ClaudeDesktopConfig.verifyLibrary(library, config); throw new AssertionError("stale picker accepted"); }
                 catch (IllegalStateException expected) { passed++; }

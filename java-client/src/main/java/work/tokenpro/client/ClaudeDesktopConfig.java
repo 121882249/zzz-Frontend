@@ -5,6 +5,7 @@ import java.util.*;
 
 final class ClaudeDesktopConfig {
     private static final String STATE_FILE = "claude-desktop-state.json";
+    private static final String MAX_EFFORT = "max";
     private ClaudeDesktopConfig() {}
 
     static void install(SecureStore store, ClaudeBridgeConfig bridge, String accountLabel) throws Exception {
@@ -24,7 +25,10 @@ final class ClaudeDesktopConfig {
         ensureEntry(meta, official, "Claude 官方配置");
         ensureEntry(meta, tokenPro, "TokenPro");
         if (!Files.exists(library.resolve(official + ".json"))) writeJson(library.resolve(official + ".json"), Map.of());
-        List<Map<String, Object>> models = bridge.routes().stream().map(route -> Map.<String, Object>of("name", route.alias(), "labelOverride", PricedModel.displayCase(route.name()))).toList();
+        List<Map<String, Object>> models = bridge.routes().stream().map(route -> Map.<String, Object>of(
+            "name", route.alias(),
+            "labelOverride", PricedModel.displayCase(route.name()),
+            "maxEffort", MAX_EFFORT)).toList();
         Map<String, Object> profile = new LinkedHashMap<>();
         profile.put("deploymentDisplayName", deploymentDisplayName(accountLabel)); profile.put("endUserAttribution", false);
         profile.put("inferenceProvider", "gateway"); profile.put("inferenceGatewayBaseUrl", bridge.baseUrl());
@@ -42,9 +46,11 @@ final class ClaudeDesktopConfig {
         String id = validId(readMeta(library).get("appliedId"));
         if (id == null) throw new IllegalStateException("Claude 未应用 TokenPro 配置");
         Map<String,Object> profile = Json.object(Json.parse(Files.readString(library.resolve(id + ".json"))));
-        List<String> actual = ClaudeAdapter.list(profile.get("inferenceModels")).stream()
-            .map(Json::object).map(row -> Objects.toString(row.get("name"), "")).toList();
+        List<Map<String,Object>> configuredModels = ClaudeAdapter.list(profile.get("inferenceModels")).stream()
+            .map(Json::object).toList();
+        List<String> actual = configuredModels.stream().map(row -> Objects.toString(row.get("name"), "")).toList();
         if (!actual.equals(bridge.routes().stream().map(ClaudeBridgeConfig.Route::alias).toList())
+            || configuredModels.stream().anyMatch(row -> !MAX_EFFORT.equals(row.get("maxEffort")))
             || !bridge.baseUrl().equals(profile.get("inferenceGatewayBaseUrl")))
             throw new IllegalStateException("Claude 模型列表与桥接配置不一致，请重新连接");
     }
