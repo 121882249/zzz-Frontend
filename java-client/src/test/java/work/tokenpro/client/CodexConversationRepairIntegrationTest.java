@@ -27,7 +27,7 @@ public final class CodexConversationRepairIntegrationTest {
             Files.writeString(archivedSession, archivedInitial);
 
             CodexConversationRepair.Result result = CodexConversationRepair.repair(root, "openai", "gpt-5.6-sol");
-            require(result.discovered() == 2 && result.repaired() == 2 && result.visibleRepaired() == 2
+            require(result.discovered() == 2 && result.repaired() == 1 && result.visibleRepaired() == 1
                 && result.archivedDiscovered() == 1 && result.failed() == 0,
                 "legacy provider was not repaired: " + result);
             try (CodexAppServerRpc rpc = new CodexAppServerRpc(root)) {
@@ -40,8 +40,7 @@ public final class CodexConversationRepairIntegrationTest {
                 Map<String,Object> archived = ClaudeAdapter.list(archivedPage.get("data")).stream().map(Json::object)
                     .filter(row -> archivedId.equals(row.get("id"))).findFirst()
                     .orElseThrow(() -> new AssertionError("archived conversation was not restored to the archive"));
-                require("openai".equals(archived.get("modelProvider")), "archived provider did not persist as openai");
-                require("gpt-5.6-sol".equals(archived.get("model")), "archived model did not persist");
+                require("custom".equals(archived.get("modelProvider")), "archived provider should remain unchanged");
             }
             Files.writeString(root.resolve("config.toml"), """
                 model="gpt-5.5"
@@ -54,7 +53,8 @@ public final class CodexConversationRepairIntegrationTest {
                 experimental_bearer_token="fixture-key"
                 """);
             CodexConversationRepair.Result custom = CodexConversationRepair.repair(root, "custom", "gpt-5.5");
-            require(custom.repaired() == 2 && custom.failed() == 0, "reverse custom repair failed: " + custom);
+            require(custom.repaired() == 1 && custom.failed() == 0 && custom.archivedDiscovered() == 1,
+                "reverse custom repair failed: " + custom);
             try (CodexAppServerRpc rpc = new CodexAppServerRpc(root)) {
                 Map<String,Object> resumed = rpc.call("thread/resume", Map.of("threadId", id, "excludeTurns", true));
                 require("custom".equals(resumed.get("modelProvider")), "provider did not persist as custom");
@@ -67,7 +67,7 @@ public final class CodexConversationRepairIntegrationTest {
                     .orElseThrow(() -> new AssertionError("archived rollout disappeared after repair"));
                 require(Files.readString(restored).startsWith(archivedInitial), "repair rewrote archived conversation records");
             }
-            System.out.println("Installed Codex repaired active and archived threads in both directions without sending a user turn.");
+            System.out.println("Installed Codex repaired only active visible threads and preserved archived history.");
         } finally {
             try (var paths = Files.walk(root)) {
                 for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path);

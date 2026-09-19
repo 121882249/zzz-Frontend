@@ -8,6 +8,7 @@ final class CodexConversationRepairTest {
     static int run() throws Exception {
         Map<String,String> providers = new LinkedHashMap<>();
         providers.put("already", "openai"); providers.put("custom", "custom");
+        providers.put("broken", "custom"); providers.put("guardian", "custom");
         providers.put("direct", "tokenpro_direct"); providers.put("uppercase", "OpenAI");
         Map<String,String> models = new HashMap<>(Map.of("already", "tp-g57-fixture"));
         Set<String> archivedIds = new LinkedHashSet<>(List.of("direct", "uppercase"));
@@ -19,14 +20,20 @@ final class CodexConversationRepairTest {
                 if (method.equals("thread/list")) {
                     boolean archived = Boolean.TRUE.equals(params.get("archived"));
                     List<String> ids = providers.keySet().stream().filter(value -> archivedIds.contains(value) == archived).toList();
-                    return Map.of("data", ids.stream().map(value -> Map.of(
-                        "id", value, "modelProvider", providers.get(value),
-                        "model", models.getOrDefault(value, "old"), "source", "vscode")).toList());
+                    return Map.of("data", ids.stream().map(value -> {
+                        Map<String,Object> row = new LinkedHashMap<>();
+                        row.put("id", value); row.put("modelProvider", providers.get(value));
+                        row.put("model", models.getOrDefault(value, "old"));
+                        row.put("source", value.equals("guardian")
+                            ? Map.of("subAgent", Map.of("other", "guardian")) : "vscode");
+                        if (value.equals("guardian")) row.put("parentThreadId", "custom");
+                        return row;
+                    }).toList());
                 }
                 if (method.equals("thread/unarchive")) { archivedIds.remove(id); return Map.of(); }
                 if (method.equals("thread/archive")) { archivedIds.add(id); return Map.of(); }
                 if (method.equals("thread/resume") && params.containsKey("modelProvider")) {
-                    if (id.equals("uppercase")) throw new IOException("fixture failure");
+                    if (id.equals("broken")) throw new IOException("fixture failure");
                     pendingId = id;
                     return Map.of("modelProvider", params.get("modelProvider"), "model", params.get("model"));
                 }
@@ -42,14 +49,15 @@ final class CodexConversationRepairTest {
             public void close() { closed.incrementAndGet(); }
         };
         CodexConversationRepair.Result result = CodexConversationRepair.repair(factory, "openai", "tp-g57-fixture");
-        require(result.discovered() == 4 && result.alreadyTarget() == 1 && result.attempted() == 3,
-            "all archived and active non-openai providers are selected");
-        require(result.repaired() == 2 && result.failed() == 1 && result.failedThreadIds().equals(List.of("uppercase")),
+        require(result.discovered() == 6 && result.visibleDiscovered() == 3 && result.alreadyTarget() == 1
+            && result.attempted() == 2, "only active visible non-target conversations are selected");
+        require(result.repaired() == 1 && result.failed() == 1 && result.failedThreadIds().equals(List.of("broken")),
             "individual failures do not block other conversations");
-        require(result.visibleRepaired() == 2 && result.internalRepaired() == 0 && result.archivedDiscovered() == 2
-            && result.archivedRepaired() == 1,
-            "visible and archived repair counts are reported separately");
-        require("openai".equals(providers.get("custom")) && "openai".equals(providers.get("direct"))
+        require(result.visibleRepaired() == 1 && result.internalRepaired() == 0
+            && result.archivedDiscovered() == 2 && result.internalDiscovered() == 1,
+            "archived conversations and internal tasks are reported as skipped");
+        require("openai".equals(providers.get("custom")) && "tokenpro_direct".equals(providers.get("direct"))
+            && "custom".equals(providers.get("guardian"))
             && "tp-g57-fixture".equals(models.get("custom")), "provider and current route model are persisted");
         require(archivedIds.equals(Set.of("direct", "uppercase")), "archived conversations keep their original state");
         require("openai".equals(result.provider()), "selected target provider is reported");

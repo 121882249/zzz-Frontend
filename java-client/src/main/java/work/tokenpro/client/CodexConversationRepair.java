@@ -25,11 +25,11 @@ final class CodexConversationRepair {
 
     record Result(int discovered, int visibleDiscovered, int internalDiscovered, int archivedDiscovered,
                   int alreadyTarget, int attempted, int repaired, int visibleRepaired,
-                  int internalRepaired, int archivedRepaired, int failed, List<String> failedThreadIds,
+                  int internalRepaired, int failed, List<String> failedThreadIds,
                   Map<String,Integer> failureReasons, String provider, String model) {
         String summary() {
-            return "可见对话修复 " + visibleRepaired + " 个，内部任务 " + internalRepaired
-                + " 个，失败 " + failed + " 个。";
+            return "修复 " + visibleRepaired + " 个，跳过归档 " + archivedDiscovered
+                + " 个、内部任务 " + internalDiscovered + " 个，失败 " + failed + " 个。";
         }
     }
 
@@ -69,9 +69,11 @@ final class CodexConversationRepair {
         String model = resolveModel(factory, requestedModel);
         if (model.isBlank()) throw new IOException("无法确认当前渠道模型，未修改历史对话");
 
+        List<ThreadRecord> eligible = providers.values().stream()
+            .filter(thread -> !thread.archived() && !thread.internal()).toList();
         int alreadyTarget = 0;
         List<ThreadRecord> targets = new ArrayList<>();
-        for (ThreadRecord thread : providers.values()) {
+        for (ThreadRecord thread : eligible) {
             if (targetProvider.equals(thread.provider()) && model.equals(thread.model())) alreadyTarget++;
             else targets.add(thread);
         }
@@ -81,17 +83,11 @@ final class CodexConversationRepair {
         Rpc rpc = null;
         try {
             for (ThreadRecord thread : targets) {
-                boolean temporarilyUnarchived = false;
-                boolean restoredArchive = false;
                 boolean modelUpdated = false;
                 MetadataBackup backup = null;
                 try {
                     backup = editor.update(thread, targetProvider);
                     if (rpc == null) rpc = factory.open();
-                    if (thread.archived()) {
-                        rpc.call("thread/unarchive", Map.of("threadId", thread.id()));
-                        temporarilyUnarchived = true;
-                    }
                     Map<String,Object> resumed = rpc.call("thread/resume", Map.of(
                         "threadId", thread.id(), "modelProvider", targetProvider, "model", model, "excludeTurns", true));
                     if (!targetProvider.equals(Objects.toString(resumed.get("modelProvider"), "")))
@@ -99,20 +95,8 @@ final class CodexConversationRepair {
                     rpc.call("thread/settings/update", Map.of("threadId", thread.id(), "model", model));
                     modelUpdated = true;
                     unsubscribe(rpc, thread.id());
-                    if (thread.archived()) {
-                        rpc.call("thread/archive", Map.of("threadId", thread.id()));
-                        restoredArchive = true;
-                    }
                     candidates.add(thread);
                 } catch (Exception failure) {
-                    if (temporarilyUnarchived && !restoredArchive) {
-                        try {
-                            unsubscribe(rpc, thread.id());
-                            rpc.call("thread/archive", Map.of("threadId", thread.id()));
-                        } catch (Exception restoreFailure) {
-                            failure.addSuppressed(new IOException("恢复归档状态失败", restoreFailure));
-                        }
-                    }
                     if (!modelUpdated && backup != null) {
                         try { restore(backup); }
                         catch (Exception restoreFailure) {
@@ -141,15 +125,15 @@ final class CodexConversationRepair {
         }
         LinkedHashMap<String,Integer> reasons = new LinkedHashMap<>();
         for (Failure failure : failures) reasons.merge(failure.reason(), 1, Integer::sum);
-        int visibleDiscovered = (int) providers.values().stream().filter(thread -> !thread.internal()).count();
-        int internalDiscovered = providers.size() - visibleDiscovered;
+        int visibleDiscovered = eligible.size();
+        int internalDiscovered = (int) providers.values().stream()
+            .filter(thread -> !thread.archived() && thread.internal()).count();
         int archivedDiscovered = (int) providers.values().stream().filter(ThreadRecord::archived).count();
         int visibleRepaired = (int) repaired.stream().filter(thread -> !thread.internal()).count();
         int internalRepaired = repaired.size() - visibleRepaired;
-        int archivedRepaired = (int) repaired.stream().filter(ThreadRecord::archived).count();
         return new Result(providers.size(), visibleDiscovered, internalDiscovered, archivedDiscovered,
             alreadyTarget, targets.size(), repaired.size(), visibleRepaired, internalRepaired,
-            archivedRepaired, failures.size(), failures.stream().map(Failure::id).distinct().toList(),
+            failures.size(), failures.stream().map(Failure::id).distinct().toList(),
             Collections.unmodifiableMap(reasons), targetProvider, model);
     }
 
