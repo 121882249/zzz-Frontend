@@ -200,11 +200,18 @@ final class TokenProDialogs {
             g.setColor(color);
             g.setStroke(new BasicStroke(2f));
             g.drawOval(5, 5, 32, 32);
-            g.setFont(font(19, Font.BOLD));
-            String symbol = tone == Tone.INFO ? "i" : "!";
-            FontMetrics metrics = g.getFontMetrics();
-            g.drawString(symbol, (getWidth() - metrics.stringWidth(symbol)) / 2,
-                (getHeight() - metrics.getHeight()) / 2 + metrics.getAscent());
+            if (tone == Tone.INFO) {
+                g.setFont(font(19, Font.BOLD));
+                String symbol = "i";
+                FontMetrics metrics = g.getFontMetrics();
+                g.drawString(symbol, (getWidth() - metrics.stringWidth(symbol)) / 2,
+                    (getHeight() - metrics.getHeight()) / 2 + metrics.getAscent());
+            } else {
+                int center = getWidth() / 2;
+                g.setStroke(new BasicStroke(2.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                g.drawLine(center, 13, center, 25);
+                g.fillOval(center - 2, 29, 4, 4);
+            }
             g.dispose();
         }
     }
