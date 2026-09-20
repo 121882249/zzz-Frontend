@@ -12,7 +12,7 @@ final class CliLauncher {
         Files.createDirectories(directory);
         Path launcher = directory.resolve("tokenpro-" + client + (Platform.OS_KIND == Platform.OS.WINDOWS ? ".cmd" : ""));
         Files.writeString(launcher, launchScript(Platform.OS_KIND, RuntimeCommand.withArgs("--prepare-" + client + "-cli"),
-            Platform.resolveCli(client).toString(), arguments(root,client,List.of()), environment(root,client)));
+            Platform.resolveCli(client).toString(), launchArguments(root,client,List.of()), environment(root,client)));
         Platform.privateFile(launcher);
         if(Platform.OS_KIND != Platform.OS.WINDOWS) launcher.toFile().setExecutable(true, true);
         return launcher.toAbsolutePath();
@@ -66,13 +66,21 @@ final class CliLauncher {
         if(client.equals("claude")) result.addAll(List.of("--settings", root.cli(client).root().resolve(ClaudeCliConfig.FILE).toAbsolutePath().toString()));
         // Codex -c accepts a raw string when the value is not valid TOML.
         // Absolute slash paths avoid nested quotes inside a Windows batch arg.
-        else result.addAll(List.of("-c", "tokenpro_profile=" + ClientReconnect.cliMarker(root, client).replace('\\', '/')));
+        else {
+            result.addAll(List.of("-c", "tokenpro_profile=" + ClientReconnect.cliMarker(root, client).replace('\\', '/')));
+        }
         result.addAll(extra);
         return result;
     }
     static int run(SecureStore root, String client, List<String> extra) throws Exception {
         prepare(root, client);
-        return Platform.runCli(client, arguments(root, client, extra), environment(root, client));
+        return Platform.runCli(client, launchArguments(root, client, extra), environment(root, client));
+    }
+    private static List<String> launchArguments(SecureStore root, String client, List<String> extra) throws Exception {
+        List<String> result = new ArrayList<>(arguments(root, client, List.of()));
+        if (client.equals("codex")) result.addAll(CodexCliCatalog.arguments(root, Platform.codexConfig()));
+        result.addAll(extra);
+        return result;
     }
     static void prepare(SecureStore root, String client) throws Exception {
         validate(client);

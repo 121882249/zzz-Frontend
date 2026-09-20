@@ -606,8 +606,7 @@ final class TokenProFrame extends JFrame {
             if (models.isEmpty()) { error(new IllegalStateException("当前账户没有可用模型")); return; }
             updateSupportedModelCounts(models);
             reconcileModelSelections(models, owner);
-            boolean sharedCodex = "Codex".equals(client);
-            boolean pickerCli = cli && !sharedCodex;
+            boolean pickerCli = cli;
             Set<String> selected = selectedModelIds(client, pickerCli);
             ModelPickerDialog dialog = new ModelPickerDialog(this, client, pickerCli, models, selected,
                 chosen -> {
@@ -2278,6 +2277,13 @@ final class TokenProFrame extends JFrame {
                 List<PricedModel> saved = requestedModels != null ? requestedModels : app.equals("Codex") ? savedCodexModels(target)
                     : ClaudeBridgeConfig.load(target).routes().stream()
                         .map(r -> new PricedModel(r.name(), r.platform(), r.groupName(), r.groupId())).toList();
+                if (app.equals("Codex") && cli && requestedModels != null) {
+                    // The CLI picker edits text choices only; hidden desktop image
+                    // choices must survive applying the filtered selection.
+                    List<PricedModel> combined = new ArrayList<>(saved);
+                    savedCodexModels(target).stream().filter(PricedModel::isImageGeneration).forEach(combined::add);
+                    saved = combined;
+                }
                 // The picker already supplies the exact model/group pair. Availability
                 // is decided on invocation by the gateway, not by a second catalog fetch.
                 List<PricedModel> selected = app.equals("Codex") ? ModelPickerDialog.orderedModels(saved, app, false)

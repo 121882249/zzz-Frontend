@@ -27,7 +27,7 @@ final class ModelPickerDialog extends JDialog {
 
     ModelPickerDialog(JFrame owner, String client, boolean cli, List<PricedModel> models,
                       Set<String> selectedIds, Consumer<List<PricedModel>> onApply) {
-        super(owner, "选择 " + client + " 模型", true);
+        super(owner, "选择 " + client + (cli ? " 命令行" : " 客户端") + " 模型", true);
         setUndecorated(true);
         boolean transparent = false;
         try {
@@ -60,7 +60,7 @@ final class ModelPickerDialog extends JDialog {
         JPanel header = transparent();
         header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
         JPanel titleLine = transparent(new BorderLayout());
-        JLabel title = new JLabel("选择 " + client + " 模型");
+        JLabel title = new JLabel("选择 " + client + (cli ? " 命令行" : " 客户端") + " 模型");
         title.setFont(font(23, Font.BOLD));
         title.setForeground(TEXT);
         titleLine.add(title, BorderLayout.WEST);
