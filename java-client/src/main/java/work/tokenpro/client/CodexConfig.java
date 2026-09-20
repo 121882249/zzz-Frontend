@@ -247,8 +247,6 @@ final class CodexConfig {
             bySlug.put(String.valueOf(template.getOrDefault("slug", "")), template);
         }
         List<Map<String, Object>> entries = new ArrayList<>();
-        Map<String, Long> nameCounts = new HashMap<>();
-        for (PricedModel model : models) nameCounts.merge(model.name().toLowerCase(Locale.ROOT), 1L, Long::sum);
         int priority = 1;
         for (PricedModel model : models) {
             Map<String, Object> exact = bySlug.get(model.name());
@@ -257,8 +255,7 @@ final class CodexConfig {
             if (closest == null) closest = bySlug.values().stream().min(Comparator.comparing(item -> String.valueOf(item.get("slug")))).orElseThrow();
             Map<String, Object> entry = deepCopy(closest);
             entry.put("slug", routedModelId(model));
-            entry.put("display_name", catalogDisplayName(model,
-                nameCounts.getOrDefault(model.name().toLowerCase(Locale.ROOT), 0L) > 1));
+            entry.put("display_name", catalogDisplayName(model));
             entry.put("description", model.groupName() + " · TokenPro");
             entry.put("visibility", "list");
             entry.put("supported_in_api", true);
@@ -350,14 +347,12 @@ final class CodexConfig {
     }
 
     static String catalogDisplayName(PricedModel model) {
-        return model.codexDisplayName();
+        String description = model.groupDescription().replaceAll("\\s+", " ").trim();
+        return model.codexDisplayName() + (description.isEmpty() ? "" : "「" + description + "」");
     }
 
     static String catalogDisplayName(PricedModel model, boolean duplicateName) {
-        if (!duplicateName) return catalogDisplayName(model);
-        String description = model.groupDescription().replaceAll("\\s+", " ").trim();
-        if (description.isEmpty()) description = model.displayGroupName();
-        return catalogDisplayName(model) + "「" + description + "」";
+        return catalogDisplayName(model);
     }
 
     private static Map<String, Object> reasoningLevel(String effort) {

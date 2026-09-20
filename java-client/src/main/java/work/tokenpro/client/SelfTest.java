@@ -258,6 +258,12 @@ final class SelfTest {
         check("GPT⁠-5.6-Sol「专业分组 稳定高速」".equals(CodexConfig.catalogDisplayName(new PricedModel(
             "gpt-5.6-sol", "openai", "专业组", 65, "token", null, null, List.of(), false, 0d, "", "专业分组\n稳定高速"), true)),
             "duplicate Codex model names show their group description"); passed++;
+        check("GPT⁠-5.6-Sol「拥堵繁忙」".equals(CodexConfig.catalogDisplayName(new PricedModel(
+            "gpt-5.6-sol", "openai", "福利组", 41, "token", null, null, List.of(), false, 0d, "", " 拥堵繁忙 "), false)),
+            "unique Codex models also show the trimmed group description"); passed++;
+        check("Claude-Fable-5".equals(CodexConfig.catalogDisplayName(new PricedModel(
+            "claude-fable-5", "anthropic", "Claude", 60), true)),
+            "empty descriptions never produce brackets or substitute a group name"); passed++;
         Map<String, Object> customModel = new LinkedHashMap<>(Map.of("use_responses_lite", true));
         CodexConfig.disableResponsesLite(customModel);
         check(Boolean.FALSE.equals(customModel.get("use_responses_lite")), "custom provider disables Responses Lite"); passed++;
