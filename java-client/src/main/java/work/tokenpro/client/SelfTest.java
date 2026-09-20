@@ -68,8 +68,10 @@ final class SelfTest {
         check(restoredConfig.startsWith("model = \"old\"\nmodel_provider = \"openai\"\n"), "official root model settings restored"); passed++;
         check(restoredConfig.contains("apps = false") && restoredConfig.contains("[new_setting]"), "restore preserves newer Codex settings"); passed++;
         check("https://tokenpro.work/v1".equals(CodexConfig.providerBaseUrl("https://tokenpro.work/v1")), "Codex provider keeps v1 route"); passed++;
-        check("tp-g16-Z3B0LTUuNi1zb2w".equals(CodexConfig.routedModelId(
-            new PricedModel("gpt-5.6-sol", "openai", "GPT", 16))), "direct Codex model slug pins its exact group"); passed++;
+        check("tp-g16-gpt-5.6-sol".equals(CodexConfig.routedModelId(
+            new PricedModel("gpt-5.6-sol", "openai", "GPT", 16))), "direct Codex model slug keeps a readable model name and pins its exact group"); passed++;
+        check("tp-g16-bW9kZWwgd2l0aCBzcGFjZQ".equals(CodexConfig.routedModelId(
+            new PricedModel("model with space", "openai", "GPT", 16))), "unsafe direct Codex model names retain the legacy encoded route"); passed++;
         check(!CodexConfig.routedModelId(new PricedModel("same-model", "openai", "A", 16)).equals(
             CodexConfig.routedModelId(new PricedModel("same-model", "openai", "B", 65))),
             "same model name in different groups cannot share a direct route"); passed++;

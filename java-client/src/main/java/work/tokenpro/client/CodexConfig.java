@@ -15,6 +15,7 @@ final class CodexConfig {
     private static final Pattern MODEL_CATALOG_ASSIGNMENT = Pattern.compile("(?m)^model_catalog_json\\s*=\\s*(['\\\"])([^'\\\"]+)\\1\\s*$");
     private static final Pattern ROOT_MODEL_ASSIGNMENT = Pattern.compile("(?m)^model\\s*=.*$");
     private static final Pattern REVIEW_MODEL_ASSIGNMENT = Pattern.compile("(?m)^review_model\\s*=.*$");
+    private static final Pattern READABLE_ROUTE_MODEL = Pattern.compile("[\\p{L}\\p{N}][\\p{L}\\p{N}._:/-]{0,511}");
     private final SecureStore store;
     private final Path configPath;
     record ForeignRelayPlan(String original, String cleaned, List<String> changes) {}
@@ -209,8 +210,10 @@ final class CodexConfig {
     }
 
     static String routedModelId(PricedModel model) {
+        String name = model.name().trim();
+        if (READABLE_ROUTE_MODEL.matcher(name).matches()) return "tp-g" + model.groupId() + "-" + name;
         String encoded = Base64.getUrlEncoder().withoutPadding()
-            .encodeToString(model.name().getBytes(StandardCharsets.UTF_8));
+            .encodeToString(name.getBytes(StandardCharsets.UTF_8));
         return "tp-g" + model.groupId() + "-" + encoded;
     }
 
