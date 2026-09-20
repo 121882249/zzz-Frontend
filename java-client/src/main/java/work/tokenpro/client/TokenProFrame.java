@@ -2255,7 +2255,6 @@ final class TokenProFrame extends JFrame {
                         CodexConfig config = cli ? new CodexConfig(target, configPath) : codex;
                         config.apply("https://tokenpro.work/v1", selected, key.key(), accountLabel, relayPlanToApply);
                         saveCodexSelection(target, selected, key, owner);
-                        if (cli) CliLauncher.install(store, command);
                     }, () -> startAndAwaitProfile(app, cli));
                     return selected.size();
                 }
@@ -2277,7 +2276,21 @@ final class TokenProFrame extends JFrame {
                     int count = get();
                     if (!cli) setDesktopCardState(app, selectionStatus(count), true);
                     else updateCommandControls(command, true);
-                    status(label + " 已启动，已配置 " + count + " 个模型；费用以 TokenPro 用量记录为准");
+                    String defaultCommand = "";
+                    if (cli && app.equals("Codex")) {
+                        // Write startup settings only after the transactional route
+                        // update and CLI launch both succeeded, so a failed connect
+                        // cannot leave a new default command behind.
+                        try {
+                            CodexCliShellIntegration.install(store, Platform.resolveCli("codex"));
+                            defaultCommand = "；新开的 " + (Platform.OS_KIND == Platform.OS.WINDOWS ? "PowerShell" : "终端")
+                                + " 可直接输入 codex，codex-official 可回退原命令";
+                        } catch (Exception startupFailure) {
+                            defaultCommand = "；默认命令设置失败，仍可直接运行 TokenPro 独立启动器："
+                                + startupFailure.getMessage();
+                        }
+                    }
+                    status(label + " 已启动，已配置 " + count + " 个模型；费用以 TokenPro 用量记录为准" + defaultCommand);
                     if (app.equals("Codex") && !cli) TokenProDialogs.info(TokenProFrame.this, "连接完成",
                         "TokenPro 配置已启用，客户端已重启。");
                     lastAccountRefresh = 0; refreshAccountSilently();

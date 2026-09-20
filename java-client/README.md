@@ -43,7 +43,13 @@ Codex 模型目录使用不展示给用户的分组限定 slug 携带模型选�
 桌面端重新选模型、恢复配置或关闭 Claude 桥接，不会覆盖命令行配置，反之亦然。
 普通终端也可以直接运行 TokenPro 数据目录下的
 `bin/tokenpro-codex` 或 `bin/tokenpro-claude`（Windows 为 .cmd）。该入口在运行前加载独立配置；Claude 入口还会恢复对应桥接。
-直接输入系统原来的 `codex`/`claude` 仍采用原生配置；TokenPro 不覆盖它们，也不修改全局 PATH。
+连接 Codex 命令行时，TokenPro 会将一个带有成对标记的函数写入当前用户的终端启动设置，因此新开的终端直接输入 `codex` 即使用该独立配置；`codex-official` 保留连接前识别到的官方 CLI。这个函数不修改系统 PATH、不改 Codex 客户端配置，也不影响 `claude`：
+
+- macOS：默认 zsh 写入 `~/.zshrc`；使用 bash 的账户写入 `~/.bashrc` 和 `~/.bash_profile`。
+- Linux：默认 bash / zsh / fish 分别写入 `~/.bashrc`、`~/.zshrc`、`~/.config/fish/config.fish`。
+- Windows：同时写入 `Documents\\WindowsPowerShell\\Microsoft.PowerShell_profile.ps1`（Windows PowerShell 5）和 `Documents\\PowerShell\\Microsoft.PowerShell_profile.ps1`（PowerShell 7）。PowerShell 启动策略若禁用用户 Profile，则应按企业策略启用 Profile 或直接运行 `tokenpro-codex.cmd`；不会自动修改执行策略。
+
+每次连接会仅替换 TokenPro 自己的标记块；其他 shell / PowerShell 设置保持不变。若标记块被手动删坏，客户端会停止写入并提示修复，避免覆盖用户的启动文件。
 
 ### 接入状态、图片与模型同步
 

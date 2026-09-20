@@ -4,6 +4,11 @@
 
 TokenPro 现在只有一套 Java 21/Swing 客户端源码，支持 Windows、macOS 和 Linux。macOS 的 Intel 与 Apple 芯片版本、Windows x64 版本和 Linux x64 版本由 GitHub Actions 分别在对应系统构建。
 
+## v1.3.31 更新
+
+- 连接 Codex 命令行后，新开的终端可直接使用 `codex` 启动 TokenPro 的独立命令行配置；`codex-official` 始终可运行连接前识别到的原始 Codex CLI。
+- 不改系统 PATH：macOS 使用当前用户的 zsh / bash 启动文件，Linux 使用当前默认的 bash / zsh / fish 启动文件；Windows 同时写入 Windows PowerShell 5 与 PowerShell 7 的当前用户 Profile。Codex 客户端配置不受影响。
+
 ## v1.3.30 更新
 
 - Codex 命令行现在与 Codex 客户端一样提供“修复历史对话”：只修复该入口独立 `CODEX_HOME` 中未归档的普通对话，不会改写桌面端会话。
@@ -64,7 +69,7 @@ flowchart LR
 
 开始前请确认 TokenPro 已更新到 `v1.2.93` 或更高版本。Claude Code 需为 `2.1.242` 或更高版本；Windows 一键连接使用原生 CLI，WSL 环境需要单独配置。
 
-TokenPro 不修改系统全局 PATH，也不会用命令行配置覆盖桌面端配置。直接从普通终端运行原来的 `codex` 或 `claude`，仍使用各自的官方配置。
+TokenPro 不修改系统全局 PATH，也不会用命令行配置覆盖桌面端配置。连接 Codex 命令行后，新开的终端中 `codex` 会使用 TokenPro 的独立配置；`codex-official` 可随时运行原来的官方 CLI。`claude` 始终保持原生命令。
 
 ## 功能
 
