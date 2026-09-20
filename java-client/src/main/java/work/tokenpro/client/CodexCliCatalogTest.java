@@ -32,11 +32,13 @@ final class CodexCliCatalogTest {
             if (models.size() != 1 || !Json.object(models.getFirst()).get("slug").equals(CodexConfig.routedModelId(chat)))
                 throw new AssertionError("CLI must exclude image group and retain exact text route");
             if (!args.get(3).equals("model=" + CodexConfig.routedModelId(chat))) throw new AssertionError("image default must fall back to text");
+            if (!CodexCliCatalog.cliDescription("GPT-6-Astra「高速订阅」").equals("GPT-6-Astra · 高速订阅"))
+                throw new AssertionError("CLI description separator is unstable");
             if (!Files.readString(config).equals(original) || !Files.readString(catalog).equals(full)) throw new AssertionError("desktop data changed");
             store.write("codex-selected.json", Json.stringify(Map.of("models", List.of(selections.get(1)))));
             try { CodexCliCatalog.arguments(store, config); throw new AssertionError("image-only selection allowed"); }
             catch (IllegalStateException expected) { }
-            return 4;
+            return 5;
         } finally {
             try (var paths = Files.walk(temp)) { for (Path p : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(p); }
         }

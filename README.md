@@ -4,6 +4,11 @@
 
 TokenPro 现在只有一套 Java 21/Swing 客户端源码，支持 Windows、macOS 和 Linux。macOS 的 Intel 与 Apple 芯片版本、Windows x64 版本和 Linux x64 版本由 GitHub Actions 分别在对应系统构建。
 
+## v1.3.36 更新
+
+- Codex CLI 右侧可读说明使用稳定的“模型名 · 分组说明”格式，避免原生 TUI 吞掉中文左引号。
+- 专用生图组继续从 CLI 模型目录中过滤；内部 `tp-g...` 路由仍由原生 CLI 显示在左侧。
+
 ## v1.3.35 更新
 
 - 模型选择弹窗标题区分 Codex / Claude 的客户端和命令行入口。

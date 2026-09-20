@@ -17,8 +17,10 @@ final class CodexCliCatalog {
         for (Object raw : ClaudeAdapter.list(root.get("models"))) {
             Map<String,Object> entry = new LinkedHashMap<>(Json.object(raw));
             if (!textSlugs.contains(entry.get("slug"))) continue;
-            // Native CLI renders description alongside its request slug.
-            entry.put("description", entry.getOrDefault("display_name", entry.get("slug")));
+            // The native TUI drops the opening CJK quote in descriptions. Use a
+            // stable separator while leaving the desktop display name unchanged.
+            String display = Objects.toString(entry.getOrDefault("display_name", entry.get("slug")));
+            entry.put("description", cliDescription(display));
             entries.add(entry);
         }
         if (entries.isEmpty()) throw new IllegalStateException("当前没有可用于 Codex 命令行的对话模型，请先选择普通模型");
@@ -29,5 +31,9 @@ final class CodexCliCatalog {
         if (!textSlugs.contains(current)) current = Objects.toString(entries.getFirst().get("slug"));
         return List.of("-c", "model_catalog_json=" + target.toAbsolutePath().toString().replace('\\', '/'),
             "-c", "model=" + current);
+    }
+
+    static String cliDescription(String display) {
+        return display.replaceFirst("「([^」]+)」$", " · $1");
     }
 }
