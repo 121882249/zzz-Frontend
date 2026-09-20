@@ -4,6 +4,11 @@
 
 TokenPro 现在只有一套 Java 21/Swing 客户端源码，支持 Windows、macOS 和 Linux。macOS 的 Intel 与 Apple 芯片版本、Windows x64 版本和 Linux x64 版本由 GitHub Actions 分别在对应系统构建。
 
+## v1.3.32 更新
+
+- 四个入口的启动按钮仅打开对应客户端或命令行，沿用已保存的配置，不再执行渠道切换或联动重启其他入口。
+- 未选模型时启动也不会自动切换官方配置；选择模型、切换官方和修复历史继续通过菜单操作。
+
 ## v1.3.31 更新
 
 - Codex 客户端与 Codex CLI 改为共用系统默认 `CODEX_HOME`：模型选择、渠道、认证、对话历史及“修复历史对话”使用同一套数据。

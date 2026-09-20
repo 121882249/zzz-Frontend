@@ -363,7 +363,6 @@ final class TokenProFrame extends JFrame {
         launch.setEnabled(false);
         launch.addActionListener(e -> {
             if (!desktopClientInstalled(iconName)) browse(downloadUrl);
-            else if (!Boolean.TRUE.equals(launch.getClientProperty("tokenpro.canConnect"))) chooseModel.run();
             else open.run();
         });
         if (iconName.equals("Codex")) codexLaunch = launch; else claudeLaunch = launch;
@@ -1020,9 +1019,8 @@ final class TokenProFrame extends JFrame {
             return;
         }
         launch.setText(installed ? "连接" : "去下载");
-        if (installed && !canConnect) launch.setText("配置渠道");
         launch.putClientProperty("tokenpro.canConnect", canConnect);
-        launch.setToolTipText(installed ? (canConnect ? "重新连接 " + client + " 客户端" : "选择可用模型并配置渠道") : "打开 " + client + " 官方下载页");
+        launch.setToolTipText(installed ? "打开 " + client + " 客户端" : "打开 " + client + " 官方下载页");
         launch.setEnabled(true);
         if (menu != null) menu.setEnabled(true);
         if (!installed) state.setText("请先安装应用");
@@ -2208,22 +2206,38 @@ final class TokenProFrame extends JFrame {
         }.execute();
     }
     private void reconnectApp(String app) {
-        connectClient(app, false);
+        launchOnly(app, false);
     }
     private void openTerminal(String command) {
-        if(cliSelectedCount(command) == 0) {
-            String app = command.equals("codex") ? "Codex" : "Claude";
-            switchOfficialProfile(app, true);
-        }
-        else launchTerminal(command);
+        launchOnly(command.equals("codex") ? "Codex" : "Claude", true);
+    }
+
+    private void launchOnly(String app, boolean cli) {
+        String identity = app.toLowerCase(Locale.ROOT) + (cli ? "-cli" : "-desktop");
+        if (app.equals("Codex") && connectingClients.blocked("codex-shared")) return;
+        if (!connectingClients.begin(identity)) return;
+        refreshConnectControls();
+        String label = app + (cli ? " 命令行" : " 客户端");
+        status("正在打开 " + label + "…");
+        new SwingWorker<Void,Void>() {
+            protected Void doInBackground() throws Exception {
+                // Startup consumes the saved profile. Only explicit settings
+                // actions may switch routes or stop/restart another program.
+                startAndAwaitProfile(app, cli);
+                return null;
+            }
+            protected void done() {
+                finishConnection(identity);
+                try {
+                    get();
+                    status(label + " 已打开，沿用当前配置");
+                } catch (Exception failure) { connectionFailure(app, cli, failure); }
+            }
+        }.execute();
     }
 
     private void applyClaudeCli(List<PricedModel> selected, boolean launch) {
         connectClient("Claude", true, selected);
-    }
-
-    private void launchTerminal(String command) {
-        connectClient(command.equals("codex") ? "Codex" : "Claude", true);
     }
 
     private void connectClient(String app, boolean cli) {
