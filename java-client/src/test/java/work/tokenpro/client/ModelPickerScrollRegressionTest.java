@@ -13,8 +13,8 @@ public final class ModelPickerScrollRegressionTest {
     public static void main(String[] args) throws Exception {
         var catalog = new ArrayList<PricedModel>();
         for (int i = 0; i < 60; i++) catalog.add(new PricedModel("gpt-scroll-fixture-" + i, "openai", "Fixture " + i / 15, 10 + i / 15));
-        var flare = new PricedModel("gpt-image-2.5-flare", "openai", "Images", 65);
-        var sunburst = new PricedModel("gpt-image-2.5-sunburst", "openai", "Images", 65);
+        var flare = image("gpt-image-2.5-flare");
+        var sunburst = image("gpt-image-2.5-sunburst");
         catalog.add(flare); catalog.add(sunburst);
         Set<String> chosen = Set.of(ModelPickerDialog.id(catalog.getFirst()), ModelPickerDialog.id(flare), ModelPickerDialog.id(sunburst));
         var applied = new AtomicReference<List<PricedModel>>();
@@ -29,7 +29,7 @@ public final class ModelPickerScrollRegressionTest {
                 frame.getContentPane().setBackground(Color.MAGENTA);
                 frame.setSize(900, 760); frame.setLocationRelativeTo(null); frame.setVisible(true);
                 owner.set(frame);
-                ModelPickerDialog dialog = new ModelPickerDialog(frame, "Codex", catalog, chosen, applied::set);
+                ModelPickerDialog dialog = new ModelPickerDialog(frame, "Codex", false, catalog, chosen, applied::set);
                 dialog.setModal(false); dialog.setVisible(true); dialog.validate(); picker.set(dialog);
                 scroll.set(findScroll(dialog));
                 require(scroll.get() != null, "missing list");
@@ -84,4 +84,8 @@ public final class ModelPickerScrollRegressionTest {
         return null;
     }
     static void require(boolean value, String message) {if (!value) throw new AssertionError(message);}
+    static PricedModel image(String name) {
+        return new PricedModel(name, "openai", "openai", "Images", 65,
+            "image", null, null, List.of(), false, 0d, "", "生图");
+    }
 }

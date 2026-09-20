@@ -607,7 +607,7 @@ final class TokenProFrame extends JFrame {
             updateSupportedModelCounts(models);
             reconcileModelSelections(models, owner);
             Set<String> selected = selectedModelIds(client, cli);
-            ModelPickerDialog dialog = new ModelPickerDialog(this, client, models, selected,
+            ModelPickerDialog dialog = new ModelPickerDialog(this, client, cli, models, selected,
                 chosen -> {
                     if ("Codex".equals(client)) applyCodex(chosen, cli, launch);
                     else if (cli) applyClaudeCli(chosen, launch);
@@ -1301,9 +1301,9 @@ final class TokenProFrame extends JFrame {
         try {
             int removed = ModelSelectionReconciler.reconcileAll(store, owner, models);
             if (removed > 0) {
-                refreshReconciledCodexCatalog(store, Platform.codexConfig(), models);
+                refreshReconciledCodexCatalog(store, Platform.codexConfig(), models, false);
                 SecureStore cliStore = store.cli("codex");
-                refreshReconciledCodexCatalog(cliStore, cliStore.root().resolve("home/config.toml"), models);
+                refreshReconciledCodexCatalog(cliStore, cliStore.root().resolve("home/config.toml"), models, true);
             }
             updateCodexStatus(); updateBridgeStatus();
             updateCommandControls("codex", codexCliInstalled);
@@ -1315,8 +1315,9 @@ final class TokenProFrame extends JFrame {
     }
 
     private static void refreshReconciledCodexCatalog(SecureStore target, Path config,
-                                                        List<PricedModel> available) throws Exception {
+                                                        List<PricedModel> available, boolean cli) throws Exception {
         List<PricedModel> selected = ModelSelectionReconciler.currentModels(savedCodexModels(target), available, "Codex");
+        selected = ModelPickerDialog.orderedModels(selected, "Codex", cli);
         if (!selected.isEmpty()) new CodexConfig(target, config).refreshModelCatalog(selected);
     }
 
@@ -2229,7 +2230,7 @@ final class TokenProFrame extends JFrame {
                         .map(r -> new PricedModel(r.name(), r.platform(), r.groupName(), r.groupId())).toList();
                 // The picker already supplies the exact model/group pair. Availability
                 // is decided on invocation by the gateway, not by a second catalog fetch.
-                List<PricedModel> selected = app.equals("Codex") ? ModelPickerDialog.orderedModels(saved, app)
+                List<PricedModel> selected = app.equals("Codex") ? ModelPickerDialog.orderedModels(saved, app, cli)
                     : ModelSelectionReconciler.currentModels(saved, api.pricedModels(token), app);
                 if(!Objects.equals(token, accessToken)) throw new IllegalStateException("账户已变化，连接已取消");
                 if (selected.isEmpty()) throw new IllegalStateException("之前选择的模型已不可用，请重新选择模型；原程序未关闭");

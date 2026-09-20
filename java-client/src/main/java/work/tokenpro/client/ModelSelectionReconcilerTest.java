@@ -11,7 +11,8 @@ final class ModelSelectionReconcilerTest {
             SecureStore store = new SecureStore(root);
             PricedModel old = new PricedModel("GPT-Old", "openai", "Before", 7);
             PricedModel live = new PricedModel("GPT-Live", "openai", "Current", 7);
-            PricedModel image = new PricedModel("GPT-Image-Old", "openai", "Before", 7);
+            PricedModel image = new PricedModel("GPT-Image-Old", "openai", "openai", "Before", 7,
+                "image", null, null, List.of(), false, 0d, "", "生图");
             PricedModel fresh = new PricedModel("GPT-New", "openai", "Current", 7);
             List<PricedModel> catalog = List.of(live, fresh, new PricedModel(old.name(), "openai", "Different Group", 8));
             Map<String,Object> document = new LinkedHashMap<>(Map.of("account_id", "18", "key_id", 91, "custom", "preserve", "models", rows(List.of(old, live, image)), "model", old.name(), "group_id", 7, "default_model", old.name(), "image_model", image.name()));
@@ -46,6 +47,13 @@ final class ModelSelectionReconcilerTest {
             codexCli.write("codex-selected.json", Json.stringify(document)); bridge.save(claudeCli);
             check(ModelSelectionReconciler.reconcileAll(store, "18", catalog) == 3, "Codex CLI and Claude CLI stale selections are reconciled"); passed++;
             check(TokenProFrame.savedCodexModels(codexCli).equals(List.of(live)) && ClaudeBridgeConfig.load(store).routes().size() == 1 && ClaudeBridgeConfig.load(claudeCli).routes().size() == 1, "desktop and CLI selections remain isolated"); passed++;
+            PricedModel dedicatedImage = new PricedModel("gpt-image-2", "openai", "openai", "生图组", 12,
+                "image", null, null, List.of(), false, 0d, "", " 生图 ");
+            codexCli.write("codex-selected.json", Json.stringify(Map.of("account_id", "18", "models", rows(List.of(live, dedicatedImage)))));
+            check(ModelSelectionReconciler.reconcileAll(store, "18", List.of(live, dedicatedImage)) == 1,
+                "Codex CLI drops the dedicated image group during reconciliation"); passed++;
+            check(TokenProFrame.savedCodexModels(codexCli).equals(List.of(live)),
+                "Codex CLI persistence never retains dedicated image groups"); passed++;
             store.write("codex-selected.json", "{\"model\":\"GPT-Old\",\"group_id\":7,\"key_id\":91}");
             check(ModelSelectionReconciler.reconcileAll(store, "18", catalog) == 1 && !store.read("codex-selected.json").orElseThrow().contains("GPT-Old"), "legacy Codex selection is removed when no longer available"); passed++;
             store.write("codex-selected.json", "{\"models\":[{\"name\":\"missing group\"}]}");

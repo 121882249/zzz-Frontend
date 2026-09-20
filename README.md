@@ -4,6 +4,12 @@
 
 TokenPro 现在只有一套 Java 21/Swing 客户端源码，支持 Windows、macOS 和 Linux。macOS 的 Intel 与 Apple 芯片版本、Windows x64 版本和 Linux x64 版本由 GitHub Actions 分别在对应系统构建。
 
+## v1.3.29 更新
+
+- 生图模型严格以服务端分组字段识别：`groupPlatform == openai` 且分组描述去除首尾空白后为“生图”。
+- 专用生图组仅显示于 Codex 客户端；Codex CLI、Claude 客户端和 Claude Code 均不会保存或导出该组。
+- Codex 客户端、Codex CLI、Claude 客户端与 Claude Code 继续各自使用独立配置目录和模型选择。
+
 ## v1.3.6 更新
 
 - 分组平台为 `openai` 且描述为“生图”的分组使用紫蓝青极光框体、同色“余额”标签和带星光渐变的 OpenAI 生图图标。
@@ -34,7 +40,7 @@ TokenPro 现在只有一套 Java 21/Swing 客户端源码，支持 Windows、mac
 |---|---|---|---|
 | Codex 客户端 | 独立 Codex 配置与认证 | 直连 `tokenpro.work` | 桌面图形界面、对话与生图 |
 | Claude 客户端 | 独立 Claude 第三方账户 | `127.0.0.1:23179` | Claude Desktop 图形界面 |
-| Codex CLI | 独立 `CODEX_HOME` | 直连 `tokenpro.work` | 终端开发、脚本和 Agent 任务 |
+| Codex CLI | 独立 `CODEX_HOME` | 直连 `tokenpro.work` | 终端开发、脚本和 Agent 任务（仅文本模型） |
 | Claude Code | 独立 `CLAUDE_CONFIG_DIR` | `127.0.0.1:23181` | Claude Code 终端工作流 |
 
 Codex 的原生图片模式由后端按当前回合的真实分组启用：仅适用于全局 Key、平台为 `openai` 且描述去除首尾空白后等于“生图”的分组。其他分组走普通请求流程；客户端不再在共用 provider 上固定配置 `native-v2`。升级时先部署支持该分组策略的后端，再更新客户端并重新应用连接配置。

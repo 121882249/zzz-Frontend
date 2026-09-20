@@ -11,10 +11,10 @@ final class ModelSelectionReconciler {
         // The available-groups response is the source of truth for every
         // client.  Leaving old Codex entries untouched makes the dashboard
         // count models the user has already unselected in TokenPro.
-        int removed = reconcile(root, "codex-selected.json", "Codex", account, catalog);
-        removed += reconcile(root.cli("codex"), "codex-selected.json", "Codex", account, catalog);
-        removed += reconcile(root, ClaudeBridgeConfig.FILE, "Claude", account, catalog);
-        return removed + reconcile(root.cli("claude"), ClaudeBridgeConfig.FILE, "Claude", account, catalog);
+        int removed = reconcile(root, "codex-selected.json", "Codex", false, account, catalog);
+        removed += reconcile(root.cli("codex"), "codex-selected.json", "Codex", true, account, catalog);
+        removed += reconcile(root, ClaudeBridgeConfig.FILE, "Claude", false, account, catalog);
+        return removed + reconcile(root.cli("claude"), ClaudeBridgeConfig.FILE, "Claude", true, account, catalog);
     }
 
     static List<PricedModel> currentModels(List<PricedModel> selected, List<PricedModel> catalog, String client) {
@@ -27,7 +27,7 @@ final class ModelSelectionReconciler {
         return List.copyOf(kept.values());
     }
 
-    static int reconcile(SecureStore store, String file, String client, String account, List<PricedModel> catalog) throws Exception {
+    static int reconcile(SecureStore store, String file, String client, boolean cli, String account, List<PricedModel> catalog) throws Exception {
         if(catalog == null || catalog.isEmpty() || account == null || account.isBlank()) return 0;
         Optional<String> before = store.read(file);
         if(before.isEmpty()) return 0;
@@ -42,7 +42,7 @@ final class ModelSelectionReconciler {
         else if(!claude && root.get("group_id") instanceof Number && root.get("model") instanceof String model && !model.isBlank()) {
             rows = List.of(Map.of("name", model, "group_id", root.get("group_id")));
         } else return 0; // Unknown formats are not evidence of obsolete selections.
-        Map<String,PricedModel> available = index(catalog, client);
+        Map<String,PricedModel> available = index(catalog, client, cli);
         List<Map<String,Object>> kept = new ArrayList<>();
         List<PricedModel> keptModels = new ArrayList<>();
         for(Object value : rows) {
@@ -53,7 +53,7 @@ final class ModelSelectionReconciler {
             if(model == null) continue;
             Map<String,Object> current = new LinkedHashMap<>(row);
             current.put("platform", model.platform()); current.put("group_platform", model.groupPlatform());
-            current.put("group_name", model.groupName());
+            current.put("group_name", model.groupName()); current.put("group_description", model.groupDescription());
             kept.add(current); keptModels.add(model);
         }
         root.put(field, kept);
@@ -74,8 +74,12 @@ final class ModelSelectionReconciler {
     }
 
     private static Map<String,PricedModel> index(List<PricedModel> catalog, String client) {
+        return index(catalog, client, false);
+    }
+
+    private static Map<String,PricedModel> index(List<PricedModel> catalog, String client, boolean cli) {
         Map<String,PricedModel> result = new LinkedHashMap<>();
-        for(PricedModel model : catalog) if(ModelPickerDialog.supportsClient(model, client)) result.put(id(model.groupId(), model.name()), model);
+        for(PricedModel model : catalog) if(ModelPickerDialog.supportsClient(model, client, cli)) result.put(id(model.groupId(), model.name()), model);
         return result;
     }
     private static String id(long group, String name) { return group + "\u0000" + name; }

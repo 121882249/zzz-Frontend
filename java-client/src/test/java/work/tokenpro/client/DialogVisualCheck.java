@@ -50,7 +50,7 @@ public final class DialogVisualCheck {
                     capture(owner, output, "error-long", "确定", () -> TokenProDialogs.error(owner, "操作未完成",
                         "很长的错误说明".repeat(20)));
                     for (String client : List.of("Codex", "Claude")) {
-                        ModelPickerDialog picker = new ModelPickerDialog(owner, client,
+                        ModelPickerDialog picker = new ModelPickerDialog(owner, client, false,
                             List.of(new PricedModel("fixture-model", client.equals("Codex") ? "openai" : "anthropic", "测试分组", 1)),
                             java.util.Set.of(), ignored -> {});
                         try {

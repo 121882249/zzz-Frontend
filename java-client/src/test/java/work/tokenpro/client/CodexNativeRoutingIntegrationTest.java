@@ -23,7 +23,7 @@ public final class CodexNativeRoutingIntegrationTest {
         var pngBuffer = new java.io.ByteArrayOutputStream();
         javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(8, 8, java.awt.image.BufferedImage.TYPE_INT_RGB), "png", pngBuffer);
         byte[] png = pngBuffer.toByteArray();
-        String imageRoute = CodexConfig.routedModelId(new PricedModel("gpt-image-2.5-flare", "openai", "Images", 65));
+        String imageRoute = CodexConfig.routedModelId(image("gpt-image-2.5-flare"));
         String chatRoute = imageOnly ? imageRoute : CodexConfig.routedModelId(new PricedModel("gpt-6-astra", "openai", "Chat", 16));
         server.createContext("/v1/responses", exchange -> {
             try {
@@ -90,7 +90,7 @@ public final class CodexNativeRoutingIntegrationTest {
             Path home = root.resolve("home");
             new CodexConfig(new SecureStore(root.resolve("store")), home.resolve("config.toml")).apply(
                 "http://127.0.0.1:" + server.getAddress().getPort() + "/v1",
-                imageOnly ? List.of(new PricedModel("gpt-image-2.5-flare", "openai", "Images", 65)) : List.of(new PricedModel("gpt-6-astra", "openai", "Chat", 16), new PricedModel("gpt-image-2.5-flare", "openai", "Images", 65)),
+                imageOnly ? List.of(image("gpt-image-2.5-flare")) : List.of(new PricedModel("gpt-6-astra", "openai", "Chat", 16), image("gpt-image-2.5-flare")),
                 "fixture-key", "fixture@example.com");
             try (var rpc = new CodexAppServerRpc(home)) {
                 var result = rpc.call("thread/start", Map.of("cwd", root.toString(), "approvalPolicy", "never", "sandbox", "read-only"));
@@ -115,4 +115,8 @@ public final class CodexNativeRoutingIntegrationTest {
         exchange.getResponseBody().write(bytes); exchange.close();
     }
     private static void require(boolean ok, String message) { if (!ok) throw new AssertionError(message); }
+    private static PricedModel image(String name) {
+        return new PricedModel(name, "openai", "openai", "Images", 65,
+            "image", null, null, List.of(), false, 0d, "", "生图");
+    }
 }

@@ -57,10 +57,9 @@ record PricedModel(String name, String platform, String groupPlatform, String gr
     boolean usesResponses() { return "openai".equalsIgnoreCase(platform); }
 
     boolean isImageGeneration() {
-        String value = name == null ? "" : name.trim().toLowerCase(java.util.Locale.ROOT);
-        return value.startsWith("gpt-image-") || value.startsWith("dall-e-") ||
-            value.contains("imagen") || value.contains("flux") ||
-            value.startsWith("grok-imagine");
+        String platform = groupPlatform == null ? "" : groupPlatform.trim();
+        String description = groupDescription == null ? "" : groupDescription.trim();
+        return "openai".equalsIgnoreCase(platform) && "生图".equals(description);
     }
 
     String displayName() {

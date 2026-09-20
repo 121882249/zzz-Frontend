@@ -78,7 +78,7 @@ public final class CodexImageCorrelationProbe {
         });
         server.start();
         try {
-            var selections = List.of(new PricedModel("gpt-image-2.5-flare", "openai", "Images", 65), new PricedModel("gpt-image-2.5-sunburst", "openai", "Images", 66));
+            var selections = List.of(image("gpt-image-2.5-flare", 65), image("gpt-image-2.5-sunburst", 66));
             Path home = root.resolve("home");
             new CodexConfig(new SecureStore(root.resolve("store")), home.resolve("config.toml")).apply(
                 "http://127.0.0.1:" + server.getAddress().getPort() + "/v1",
@@ -110,6 +110,11 @@ public final class CodexImageCorrelationProbe {
             System.out.println("REPORT=" + report);
             System.out.println("PASS: distinct models/groups; identical prompts; concurrent reversed replies; exact turn/call/image bytes. " + selectedModels);
         } finally { server.stop(0); executor.shutdownNow(); }
+    }
+
+    private static PricedModel image(String name, long groupId) {
+        return new PricedModel(name, "openai", "openai", "Images", groupId,
+            "image", null, null, List.of(), false, 0d, "", "生图");
     }
 
     static String marker(Map<String,Object> body) {

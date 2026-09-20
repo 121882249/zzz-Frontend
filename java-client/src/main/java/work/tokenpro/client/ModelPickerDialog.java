@@ -25,7 +25,7 @@ final class ModelPickerDialog extends JDialog {
     private static final Color IMAGE_BADGE_BORDER = new Color(104, 218, 255, 185);
     private final List<ModelCheckBox> choices = new ArrayList<>();
 
-    ModelPickerDialog(JFrame owner, String client, List<PricedModel> models,
+    ModelPickerDialog(JFrame owner, String client, boolean cli, List<PricedModel> models,
                       Set<String> selectedIds, Consumer<List<PricedModel>> onApply) {
         super(owner, "选择 " + client + " 模型", true);
         setUndecorated(true);
@@ -36,7 +36,7 @@ final class ModelPickerDialog extends JDialog {
         } catch (UnsupportedOperationException | IllegalComponentStateException ignored) {}
         if (!transparent) setBackground(new Color(15, 26, 58));
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
-        setContentPane(content(client, models, selectedIds, onApply));
+        setContentPane(content(client, cli, models, selectedIds, onApply));
         setSize(760, 680);
         setMinimumSize(new Dimension(560, 480));
         if (!transparent) applyShape();
@@ -50,9 +50,9 @@ final class ModelPickerDialog extends JDialog {
         catch (UnsupportedOperationException ignored) {}
     }
 
-    private JComponent content(String client, List<PricedModel> models, Set<String> selectedIds,
+    private JComponent content(String client, boolean cli, List<PricedModel> models, Set<String> selectedIds,
                                Consumer<List<PricedModel>> onApply) {
-        models = orderedModels(models, client);
+        models = orderedModels(models, client, cli);
         JPanel root = new CosmosPanel();
         root.setLayout(new BorderLayout());
         root.setBorder(new EmptyBorder(24, 26, 22, 26));
@@ -65,7 +65,8 @@ final class ModelPickerDialog extends JDialog {
         title.setForeground(TEXT);
         titleLine.add(title, BorderLayout.WEST);
         boolean codex = "Codex".equals(client);
-        JLabel detail = new JLabel(codex ? "文本和生图模型均可多选；每次使用 Codex 中当前选择的模型" : "LLM Model 至少选择 1 个，可同时选择多个");
+        boolean supportsImages = codex && !cli;
+        JLabel detail = new JLabel(supportsImages ? "文本和生图模型均可多选；每次使用 Codex 中当前选择的模型" : "LLM Model 至少选择 1 个，可同时选择多个");
         detail.setFont(font(12, Font.PLAIN));
         detail.setForeground(MUTED);
         header.add(titleLine);
@@ -79,7 +80,7 @@ final class ModelPickerDialog extends JDialog {
         groups.setLayout(new BoxLayout(groups, BoxLayout.Y_AXIS));
         Map<String, List<PricedModel>> grouped = new LinkedHashMap<>();
         for (PricedModel model : models) {
-            if (!supportsClient(model, client) || model.isImageGeneration()) continue;
+            if (!supportsClient(model, client, cli) || model.isImageGeneration()) continue;
             grouped.computeIfAbsent(groupKey(model), ignored -> new ArrayList<>()).add(model);
         }
         List<List<PricedModel>> orderedGroups = grouped.values().stream()
@@ -119,12 +120,12 @@ final class ModelPickerDialog extends JDialog {
             groups.add(Box.createVerticalStrut(10));
             // Keep images immediately below the first GPT group, including a
             // GPT subscription group, rather than below every subscription.
-            if (codex && !imageGroupAdded && isGptGroup(first)) {
+            if (supportsImages && !imageGroupAdded && isGptGroup(first)) {
                 addImageChoices(groups, models, selectedIds);
                 imageGroupAdded = true;
             }
         }
-        if (codex && !imageGroupAdded) addImageChoices(groups, models, selectedIds);
+        if (supportsImages && !imageGroupAdded) addImageChoices(groups, models, selectedIds);
         if (!codex && choices.stream().noneMatch(AbstractButton::isSelected)) {
             choices.stream().findFirst().ifPresent(choice -> choice.setSelected(true));
         }
@@ -157,7 +158,7 @@ final class ModelPickerDialog extends JDialog {
         Runnable updateCount = () -> {
             long imageCount = selected().stream().filter(PricedModel::isImageGeneration).count();
             long chatCount = selected().size() - imageCount;
-            count.setText(codex ? "主模型已选 " + chatCount + " 个   生图模型已选 " + imageCount + " 个" : "已选择 " + selected().size() + " 个模型");
+            count.setText(supportsImages ? "主模型已选 " + chatCount + " 个   生图模型已选 " + imageCount + " 个" : "已选择 " + selected().size() + " 个模型");
         };
         choices.forEach(choice -> choice.addActionListener(event -> updateCount.run()));
         updateCount.run();
@@ -229,8 +230,7 @@ final class ModelPickerDialog extends JDialog {
     }
 
     static boolean isDedicatedImageGroup(PricedModel model) {
-        return "openai".equalsIgnoreCase(model.groupPlatform().trim())
-            && "生图".equals(model.groupDescription().trim());
+        return model.isImageGeneration();
     }
 
     private List<PricedModel> selected() {
@@ -242,18 +242,26 @@ final class ModelPickerDialog extends JDialog {
         return selectedIds.contains(id(model));
     }
     static boolean supportsClient(PricedModel model, String client) {
-        return !model.isImageGeneration() || "Codex".equals(client);
+        return supportsClient(model, client, false);
+    }
+
+    static boolean supportsClient(PricedModel model, String client, boolean cli) {
+        return !model.isImageGeneration() || ("Codex".equals(client) && !cli);
     }
 
     static List<PricedModel> orderedModels(List<PricedModel> models, String client) {
+        return orderedModels(models, client, false);
+    }
+
+    static List<PricedModel> orderedModels(List<PricedModel> models, String client, boolean cli) {
         Map<String, List<PricedModel>> grouped = new LinkedHashMap<>();
         for (PricedModel model : models) {
-            if (!supportsClient(model, client) || model.isImageGeneration()) continue;
+            if (!supportsClient(model, client, cli) || model.isImageGeneration()) continue;
             grouped.computeIfAbsent(groupKey(model), ignored -> new ArrayList<>()).add(model);
         }
         List<List<PricedModel>> orderedGroups = grouped.values().stream()
             .sorted((left, right) -> compareGroups(left, right, client)).toList();
-        List<PricedModel> images = orderedImageModels(models);
+        List<PricedModel> images = cli ? List.of() : orderedImageModels(models);
         List<PricedModel> result = new ArrayList<>();
         boolean imagesAdded = false;
         for (List<PricedModel> group : orderedGroups) {

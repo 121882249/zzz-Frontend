@@ -74,8 +74,10 @@ final class SelfTest {
             CodexConfig.routedModelId(new PricedModel("same-model", "openai", "B", 65))),
             "same model name in different groups cannot share a direct route"); passed++;
         PricedModel nativeChat = new PricedModel("gpt-5.6-sol", "openai", "GPT", 16);
-        PricedModel nativeImage = new PricedModel("gpt-image-2.5-flare", "openai", "Images", 65);
-        PricedModel otherImage = new PricedModel("gpt-image-2.5-sunburst", "openai", "Images", 65);
+        PricedModel nativeImage = new PricedModel("gpt-image-2.5-flare", "openai", "openai", "Images", 65,
+            "image", null, null, List.of(), false, 0d, "", "生图");
+        PricedModel otherImage = new PricedModel("gpt-image-2.5-sunburst", "openai", "openai", "Images", 65,
+            "image", null, null, List.of(), false, 0d, "", "生图");
         List<PricedModel> allImages = ModelPickerDialog.orderedModels(List.of(nativeChat, nativeImage, otherImage), "Codex");
         check(allImages.size() == 3 && allImages.containsAll(List.of(nativeChat, nativeImage, otherImage)), "Codex retains all selected text and image models"); passed++;
         PricedModel subscriptionChat = new PricedModel("gpt-sub", "openai", "Subscription", 10,
@@ -217,8 +219,10 @@ final class SelfTest {
         check("Claude-Fable-5.1".equals(new PricedModel("claude-fable-5-1", "anthropic", "claude", 17).displayName()), "minor model version punctuation"); passed++;
         check("Claude Models".equals(new PricedModel("claude", "anthropic", "claude models", 17).displayGroupName()), "vendor group title case"); passed++;
         check("Gemini".equals(new PricedModel("Gemini", "google", "Google", 17).displayName()), "non-GPT model display name"); passed++;
-        check(new PricedModel("gpt-image-2.5-sunburst", "openai", "GPT", 17).isImageGeneration(), "image model classification"); passed++;
-        PricedModel movedImage = new PricedModel("gpt-image-2.5-sunburst", "openai", "New image group", 99);
+        check(new PricedModel("gpt-image-2.5-sunburst", "openai", "openai", "GPT", 17,
+            "image", null, null, List.of(), false, 0d, "", "生图").isImageGeneration(), "image group classification"); passed++;
+        PricedModel movedImage = new PricedModel("gpt-image-2.5-sunburst", "openai", "openai", "New image group", 99,
+            "image", null, null, List.of(), false, 0d, "", "生图");
         check(!ModelPickerDialog.matchesSelectedImage(movedImage, Set.of("65\u0000" + movedImage.name())), "image selection must not move to another group with the same model name"); passed++;
         check(!new PricedModel("gpt-5.6-sol", "openai", "GPT", 17).isImageGeneration(), "chat model classification"); passed++;
         check(CodexConfig.inferredReasoningEfforts(priced).equals(List.of("low", "medium", "high", "xhigh", "max")), "GPT five reasoning levels"); passed++;
@@ -229,7 +233,8 @@ final class SelfTest {
         shortNativeProfile.put("default_reasoning_level", "high");
         CodexConfig.applyReasoningProfile(shortNativeProfile, priced);
         check(((List<?>) shortNativeProfile.get("supported_reasoning_levels")).size() == 5 && "high".equals(shortNativeProfile.get("default_reasoning_level")), "short native profile expands to five levels"); passed++;
-        check(CodexConfig.inferredReasoningEfforts(new PricedModel("gpt-image-2.5", "openai", "GPT", 17)).isEmpty(), "image model omits reasoning"); passed++;
+        check(CodexConfig.inferredReasoningEfforts(new PricedModel("gpt-image-2.5", "openai", "openai", "GPT", 17,
+            "image", null, null, List.of(), false, 0d, "", "生图")).isEmpty(), "image model omits reasoning"); passed++;
         Map<String, Object> sixLevelNative = new LinkedHashMap<>(Map.of(
             "supported_reasoning_levels", List.of("low", "medium", "high", "xhigh", "max", "ultra").stream()
                 .map(level -> Map.of("effort", level, "description", level)).toList(),
@@ -245,7 +250,8 @@ final class SelfTest {
         CodexConfig.applyNativeCapabilities(nativeExport, priced, null);
         check(((List<?>) nativeExport.get("supported_reasoning_levels")).size() == 5
             && ((List<?>) nativeExport.get("service_tiers")).isEmpty(), "unknown models never inherit template Ultra or Fast"); passed++;
-        CodexConfig.applyNativeCapabilities(nativeExport, new PricedModel("gpt-image-2.5", "openai", "Images", 1), sixLevelNative);
+        CodexConfig.applyNativeCapabilities(nativeExport, new PricedModel("gpt-image-2.5", "openai", "openai", "Images", 1,
+            "image", null, null, List.of(), false, 0d, "", "生图"), sixLevelNative);
         check(((List<?>) nativeExport.get("supported_reasoning_levels")).isEmpty(), "image models never inherit reasoning levels"); passed++;
         check("GPT⁠-Image-2.5-Sunburst".equals(CodexConfig.catalogDisplayName(new PricedModel("gpt-image-2.5-sunburst", "openai", "GPT", 17))), "catalog omits model category"); passed++;
         check("Claude-Sonnet-5".equals(CodexConfig.catalogDisplayName(new PricedModel("claude-sonnet-5", "anthropic", "Claude", 17))), "LLM catalog uses model name only"); passed++;
@@ -260,7 +266,8 @@ final class SelfTest {
         check(ApiClient.compareModelVersionDescending("claude-opus-4-8", "claude-opus-4-7") < 0, "decimal model versions sort descending"); passed++;
         PricedModel premium = new PricedModel("claude-fable-5-1", "anthropic", "Claude", 60, "token", 0.00005);
         PricedModel standard = new PricedModel("claude-opus-5", "anthropic", "Claude", 60, "token", 0.000025);
-        PricedModel image = new PricedModel("gpt-image-2", "openai", "GPT", 60, "image", null);
+        PricedModel image = new PricedModel("gpt-image-2", "openai", "openai", "GPT", 60,
+            "image", null, null, List.of(), false, 0d, "", "生图");
         check(ApiClient.compareModelPriceDescending(premium, standard) < 0, "models sort by output price descending"); passed++;
         check(ApiClient.compareModelPriceDescending(standard, image) < 0, "token models sort before non-token models"); passed++;
         List<PricedModel> tickerCandidates = List.of(
@@ -282,11 +289,11 @@ final class SelfTest {
         check(Math.abs(ApiClient.discountedInputPrice(0.000005, "token", 0.28) - 0.0000014) < 1e-12, "LLM picker price applies effective group discount"); passed++;
         check(Math.abs(ApiClient.discountedInputPrice(0.000005, "image", 0.28) - 0.000005) < 1e-12, "image picker price remains unchanged"); passed++;
         check("Input ¥4.00/M".equals(inputPriced.priceLabel()), "LLM input price label"); passed++;
-        PricedModel imagePriced = new PricedModel("gpt-image-2.5", "openai", "Image", 60, "image", null, null,
-            List.of(new PricedModel.ImagePrice("1K", 0.03), new PricedModel.ImagePrice("2K", 0.05), new PricedModel.ImagePrice("4K", 0.10)));
+        PricedModel imagePriced = new PricedModel("gpt-image-2.5", "openai", "openai", "Image", 60, "image", null, null,
+            List.of(new PricedModel.ImagePrice("1K", 0.03), new PricedModel.ImagePrice("2K", 0.05), new PricedModel.ImagePrice("4K", 0.10)), false, 0d, "", "生图");
         check("1K ¥0.03/IMG · 2K ¥0.05/IMG · 4K ¥0.10/IMG".equals(imagePriced.priceLabel()), "image resolution prices"); passed++;
-        PricedModel cheaperImage = new PricedModel("gpt-image-2", "openai", "Image", 60, "image", null, null,
-            List.of(new PricedModel.ImagePrice("1K", 0.01), new PricedModel.ImagePrice("2K", 0.02)));
+        PricedModel cheaperImage = new PricedModel("gpt-image-2", "openai", "openai", "Image", 60, "image", null, null,
+            List.of(new PricedModel.ImagePrice("1K", 0.01), new PricedModel.ImagePrice("2K", 0.02)), false, 0d, "", "生图");
         check(ApiClient.compareSelectablePriceDescending(imagePriced, cheaperImage) < 0, "image models sort by displayed per-image price descending"); passed++;
         Map<String, Object> subscription = Map.of("monthly_limit_usd", 100d, "monthly_used_usd", 37.5d);
         check(Math.abs(ApiClient.subscriptionRemaining(subscription) - 62.5d) < 1e-9, "subscription remaining balance"); passed++;
@@ -306,7 +313,10 @@ final class SelfTest {
             new PricedModel("grok-4.5", "grok", "Grok", 25));
         List<String> claudeOrdered = ModelPickerDialog.orderedModels(scattered, "Claude").stream().map(PricedModel::name).toList();
         check(claudeOrdered.equals(List.of("claude-sonnet-5", "gpt-5.6-sol", "gpt-5.6-terra", "grok-4.5", "gemini-3")), "Claude export keeps vendors together in picker order"); passed++;
-        check(!ModelPickerDialog.supportsClient(imagePriced, "Claude") && ModelPickerDialog.supportsClient(imagePriced, "Codex"), "Claude filters image models"); passed++;
+        check(!ModelPickerDialog.supportsClient(imagePriced, "Claude")
+            && ModelPickerDialog.supportsClient(imagePriced, "Codex")
+            && !ModelPickerDialog.supportsClient(imagePriced, "Codex", true),
+            "only the Codex desktop picker accepts dedicated image groups"); passed++;
         List<PricedModel> cliModels = new ArrayList<>(scattered);
         cliModels.add(imagePriced); cliModels.add(richSubscription); cliModels.add(lowSubscription);
         Map<String, Object> cliSettings = ClaudeCliConfig.settings(cliModels, "http://127.0.0.1:23179", "helper --claude-token");
@@ -326,6 +336,8 @@ final class SelfTest {
         check(imagesRejected, "Claude CLI rejects image-only selections"); passed++;
         List<String> codexOrdered = ModelPickerDialog.orderedModels(scattered, "Codex").stream().map(PricedModel::name).toList();
         check(codexOrdered.equals(List.of("gpt-5.6-sol", "gpt-5.6-terra", "claude-sonnet-5", "grok-4.5", "gemini-3")), "Codex shared ordering keeps GPT before other regular vendors"); passed++;
+        List<String> codexCliOrdered = ModelPickerDialog.orderedModels(cliModels, "Codex", true).stream().map(PricedModel::name).toList();
+        check(!codexCliOrdered.contains(imagePriced.name()), "Codex CLI never exports dedicated image groups"); passed++;
         PricedModel datedSubscription = new PricedModel("gpt-sub", "openai", "Monthly", 10, "token", 1d, 2d, List.of(), true, 30d, "2026-10-31T08:00:00Z");
         check(datedSubscription.subscriptionExpiryLabel().matches("到期 \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}"), "subscription expiry label includes minutes"); passed++;
         check(ModelPickerDialog.groupRank(new PricedModel("gpt-5.6", "openai", "GPT", 1))

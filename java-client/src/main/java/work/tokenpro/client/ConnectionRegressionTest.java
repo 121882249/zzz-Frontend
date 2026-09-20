@@ -178,8 +178,10 @@ final class ConnectionRegressionTest {
                 check(!ClientReconnect.managedCliMatches(client, "/native/" + client, args, marker + "-other"), "other " + client + " profile is never closed"); passed++;
             }
             String image = "gpt-image-2.5-flare";
-            store.write("codex-selected.json", Json.stringify(Map.of("models", List.of(Map.of("name", image, "group_id", 65, "platform", "openai", "group_name", "images")))));
-            check(TokenProFrame.savedCodexModels(store).getFirst().isImageGeneration(), "old saved image selection is migrated on Connect"); passed++;
+            store.write("codex-selected.json", Json.stringify(Map.of("models", List.of(Map.of(
+                "name", image, "group_id", 65, "platform", "openai", "group_platform", "openai",
+                "group_name", "images", "group_description", " 生图 ")))));
+            check(TokenProFrame.savedCodexModels(store).getFirst().isImageGeneration(), "saved dedicated image group is restored on Connect"); passed++;
             int port;
             try (var socket = new java.net.ServerSocket(0)) { port = socket.getLocalPort(); }
             SecureStore fixture = new SecureStore(root.resolve("bridge-fixture"));

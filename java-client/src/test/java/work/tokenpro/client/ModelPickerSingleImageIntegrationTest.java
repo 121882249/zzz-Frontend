@@ -8,11 +8,11 @@ import java.util.*;
 public final class ModelPickerSingleImageIntegrationTest {
     public static void main(String[] args) throws Exception {
         PricedModel chat = new PricedModel("gpt-5.6-sol", "openai", "GPT", 16);
-        PricedModel flare = new PricedModel("gpt-image-2.5-flare", "openai", "GPT「生图」", 65);
-        PricedModel sunburst = new PricedModel("gpt-image-2.5-sunburst", "openai", "GPT「生图」", 65);
-        PricedModel image2 = new PricedModel("gpt-image-2", "openai", "GPT「生图」", 65);
+        PricedModel flare = image("gpt-image-2.5-flare");
+        PricedModel sunburst = image("gpt-image-2.5-sunburst");
+        PricedModel image2 = image("gpt-image-2");
         SwingUtilities.invokeAndWait(() -> {
-            ModelPickerDialog dialog = new ModelPickerDialog(null, "Codex", List.of(chat, flare, sunburst, image2),
+            ModelPickerDialog dialog = new ModelPickerDialog(null, "Codex", false, List.of(chat, flare, sunburst, image2),
                 Set.of(ModelPickerDialog.id(flare), ModelPickerDialog.id(sunburst), ModelPickerDialog.id(image2)), ignored -> {});
             try {
                 List<AbstractButton> choices = choices(dialog);
@@ -49,5 +49,10 @@ public final class ModelPickerSingleImageIntegrationTest {
 
     private static void require(boolean condition, String message) {
         if (!condition) throw new AssertionError(message);
+    }
+
+    private static PricedModel image(String name) {
+        return new PricedModel(name, "openai", "openai", "GPT「生图」", 65,
+            "image", null, null, List.of(), false, 0d, "", "生图");
     }
 }
