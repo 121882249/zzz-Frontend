@@ -607,8 +607,10 @@ final class TokenProFrame extends JFrame {
             if (models.isEmpty()) { error(new IllegalStateException("当前账户没有可用模型")); return; }
             updateSupportedModelCounts(models);
             reconcileModelSelections(models, owner);
-            Set<String> selected = selectedModelIds(client, cli);
-            ModelPickerDialog dialog = new ModelPickerDialog(this, client, cli, models, selected,
+            boolean sharedCodex = "Codex".equals(client);
+            boolean pickerCli = cli && !sharedCodex;
+            Set<String> selected = selectedModelIds(client, pickerCli);
+            ModelPickerDialog dialog = new ModelPickerDialog(this, client, pickerCli, models, selected,
                 chosen -> {
                     if ("Codex".equals(client)) applyCodex(chosen, cli, launch);
                     else if (cli) applyClaudeCli(chosen, launch);
@@ -648,9 +650,10 @@ final class TokenProFrame extends JFrame {
 
     private void restoreCodex() {
         try {
-            boolean running = !ClientReconnect.desktopProcesses("Codex").isEmpty();
+            boolean running = !ClientReconnect.desktopProcesses("Codex").isEmpty()
+                || !ClientReconnect.cliProcesses(store, "codex").isEmpty();
             if (running && !TokenProDialogs.confirm(this, "切换官方配置",
-                "将切回官方并重启 Codex，当前请求会终止，请先保存。",
+                "客户端和命令行共用配置。将切回官方并重启正在运行的 Codex，当前请求会终止，请先保存。",
                 "切换并重启")) return;
             // Official mode clears the TokenPro selection and its generated config.
             restartOfficialCodex();
@@ -659,20 +662,14 @@ final class TokenProFrame extends JFrame {
     }
 
     private void repairCodexConversations(boolean cli) {
-        SecureStore targetStore;
-        try {
-            targetStore = cli ? store.cli("codex") : store;
-        } catch (Exception error) {
-            error(error);
-            return;
-        }
-        Path configPath = cli ? targetStore.root().resolve("home/config.toml") : Platform.codexConfig();
+        SecureStore targetStore = store;
+        Path configPath = Platform.codexConfig();
         String label = cli ? "Codex 命令行" : "Codex 客户端";
         try {
             String current = Files.exists(configPath) ? Files.readString(configPath) : "";
             String activeProvider = CodexSwitchConfig.rootValue(current, "model_provider").orElse("openai");
             String choice = TokenProDialogs.choose(this, "修复历史对话",
-                "仅修复 " + label + " 独立配置中的未归档普通对话并重启；不会修改其他客户端或命令行的对话，请先保存。",
+                "Codex 客户端和命令行共用同一套历史。将修复其中未归档的普通对话并重启正在使用的入口，请先保存。",
                 "CCSwitch", "OpenAI");
             if (choice == null) return;
             String targetProvider;
@@ -688,9 +685,11 @@ final class TokenProFrame extends JFrame {
             }
             String model = CodexSwitchConfig.rootValue(current, "model").orElse("");
             String targetLabel = "OpenAI".equals(choice) ? "OpenAI" : "CCSwitch";
-            String identity = cli ? "codex-cli" : "codex-desktop";
+            String identity = "codex-shared";
             if (!connectingClients.begin(identity)) return;
             refreshConnectControls();
+            boolean desktopWasRunning = !ClientReconnect.desktopProcesses("Codex").isEmpty();
+            boolean cliWasRunning = !ClientReconnect.cliProcesses(store, "codex").isEmpty();
             status("正在修复 " + label + " 历史对话为 " + targetLabel + "…");
             new SwingWorker<CodexConversationRepair.Result,Void>() {
                 protected CodexConversationRepair.Result doInBackground() throws Exception {
@@ -698,14 +697,14 @@ final class TokenProFrame extends JFrame {
                     Exception failure = null;
                     CodexConversationRepair.Result result = null;
                     try {
-                        ClientReconnect.stopForSettings(store, "Codex", cli);
+                        stopSharedCodex();
                         stopped = true;
                         result = CodexConversationRepair.repair(configPath.getParent(), targetProvider, model);
                     } catch (Exception error) {
                         failure = error;
                     }
                     if (stopped) try {
-                        startAndAwaitProfile("Codex", cli);
+                        restartSharedCodex(cli, desktopWasRunning, cliWasRunning);
                     } catch (Exception restart) {
                         if (failure == null) failure = restart;
                         else failure.addSuppressed(restart);
@@ -717,7 +716,8 @@ final class TokenProFrame extends JFrame {
                     finishConnection(identity);
                     try {
                         CodexConversationRepair.Result result = get();
-                        if (cli) updateCommandControls("codex", codexCliInstalled); else updateCodexStatus();
+                        updateCodexStatus();
+                        updateCommandControls("codex", codexCliInstalled);
                         status(label + " 对话修复完成：成功 " + result.visibleRepaired() + "，失败 " + result.failed()
                             + (result.failureReasons().isEmpty() ? "" : "（" + result.failureReasons() + "）"));
                         String detail = label + " 对话修复成功 " + result.visibleRepaired() + " 个，失败 "
@@ -734,19 +734,23 @@ final class TokenProFrame extends JFrame {
     }
 
     private void restartOfficialCodex() {
-        String identity = "codex-desktop";
+        String identity = "codex-shared";
         if (!connectingClients.begin(identity)) return;
         refreshConnectControls();
+        boolean desktopWasRunning = !ClientReconnect.desktopProcesses("Codex").isEmpty();
+        boolean cliWasRunning;
+        try { cliWasRunning = !ClientReconnect.cliProcesses(store, "codex").isEmpty(); }
+        catch (Exception failure) { finishConnection(identity); error(failure); return; }
         status("正在重新启动 Codex 并加载官方配置…");
         new SwingWorker<Boolean, Void>() {
             protected Boolean doInBackground() throws Exception {
                 CodexChannelSwitch.run(store, Platform.codexConfig(), CodexChannel.official(), List.of(), () -> {
-                    ClientReconnect.stopForSettings(store, "Codex", false);
+                    stopSharedCodex();
                 }, () -> {
                     codex.deleteForOfficial();
                     BridgeLifecycle.removeLegacyCodexAdapter(store);
                     store.write("codex-official-mode.txt", "official");
-                }, () -> startAndAwaitProfile("Codex", false));
+                }, () -> restartSharedCodex(false, desktopWasRunning, cliWasRunning));
                 return true;
             }
             protected void done() {
@@ -754,6 +758,7 @@ final class TokenProFrame extends JFrame {
                 try {
                     get();
                     updateCodexStatus();
+                    updateCommandControls("codex", codexCliInstalled);
                     status("已删除 TokenPro 配置并启动官方 Codex；网络连接尚未验证，断网请检查代理后重试");
                 } catch (Exception failure) { connectionFailure("Codex", false, failure); }
             }
@@ -1008,7 +1013,8 @@ final class TokenProFrame extends JFrame {
             state.setText(installationScanFailed ? "检测失败，请稍后重试" : "正在检查安装状态…");
             return;
         }
-        if (connectingClients.blocked(client.toLowerCase(Locale.ROOT) + "-desktop")) {
+        if (connectingClients.blocked(client.toLowerCase(Locale.ROOT) + "-desktop")
+            || client.equals("Codex") && connectingClients.blocked("codex-shared")) {
             launch.setText("连接中…"); launch.setEnabled(false);
             if (menu != null) menu.setEnabled(false);
             return;
@@ -1027,8 +1033,10 @@ final class TokenProFrame extends JFrame {
         JButton menu = command.equals("codex") ? codexCliModelMenuButton : claudeCliModelMenuButton;
         JLabel state = command.equals("codex") ? homeCodexCliStatus : homeClaudeCliStatus;
         boolean known = knownInstallationTargets.contains(command + "-cli");
+        boolean connecting = connectingClients.blocked(command + "-cli")
+            || command.equals("codex") && connectingClients.blocked("codex-shared");
         applyCliActionState(launch, menu, state, command.equals("codex") ? "Codex" : "Claude",
-            known, installed, known ? cliSelectedCount(command) : 0, connectingClients.blocked(command + "-cli"));
+            known, installed, known ? cliSelectedCount(command) : 0, connecting);
         if (!known && installationScanFailed) state.setText("检测失败，请稍后重试");
     }
 
@@ -1045,9 +1053,8 @@ final class TokenProFrame extends JFrame {
 
     private int cliSelectedCount(String command) {
         try {
-            SecureStore selected = store.cli(command);
-            if (command.equals("codex") && "official".equals(CodexChannelState.detect(
-                    selected.root().resolve("home/config.toml")).channel())) return 0;
+            SecureStore selected = command.equals("codex") ? store : store.cli(command);
+            if (command.equals("codex") && "official".equals(CodexChannelState.detect(Platform.codexConfig()).channel())) return 0;
             if(command.equals("claude")) return ClaudeBridgeConfig.load(selected).routes().size();
             Map<String,Object> data = Json.object(Json.parse(selected.read("codex-selected.json").orElse("{}")));
             return data.get("models") instanceof List<?> rows ? rows.size() : 0;
@@ -1055,11 +1062,12 @@ final class TokenProFrame extends JFrame {
     }
 
     private void copyCliCommand(String command) {
-        async("正在准备独立命令行入口…", () -> CliLauncher.install(store, command), file -> {
+        async("正在准备命令行入口…", () -> CliLauncher.install(store, command), file -> {
             String invocation = "'" + file.toString().replace("'", "'\\''") + "'";
             if(Platform.OS_KIND == Platform.OS.WINDOWS) invocation = "& '" + file.toString().replace("'", "''") + "'";
             Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new java.awt.datatransfer.StringSelection(invocation), null);
-            status("已复制独立启动命令，可在 " + (Platform.OS_KIND == Platform.OS.WINDOWS ? "PowerShell" : "终端") + " 粘贴；不覆盖系统原生命令");
+            status("已复制启动命令，可在 " + (Platform.OS_KIND == Platform.OS.WINDOWS ? "PowerShell" : "终端")
+                + " 粘贴；Codex 会复用客户端配置");
         });
     }
 
@@ -1068,8 +1076,8 @@ final class TokenProFrame extends JFrame {
     }
 
     private void startProfile(String app, boolean cli) throws Exception {
-        SecureStore target = cli ? store.cli(app.toLowerCase(Locale.ROOT)) : store;
-        Path codexConfig = cli ? target.root().resolve("home/config.toml") : Platform.codexConfig();
+        SecureStore target = app.equals("Codex") ? store : cli ? store.cli(app.toLowerCase(Locale.ROOT)) : store;
+        Path codexConfig = Platform.codexConfig();
         boolean official = app.equals("Codex") ? "official".equals(CodexChannelState.detect(codexConfig).channel())
             : target.read(ClaudeBridgeConfig.FILE).isEmpty();
         if (!official) {
@@ -1094,6 +1102,16 @@ final class TokenProFrame extends JFrame {
         ClientReconnect.awaitStarted(store, app, cli);
     }
 
+    private void stopSharedCodex() throws Exception {
+        ClientReconnect.stopForSettings(store, "Codex", true);
+        ClientReconnect.stopForSettings(store, "Codex", false);
+    }
+
+    private void restartSharedCodex(boolean requestedCli, boolean desktopWasRunning, boolean cliWasRunning) throws Exception {
+        if (!requestedCli || desktopWasRunning) startAndAwaitProfile("Codex", false);
+        if (requestedCli || cliWasRunning) startAndAwaitProfile("Codex", true);
+    }
+
     private void connectionFailure(String app, boolean cli, Throwable wrapped) {
         Throwable failure = wrapped.getCause() == null ? wrapped : wrapped.getCause();
         if (failure instanceof ManualStartRequiredException) {
@@ -1110,20 +1128,28 @@ final class TokenProFrame extends JFrame {
         String label = app + (cli ? " 命令行" : " 客户端");
         if (!TokenProDialogs.confirm(this, "切换官方配置", "将切回官方并重启 " + label
             + "，当前请求会终止，请先保存。", "切换并重启")) return;
-        String identity = app.toLowerCase(Locale.ROOT) + (cli ? "-cli" : "-desktop");
+        String identity = app.equals("Codex") ? "codex-shared" : app.toLowerCase(Locale.ROOT) + (cli ? "-cli" : "-desktop");
         if (!connectingClients.begin(identity)) return;
         refreshConnectControls();
+        boolean desktopWasRunning = app.equals("Codex") && !ClientReconnect.desktopProcesses("Codex").isEmpty();
+        boolean cliWasRunning;
+        try { cliWasRunning = app.equals("Codex") && !ClientReconnect.cliProcesses(store, "codex").isEmpty(); }
+        catch (Exception failure) { finishConnection(identity); error(failure); return; }
         new SwingWorker<Void,Void>() {
             protected Void doInBackground() throws Exception {
                 if (!app.equals("Codex")) OfficialConnectionCheck.check(app);
-                SecureStore target = cli ? store.cli(app.toLowerCase(Locale.ROOT)) : store;
+                SecureStore target = app.equals("Codex") ? store : cli ? store.cli(app.toLowerCase(Locale.ROOT)) : store;
                 ClientReconnect.Action stop = () -> {
-                    ClientReconnect.stopForSettings(store, app, cli);
+                    if (app.equals("Codex")) stopSharedCodex();
+                    else ClientReconnect.stopForSettings(store, app, cli);
                     if (!app.equals("Codex")) ClaudeBridgeManager.stop(target);
                 };
-                ClientReconnect.Action start = () -> startAndAwaitProfile(app, cli);
+                ClientReconnect.Action start = () -> {
+                    if (app.equals("Codex")) restartSharedCodex(cli, desktopWasRunning, cliWasRunning);
+                    else startAndAwaitProfile(app, cli);
+                };
                 if (app.equals("Codex")) {
-                    Path config = cli ? target.root().resolve("home/config.toml") : Platform.codexConfig();
+                    Path config = Platform.codexConfig();
                     CodexChannelSwitch.run(target, config, CodexChannel.official(), List.of(), stop, () -> {
                         new CodexConfig(target, config).deleteForOfficial();
                         BridgeLifecycle.removeLegacyCodexAdapter(target);
@@ -1142,7 +1168,10 @@ final class TokenProFrame extends JFrame {
                 finishConnection(identity);
                 try {
                     get();
-                    if (cli) updateCommandControls(app.toLowerCase(Locale.ROOT), true); else updateBridgeStatus();
+                    if (app.equals("Codex")) {
+                        updateCodexStatus();
+                        updateCommandControls("codex", codexCliInstalled);
+                    } else if (cli) updateCommandControls(app.toLowerCase(Locale.ROOT), true); else updateBridgeStatus();
                     status(label + " 官方配置已应用；请确认官方登录。网络中断时请检查代理后重试，不会自动更换渠道。");
                 } catch (Exception e) { connectionFailure(app, cli, e); }
             }
@@ -1164,7 +1193,7 @@ final class TokenProFrame extends JFrame {
     private Set<String> selectedModelIds(String client, boolean cli) {
         Set<String> ids = new HashSet<>();
         try {
-            SecureStore targetStore = cli ? store.cli(client.equals("Claude") ? "claude" : "codex") : store;
+            SecureStore targetStore = "Codex".equals(client) ? store : cli ? store.cli("claude") : store;
             if ("Claude".equals(client)) {
                 for (ClaudeBridgeConfig.Route route : ClaudeBridgeConfig.load(targetStore).routes()) {
                     ids.add(route.groupId() + "\u0000" + route.name());
@@ -1312,8 +1341,6 @@ final class TokenProFrame extends JFrame {
             int removed = ModelSelectionReconciler.reconcileAll(store, owner, models);
             if (removed > 0) {
                 refreshReconciledCodexCatalog(store, Platform.codexConfig(), models, false);
-                SecureStore cliStore = store.cli("codex");
-                refreshReconciledCodexCatalog(cliStore, cliStore.root().resolve("home/config.toml"), models, true);
             }
             updateCodexStatus(); updateBridgeStatus();
             updateCommandControls("codex", codexCliInstalled);
@@ -2206,20 +2233,21 @@ final class TokenProFrame extends JFrame {
     private void connectClient(String app, boolean cli, List<PricedModel> requestedModels) {
         if (accessToken == null || accessToken.isBlank()) { error(new IllegalStateException("请先登录 TokenPro")); return; }
         String command = app.toLowerCase(Locale.ROOT);
-        String identity = command + (cli ? "-cli" : "-desktop");
+        String identity = app.equals("Codex") ? "codex-shared" : command + (cli ? "-cli" : "-desktop");
         if (!connectingClients.begin(identity)) return;
         refreshConnectControls();
         String token = accessToken, owner = accountId, accountLabel = string(sessionUser.get("email"));
         String label = app + (cli ? " 命令行" : " 客户端");
         CodexConfig.ForeignRelayPlan relayPlan = null;
+        boolean[] codexRunning = {false, false};
         try {
             if (app.equals("Codex")) {
-                SecureStore target = cli ? store.cli(command) : store;
-                Path configPath = cli ? target.root().resolve("home/config.toml") : Platform.codexConfig();
-                relayPlan = CodexConfig.foreignRelayPlan(configPath).orElse(null);
+                relayPlan = CodexConfig.foreignRelayPlan(Platform.codexConfig()).orElse(null);
+                codexRunning[0] = !ClientReconnect.desktopProcesses("Codex").isEmpty();
+                codexRunning[1] = !ClientReconnect.cliProcesses(store, "codex").isEmpty();
             }
-            boolean running = cli ? !ClientReconnect.cliProcesses(store, command).isEmpty()
-                : !ClientReconnect.desktopProcesses(app).isEmpty();
+            boolean running = app.equals("Codex") ? codexRunning[0] || codexRunning[1]
+                : cli ? !ClientReconnect.cliProcesses(store, command).isEmpty() : !ClientReconnect.desktopProcesses(app).isEmpty();
             String notice = running
                 ? "将切换至 TokenPro 并重启 " + label + "，当前请求会终止，请先保存。"
                 : "将当前渠道切换至 TokenPro，保留聊天内容。";
@@ -2232,7 +2260,7 @@ final class TokenProFrame extends JFrame {
         status("正在核验账户并连接 " + label + "…");
         new SwingWorker<Integer,Void>() {
             protected Integer doInBackground() throws Exception {
-                SecureStore target = cli ? store.cli(command) : store;
+                SecureStore target = app.equals("Codex") ? store : cli ? store.cli(command) : store;
                 Map<String,Object> user = api.me(token);
                 if (!ClaudeBridgeServer.sameIdentifier(owner, user.get("id"))) throw new IllegalStateException("账户已变化，请重新登录");
                 List<PricedModel> saved = requestedModels != null ? requestedModels : app.equals("Codex") ? savedCodexModels(target)
@@ -2240,22 +2268,22 @@ final class TokenProFrame extends JFrame {
                         .map(r -> new PricedModel(r.name(), r.platform(), r.groupName(), r.groupId())).toList();
                 // The picker already supplies the exact model/group pair. Availability
                 // is decided on invocation by the gateway, not by a second catalog fetch.
-                List<PricedModel> selected = app.equals("Codex") ? ModelPickerDialog.orderedModels(saved, app, cli)
+                List<PricedModel> selected = app.equals("Codex") ? ModelPickerDialog.orderedModels(saved, app, false)
                     : ModelSelectionReconciler.currentModels(saved, api.pricedModels(token), app);
                 if(!Objects.equals(token, accessToken)) throw new IllegalStateException("账户已变化，连接已取消");
                 if (selected.isEmpty()) throw new IllegalStateException("之前选择的模型已不可用，请重新选择模型；原程序未关闭");
                 ApiClient.ManagedKey key = api.globalKey(token);
                 if (!Objects.equals(token, accessToken)) throw new IllegalStateException("账户已变化，连接已取消；设置未修改");
                 if (app.equals("Codex")) {
-                    Path configPath = cli ? target.root().resolve("home/config.toml") : Platform.codexConfig();
+                    Path configPath = Platform.codexConfig();
                     CodexChannelSwitch.run(target, configPath, CodexChannel.tokenPro(), selected.stream().map(CodexConfig::routedModelId).toList(), () -> {
-                        ClientReconnect.stopForSettings(store, app, cli);
+                        stopSharedCodex();
                     }, () -> {
                         BridgeLifecycle.removeLegacyCodexAdapter(target);
-                        CodexConfig config = cli ? new CodexConfig(target, configPath) : codex;
+                        CodexConfig config = codex;
                         config.apply("https://tokenpro.work/v1", selected, key.key(), accountLabel, relayPlanToApply);
                         saveCodexSelection(target, selected, key, owner);
-                    }, () -> startAndAwaitProfile(app, cli));
+                    }, () -> restartSharedCodex(cli, codexRunning[0], codexRunning[1]));
                     return selected.size();
                 }
                 ChannelSettingsBackup.switchClaude(target, cli, () -> {
@@ -2274,25 +2302,16 @@ final class TokenProFrame extends JFrame {
                 finishConnection(identity);
                 try {
                     int count = get();
-                    if (!cli) setDesktopCardState(app, selectionStatus(count), true);
+                    if (app.equals("Codex")) {
+                        setDesktopCardState(app, selectionStatus(count), true);
+                        updateCommandControls("codex", codexCliInstalled);
+                    } else if (!cli) setDesktopCardState(app, selectionStatus(count), true);
                     else updateCommandControls(command, true);
-                    String defaultCommand = "";
-                    if (cli && app.equals("Codex")) {
-                        // Write startup settings only after the transactional route
-                        // update and CLI launch both succeeded, so a failed connect
-                        // cannot leave a new default command behind.
-                        try {
-                            CodexCliShellIntegration.install(store, Platform.resolveCli("codex"));
-                            defaultCommand = "；新开的 " + (Platform.OS_KIND == Platform.OS.WINDOWS ? "PowerShell" : "终端")
-                                + " 可直接输入 codex，codex-official 可回退原命令";
-                        } catch (Exception startupFailure) {
-                            defaultCommand = "；默认命令设置失败，仍可直接运行 TokenPro 独立启动器："
-                                + startupFailure.getMessage();
-                        }
+                    status(label + " 已启动，已配置 " + count + " 个模型；费用以 TokenPro 用量记录为准");
+                    if (app.equals("Codex") && !cli) {
+                        TokenProDialogs.info(TokenProFrame.this, "连接完成",
+                            "TokenPro 配置已启用，客户端与命令行现在共用同一套配置和历史。");
                     }
-                    status(label + " 已启动，已配置 " + count + " 个模型；费用以 TokenPro 用量记录为准" + defaultCommand);
-                    if (app.equals("Codex") && !cli) TokenProDialogs.info(TokenProFrame.this, "连接完成",
-                        "TokenPro 配置已启用，客户端已重启。");
                     lastAccountRefresh = 0; refreshAccountSilently();
                 } catch (Exception e) { connectionFailure(app, cli, e); }
             }

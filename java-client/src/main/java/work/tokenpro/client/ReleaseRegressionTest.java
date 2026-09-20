@@ -54,32 +54,11 @@ final class ReleaseRegressionTest {
         check(nativeWin.contains("start \"\" /b /wait") && nativeWin.contains("\"C:/CLI/claude.exe\" \"--settings\""),
             "Windows GUI bootstrap waits, then terminal directly runs native CLI"); passed++;
         check(nativeWin.contains("set \"CLAUDE_CONFIG_DIR=C:/CLI Home\""), "native CLI receives isolated environment"); passed++;
-        Path launcher=Path.of("/Users/test/Library/Application Support/TokenPro/bin/tokenpro-codex");
-        Path official=Path.of("/Users/test/.local/bin/codex");
-        String posixDefault=CodexCliShellIntegration.posixBlock(launcher,official);
-        check(posixDefault.contains("codex()") && posixDefault.contains("codex-official()")
-            && posixDefault.contains("\"$@\""), "macOS/Linux default command preserves arguments and official fallback"); passed++;
-        String windowsDefault=CodexCliShellIntegration.powerShellBlock(Path.of("C:/Users/test/AppData/Roaming/TokenPro/bin/tokenpro-codex.cmd"),
-            Path.of("C:/Users/test/AppData/Local/Programs/OpenAI/Codex/bin/codex.cmd"));
-        check(windowsDefault.contains("function global:codex") && windowsDefault.contains("@args")
-            && windowsDefault.contains("codex-official"), "Windows PowerShell default command preserves arguments and official fallback"); passed++;
-        check(CodexCliShellIntegration.startupFiles(Platform.OS.MAC,Path.of("/Users/test"),"/bin/zsh").equals(List.of(Path.of("/Users/test/.zshrc"))),
-            "macOS zsh startup file is selected"); passed++;
-        check(CodexCliShellIntegration.startupFiles(Platform.OS.LINUX,Path.of("/home/test"),"/bin/bash").equals(List.of(Path.of("/home/test/.bashrc"))),
-            "Linux bash startup file is selected"); passed++;
-        check(CodexCliShellIntegration.startupFiles(Platform.OS.LINUX,Path.of("/home/test"),null).equals(List.of(Path.of("/home/test/.bashrc"))),
-            "Linux falls back to bash when a GUI session omits SHELL"); passed++;
-        check(CodexCliShellIntegration.startupFiles(Platform.OS.WINDOWS,Path.of("C:/Users/test"),null).size()==2,
-            "Windows PowerShell 5 and 7 profiles are both selected"); passed++;
-        check(CodexCliShellIntegration.replaceBlock("before\n", posixDefault).contains("codex-official"),
-            "startup integration appends a managed block"); passed++;
-        check(CodexCliShellIntegration.replaceBlock("before\n" + posixDefault + "after\n", posixDefault).equals("before\n" + posixDefault + "after\n"),
-            "startup integration replaces its previous block without touching user settings"); passed++;
         Path root=Files.createTempDirectory("tokenpro-release-regression-");
         try {
             SecureStore store=new SecureStore(root);
             Map<String,String> codex=CliLauncher.environment(store,"codex"),claude=CliLauncher.environment(store,"claude");
-            check(!codex.get("CODEX_HOME").equals(claude.get("CLAUDE_CONFIG_DIR")), "terminal entry profiles are separate"); passed++;
+            check(codex.isEmpty() && claude.containsKey("CLAUDE_CONFIG_DIR"), "Codex CLI inherits the desktop home while Claude keeps its adapter home"); passed++;
             check(CliLauncher.arguments(store,"claude",List.of("--version")).getLast().equals("--version"), "terminal arguments forwarded"); passed++;
             Path file=root.resolve("claude"); Files.writeString(file,"fixture");
             check(Platform.sameExecutable(file,file.toString()), "process identity compares actual files"); passed++;

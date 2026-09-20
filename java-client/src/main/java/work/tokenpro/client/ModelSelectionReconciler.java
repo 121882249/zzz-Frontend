@@ -12,7 +12,6 @@ final class ModelSelectionReconciler {
         // client.  Leaving old Codex entries untouched makes the dashboard
         // count models the user has already unselected in TokenPro.
         int removed = reconcile(root, "codex-selected.json", "Codex", false, account, catalog);
-        removed += reconcile(root.cli("codex"), "codex-selected.json", "Codex", true, account, catalog);
         removed += reconcile(root, ClaudeBridgeConfig.FILE, "Claude", false, account, catalog);
         return removed + reconcile(root.cli("claude"), ClaudeBridgeConfig.FILE, "Claude", true, account, catalog);
     }

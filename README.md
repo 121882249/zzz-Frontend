@@ -6,12 +6,13 @@ TokenPro 现在只有一套 Java 21/Swing 客户端源码，支持 Windows、mac
 
 ## v1.3.31 更新
 
-- 连接 Codex 命令行后，新开的终端可直接使用 `codex` 启动 TokenPro 的独立命令行配置；`codex-official` 始终可运行连接前识别到的原始 Codex CLI。
-- 不改系统 PATH：macOS 使用当前用户的 zsh / bash 启动文件，Linux 使用当前默认的 bash / zsh / fish 启动文件；Windows 同时写入 Windows PowerShell 5 与 PowerShell 7 的当前用户 Profile。Codex 客户端配置不受影响。
+- Codex 客户端与 Codex CLI 改为共用系统默认 `CODEX_HOME`：模型选择、渠道、认证、对话历史及“修复历史对话”使用同一套数据。
+- 普通终端直接运行原生 `codex` 即读取 TokenPro 已应用的客户端配置；macOS、Windows、Linux 均无需改 PATH 或 shell / PowerShell 启动文件。命令行卡片复用客户端的切换、回滚和修复流程。
+- 因模型目录也共用，客户端选择的生图组会出现在 Codex CLI 的模型列表中；Claude 客户端、Claude Code 仍不导出生图组。
 
 ## v1.3.30 更新
 
-- Codex 命令行现在与 Codex 客户端一样提供“修复历史对话”：只修复该入口独立 `CODEX_HOME` 中未归档的普通对话，不会改写桌面端会话。
+- Codex 命令行现在与 Codex 客户端一样提供“修复历史对话”。
 - 四个入口继续共用同一套安全切换约束：先停止目标程序，写入并校验目标配置；失败时恢复原配置。
 
 ## v1.3.29 更新
@@ -44,13 +45,13 @@ TokenPro 现在只有一套 Java 21/Swing 客户端源码，支持 Windows、mac
 
 ## 使用指南
 
-最新版客户端提供 4 条彼此隔离的接入路径。面向最终用户的图文教程以 [TokenPro 使用文档](https://tokenpro.work/docs) 为准，包含安装检查、模型选择、连接验证、恢复官方配置和常见问题。
+最新版客户端提供 4 条接入路径。Codex 客户端与 Codex CLI 共用一套 Codex 状态；Claude 的桌面端和命令行仍使用各自所需的适配配置。面向最终用户的图文教程以 [TokenPro 使用文档](https://tokenpro.work/docs) 为准，包含安装检查、模型选择、连接验证、恢复官方配置和常见问题。
 
 | 接入方式 | 配置隔离 | 网络路径 | 适用场景 |
 |---|---|---|---|
 | Codex 客户端 | 独立 Codex 配置与认证 | 直连 `tokenpro.work` | 桌面图形界面、对话与生图 |
 | Claude 客户端 | 独立 Claude 第三方账户 | `127.0.0.1:23179` | Claude Desktop 图形界面 |
-| Codex CLI | 独立 `CODEX_HOME` | 直连 `tokenpro.work` | 终端开发、脚本和 Agent 任务（仅文本模型） |
+| Codex CLI | 共用 Codex 客户端的 `CODEX_HOME` | 直连 `tokenpro.work` | 终端开发、脚本和 Agent 任务 |
 | Claude Code | 独立 `CLAUDE_CONFIG_DIR` | `127.0.0.1:23181` | Claude Code 终端工作流 |
 
 Codex 的原生图片模式由后端按当前回合的真实分组启用：仅适用于全局 Key、平台为 `openai` 且描述去除首尾空白后等于“生图”的分组。其他分组走普通请求流程；客户端不再在共用 provider 上固定配置 `native-v2`。升级时先部署支持该分组策略的后端，再更新客户端并重新应用连接配置。
@@ -69,7 +70,7 @@ flowchart LR
 
 开始前请确认 TokenPro 已更新到 `v1.2.93` 或更高版本。Claude Code 需为 `2.1.242` 或更高版本；Windows 一键连接使用原生 CLI，WSL 环境需要单独配置。
 
-TokenPro 不修改系统全局 PATH，也不会用命令行配置覆盖桌面端配置。连接 Codex 命令行后，新开的终端中 `codex` 会使用 TokenPro 的独立配置；`codex-official` 可随时运行原来的官方 CLI。`claude` 始终保持原生命令。
+TokenPro 不修改系统全局 PATH，也不写 shell 或 PowerShell 启动文件。Codex 客户端与原生 `codex` 命令共用系统默认配置，因此任一入口完成 TokenPro / 官方渠道切换后，另一入口下次启动时会读取同一结果。`claude` 始终保持原生命令。
 
 ## 功能
 

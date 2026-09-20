@@ -80,7 +80,8 @@ final class ClientReconnect {
     }
 
     static String cliMarker(SecureStore root, String client) throws Exception {
-        return root.cli(client).root().resolve(client.equals("claude") ? ClaudeCliConfig.FILE : "codex-model-catalog.json")
+        return (client.equals("codex") ? root.root().resolve("codex-selected.json")
+            : root.cli(client).root().resolve(ClaudeCliConfig.FILE))
             .toAbsolutePath().normalize().toString();
     }
 
@@ -106,6 +107,26 @@ final class ClientReconnect {
         return false;
     }
 
+    /** Codex CLI now shares the desktop profile, so ordinary native invocations are part of the same restart scope. */
+    static boolean sharedCodexCliMatches(String executable, List<String> arguments) {
+        if (Platform.desktopProcessMatches(Platform.OS_KIND, "Codex", executable)) return false;
+        // The desktop app launches the bundled binary in app-server mode. It is
+        // stopped with the desktop process, not treated as an interactive CLI.
+        if (arguments.stream().anyMatch("app-server"::equals)) return false;
+        String file;
+        try { file = Path.of(executable).getFileName().toString().toLowerCase(Locale.ROOT); }
+        catch (Exception ignored) { return false; }
+        if (file.equals("codex") || file.equals("codex.exe")) return true;
+        if (!file.equals("node") && !file.equals("node.exe")) return false;
+        return arguments.stream().map(value -> value.replace('\\', '/').toLowerCase(Locale.ROOT))
+            .anyMatch(value -> value.contains("/@openai/codex/") || value.endsWith("/codex/bin/codex.js"));
+    }
+
+    private static boolean cliProcessMatches(String client, String executable, List<String> arguments, String marker) {
+        return client.equals("codex") ? sharedCodexCliMatches(executable, arguments)
+            : managedCliMatches(client, executable, arguments, marker);
+    }
+
     private static String normalized(String value) {
         String result = value;
         if (result.startsWith("\"") && result.endsWith("\"")) {
@@ -117,7 +138,7 @@ final class ClientReconnect {
 
     static List<ProcessHandle> cliProcesses(SecureStore root, String client) throws Exception {
         String marker = cliMarker(root, client);
-        List<ProcessHandle> found = ProcessHandle.allProcesses().filter(p -> managedCliMatches(client, p.info().command().orElse(""),
+        List<ProcessHandle> found = ProcessHandle.allProcesses().filter(p -> cliProcessMatches(client, p.info().command().orElse(""),
             Arrays.asList(p.info().arguments().orElse(new String[0])), marker)).toList();
         if (!found.isEmpty() || Platform.OS_KIND != Platform.OS.WINDOWS) return found;
         // Windows ProcessHandle often omits arguments. Read the native process
@@ -140,7 +161,7 @@ final class ClientReconnect {
         List<ProcessHandle> matches = new ArrayList<>();
         for (Object raw : rows) {
             Map<String,Object> row = Json.object(raw);
-            if (managedCliMatches(client, Objects.toString(row.get("ExecutablePath"), ""),
+            if (cliProcessMatches(client, Objects.toString(row.get("ExecutablePath"), ""),
                 windowsArguments(Objects.toString(row.get("CommandLine"), "")), marker)
                 && row.get("ProcessId") instanceof Number pid) ProcessHandle.of(pid.longValue()).ifPresent(matches::add);
         }

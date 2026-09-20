@@ -177,6 +177,11 @@ final class ConnectionRegressionTest {
                 check(!ClientReconnect.managedCliMatches(client, "/native/" + client, List.of(), marker), "ordinary " + client + " is never closed"); passed++;
                 check(!ClientReconnect.managedCliMatches(client, "/native/" + client, args, marker + "-other"), "other " + client + " profile is never closed"); passed++;
             }
+            check(ClientReconnect.sharedCodexCliMatches("/native/codex", List.of())
+                && ClientReconnect.sharedCodexCliMatches("/usr/bin/node", List.of("/opt/node_modules/@openai/codex/bin/codex.js"))
+                && !ClientReconnect.sharedCodexCliMatches("/native/claude", List.of())
+                && !ClientReconnect.sharedCodexCliMatches("/Applications/ChatGPT.app/Contents/Resources/codex", List.of("app-server")),
+                "shared Codex restart scope includes native and npm CLI processes only"); passed++;
             String image = "gpt-image-2.5-flare";
             store.write("codex-selected.json", Json.stringify(Map.of("models", List.of(Map.of(
                 "name", image, "group_id", 65, "platform", "openai", "group_platform", "openai",

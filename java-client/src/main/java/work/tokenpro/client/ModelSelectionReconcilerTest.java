@@ -45,15 +45,20 @@ final class ModelSelectionReconcilerTest {
             check(retained.key().equals(bridge.key()) && retained.localToken().equals(bridge.localToken()) && retained.port() == bridge.port(), "credentials and bridge port unchanged"); passed++;
             SecureStore codexCli = store.cli("codex"), claudeCli = store.cli("claude");
             codexCli.write("codex-selected.json", Json.stringify(document)); bridge.save(claudeCli);
-            check(ModelSelectionReconciler.reconcileAll(store, "18", catalog) == 3, "Codex CLI and Claude CLI stale selections are reconciled"); passed++;
-            check(TokenProFrame.savedCodexModels(codexCli).equals(List.of(live)) && ClaudeBridgeConfig.load(store).routes().size() == 1 && ClaudeBridgeConfig.load(claudeCli).routes().size() == 1, "desktop and CLI selections remain isolated"); passed++;
+            check(ModelSelectionReconciler.reconcileAll(store, "18", catalog) == 1, "Claude CLI stale selections are reconciled"); passed++;
+            check(TokenProFrame.savedCodexModels(store).equals(List.of(live))
+                && TokenProFrame.savedCodexModels(codexCli).size() == 3
+                && ClaudeBridgeConfig.load(store).routes().size() == 1 && ClaudeBridgeConfig.load(claudeCli).routes().size() == 1,
+                "Codex uses the shared desktop selection and ignores the legacy isolated profile"); passed++;
             PricedModel dedicatedImage = new PricedModel("gpt-image-2", "openai", "openai", "生图组", 12,
                 "image", null, null, List.of(), false, 0d, "", " 生图 ");
-            codexCli.write("codex-selected.json", Json.stringify(Map.of("account_id", "18", "models", rows(List.of(live, dedicatedImage)))));
-            check(ModelSelectionReconciler.reconcileAll(store, "18", List.of(live, dedicatedImage)) == 1,
-                "Codex CLI drops the dedicated image group during reconciliation"); passed++;
-            check(TokenProFrame.savedCodexModels(codexCli).equals(List.of(live)),
-                "Codex CLI persistence never retains dedicated image groups"); passed++;
+            store.write("codex-selected.json", Json.stringify(Map.of("account_id", "18", "models", rows(List.of(live, dedicatedImage)))));
+            check(ModelSelectionReconciler.reconcileAll(store, "18", List.of(live, dedicatedImage)) == 0,
+                "shared Codex selection keeps the desktop image group"); passed++;
+            List<PricedModel> sharedCodex = TokenProFrame.savedCodexModels(store);
+            check(sharedCodex.size() == 2 && sharedCodex.stream().map(PricedModel::name).toList()
+                    .equals(List.of(live.name(), dedicatedImage.name())),
+                "Codex CLI reads the same persisted selection as the client"); passed++;
             store.write("codex-selected.json", "{\"model\":\"GPT-Old\",\"group_id\":7,\"key_id\":91}");
             check(ModelSelectionReconciler.reconcileAll(store, "18", catalog) == 1 && !store.read("codex-selected.json").orElseThrow().contains("GPT-Old"), "legacy Codex selection is removed when no longer available"); passed++;
             store.write("codex-selected.json", "{\"models\":[{\"name\":\"missing group\"}]}");

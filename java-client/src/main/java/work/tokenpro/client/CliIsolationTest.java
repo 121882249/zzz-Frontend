@@ -16,7 +16,9 @@ final class CliIsolationTest {
             SecureStore claude = desktop.cli("claude"), codex = desktop.cli("codex");
             desktop.write("codex-selected.json", "desktop");
             codex.write("codex-selected.json", "cli");
-            check(desktop.read("codex-selected.json").orElseThrow().equals("desktop"), "CLI selection preserves desktop selection"); passed++;
+            check(CliLauncher.environment(desktop, "codex").isEmpty()
+                && ClientReconnect.cliMarker(desktop, "codex").equals(desktop.root().resolve("codex-selected.json").toString()),
+                "Codex CLI uses the desktop profile and selection marker"); passed++;
             check(claude.isClaudeCli() && !desktop.isClaudeCli() && !codex.isClaudeCli(), "helper scope is explicit"); passed++;
             PricedModel desktopModel = new PricedModel("claude-desktop", "anthropic", "Claude", 1);
             PricedModel cliModel = new PricedModel("gpt-cli", "openai", "GPT", 2);
@@ -43,12 +45,9 @@ final class CliIsolationTest {
             Files.createDirectories(desktopPath.getParent()); Files.createDirectories(cliPath.getParent());
             Files.writeString(desktopPath, "desktop-config"); Files.writeString(cliPath, "cli-config");
             desktop.write("codex-original.toml", "desktop-original"); codex.write("codex-original.toml", "cli-original");
-            new CodexConfig(codex, cliPath).restore();
-            check(Files.readString(desktopPath).equals("desktop-config"), "restoring CLI preserves desktop config"); passed++;
-            check(Files.readString(cliPath).equals("cli-original"), "CLI restores its own backup"); passed++;
             new CodexConfig(desktop, desktopPath).restore();
-            check(Files.readString(cliPath).equals("cli-original"), "restoring desktop preserves CLI config"); passed++;
-            check(Files.readString(desktopPath).equals("desktop-original"), "desktop restores its own backup"); passed++;
+            check(Files.readString(desktopPath).equals("desktop-original"), "shared Codex restore uses the desktop backup"); passed++;
+            check(Files.readString(cliPath).equals("cli-config"), "legacy isolated Codex CLI files are no longer active"); passed++;
         } finally {
             try (var paths = Files.walk(root)) {
                 for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path);

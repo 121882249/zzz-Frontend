@@ -3,7 +3,7 @@ package work.tokenpro.client;
 import java.nio.file.*;
 import java.util.*;
 
-/** Explicit terminal entry points; never shadows the user's global codex/claude. */
+/** Explicit terminal entry points. Codex shares the desktop home; Claude keeps its required CLI adapter. */
 final class CliLauncher {
     private CliLauncher() {}
     static Path install(SecureStore root, String client) throws Exception {
@@ -55,9 +55,10 @@ final class CliLauncher {
     private static String batchQuote(String value) { return "\"" + value.replace("%","%%") + "\""; }
     static Map<String,String> environment(SecureStore root, String client) throws Exception {
         validate(client);
+        if (client.equals("codex")) return Map.of();
         Path home = root.cli(client).root().resolve("home").toAbsolutePath();
         Files.createDirectories(home);
-        return Map.of(client.equals("codex") ? "CODEX_HOME" : "CLAUDE_CONFIG_DIR", home.toString());
+        return Map.of("CLAUDE_CONFIG_DIR", home.toString());
     }
     static List<String> arguments(SecureStore root, String client, List<String> extra) throws Exception {
         validate(client);
@@ -75,11 +76,8 @@ final class CliLauncher {
     }
     static void prepare(SecureStore root, String client) throws Exception {
         validate(client);
-        SecureStore store = root.cli(client);
-        if(client.equals("codex")) {
-            if(store.read("codex-official-mode.txt").isEmpty() && !Files.isRegularFile(store.root().resolve("home/config.toml")))
-                throw new IllegalStateException("请先在 TokenPro 的 Codex 命令行卡片选择模型");
-        } else {
+        if(client.equals("claude")) {
+            SecureStore store = root.cli(client);
             if(store.read(ClaudeCliConfig.FILE).isEmpty()) throw new IllegalStateException("请先在 TokenPro 的 Claude 命令行卡片选择模型");
             ClaudeBridgeManager.ensureRunning(store);
         }
