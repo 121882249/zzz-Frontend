@@ -687,8 +687,8 @@ final class TokenProFrame extends JFrame {
             String identity = "codex-shared";
             if (!connectingClients.begin(identity)) return;
             refreshConnectControls();
-            boolean desktopWasRunning = !ClientReconnect.desktopProcesses("Codex").isEmpty();
-            boolean cliWasRunning = !ClientReconnect.cliProcesses(store, "codex").isEmpty();
+            boolean targetWasRunning = cli ? !ClientReconnect.cliProcesses(store, "codex").isEmpty()
+                : !ClientReconnect.desktopProcesses("Codex").isEmpty();
             status("正在修复 " + label + " 历史对话为 " + targetLabel + "…");
             new SwingWorker<CodexConversationRepair.Result,Void>() {
                 protected CodexConversationRepair.Result doInBackground() throws Exception {
@@ -696,14 +696,14 @@ final class TokenProFrame extends JFrame {
                     Exception failure = null;
                     CodexConversationRepair.Result result = null;
                     try {
-                        stopSharedCodex();
+                        stopCodexTarget(cli);
                         stopped = true;
                         result = CodexConversationRepair.repair(configPath.getParent(), targetProvider, model);
                     } catch (Exception error) {
                         failure = error;
                     }
                     if (stopped) try {
-                        restartSharedCodex(cli, desktopWasRunning, cliWasRunning);
+                        restartCodexTarget(cli, targetWasRunning);
                     } catch (Exception restart) {
                         if (failure == null) failure = restart;
                         else failure.addSuppressed(restart);
@@ -736,20 +736,19 @@ final class TokenProFrame extends JFrame {
         String identity = "codex-shared";
         if (!connectingClients.begin(identity)) return;
         refreshConnectControls();
-        boolean desktopWasRunning = !ClientReconnect.desktopProcesses("Codex").isEmpty();
-        boolean cliWasRunning;
-        try { cliWasRunning = !ClientReconnect.cliProcesses(store, "codex").isEmpty(); }
+        boolean targetWasRunning;
+        try { targetWasRunning = !ClientReconnect.desktopProcesses("Codex").isEmpty(); }
         catch (Exception failure) { finishConnection(identity); error(failure); return; }
         status("正在重新启动 Codex 并加载官方配置…");
         new SwingWorker<Boolean, Void>() {
             protected Boolean doInBackground() throws Exception {
                 CodexChannelSwitch.run(store, Platform.codexConfig(), CodexChannel.official(), List.of(), () -> {
-                    stopSharedCodex();
+                    stopCodexTarget(false);
                 }, () -> {
                     codex.deleteForOfficial();
                     BridgeLifecycle.removeLegacyCodexAdapter(store);
                     store.write("codex-official-mode.txt", "official");
-                }, () -> restartSharedCodex(false, desktopWasRunning, cliWasRunning));
+                }, () -> restartCodexTarget(false, targetWasRunning));
                 return true;
             }
             protected void done() {
@@ -1100,14 +1099,12 @@ final class TokenProFrame extends JFrame {
         ClientReconnect.awaitStarted(store, app, cli);
     }
 
-    private void stopSharedCodex() throws Exception {
-        ClientReconnect.stopForSettings(store, "Codex", true);
-        ClientReconnect.stopForSettings(store, "Codex", false);
+    private void stopCodexTarget(boolean cli) throws Exception {
+        ClientReconnect.stopForSettings(store, "Codex", cli);
     }
 
-    private void restartSharedCodex(boolean requestedCli, boolean desktopWasRunning, boolean cliWasRunning) throws Exception {
-        if (!requestedCli || desktopWasRunning) startAndAwaitProfile("Codex", false);
-        if (requestedCli || cliWasRunning) startAndAwaitProfile("Codex", true);
+    private void restartCodexTarget(boolean cli, boolean targetWasRunning) throws Exception {
+        if (targetWasRunning) startAndAwaitProfile("Codex", cli);
     }
 
     private void connectionFailure(String app, boolean cli, Throwable wrapped) {
@@ -1129,21 +1126,22 @@ final class TokenProFrame extends JFrame {
         String identity = app.equals("Codex") ? "codex-shared" : app.toLowerCase(Locale.ROOT) + (cli ? "-cli" : "-desktop");
         if (!connectingClients.begin(identity)) return;
         refreshConnectControls();
-        boolean desktopWasRunning = app.equals("Codex") && !ClientReconnect.desktopProcesses("Codex").isEmpty();
-        boolean cliWasRunning;
-        try { cliWasRunning = app.equals("Codex") && !ClientReconnect.cliProcesses(store, "codex").isEmpty(); }
+        boolean targetWasRunning;
+        try { targetWasRunning = app.equals("Codex") && (cli
+            ? !ClientReconnect.cliProcesses(store, "codex").isEmpty()
+            : !ClientReconnect.desktopProcesses("Codex").isEmpty()); }
         catch (Exception failure) { finishConnection(identity); error(failure); return; }
         new SwingWorker<Void,Void>() {
             protected Void doInBackground() throws Exception {
                 if (!app.equals("Codex")) OfficialConnectionCheck.check(app);
                 SecureStore target = app.equals("Codex") ? store : cli ? store.cli(app.toLowerCase(Locale.ROOT)) : store;
                 ClientReconnect.Action stop = () -> {
-                    if (app.equals("Codex")) stopSharedCodex();
+                    if (app.equals("Codex")) stopCodexTarget(cli);
                     else ClientReconnect.stopForSettings(store, app, cli);
                     if (!app.equals("Codex")) ClaudeBridgeManager.stop(target);
                 };
                 ClientReconnect.Action start = () -> {
-                    if (app.equals("Codex")) restartSharedCodex(cli, desktopWasRunning, cliWasRunning);
+                    if (app.equals("Codex")) restartCodexTarget(cli, targetWasRunning);
                     else startAndAwaitProfile(app, cli);
                 };
                 if (app.equals("Codex")) {
@@ -2257,10 +2255,10 @@ final class TokenProFrame extends JFrame {
         try {
             if (app.equals("Codex")) {
                 relayPlan = CodexConfig.foreignRelayPlan(Platform.codexConfig()).orElse(null);
-                codexRunning[0] = !ClientReconnect.desktopProcesses("Codex").isEmpty();
-                codexRunning[1] = !ClientReconnect.cliProcesses(store, "codex").isEmpty();
+                codexRunning[cli ? 1 : 0] = cli ? !ClientReconnect.cliProcesses(store, "codex").isEmpty()
+                    : !ClientReconnect.desktopProcesses("Codex").isEmpty();
             }
-            boolean running = app.equals("Codex") ? codexRunning[0] || codexRunning[1]
+            boolean running = app.equals("Codex") ? codexRunning[cli ? 1 : 0]
                 : cli ? !ClientReconnect.cliProcesses(store, command).isEmpty() : !ClientReconnect.desktopProcesses(app).isEmpty();
             String notice = running
                 ? "将切换至 TokenPro 并重启 " + label + "，当前请求会终止，请先保存。"
@@ -2291,13 +2289,13 @@ final class TokenProFrame extends JFrame {
                 if (app.equals("Codex")) {
                     Path configPath = Platform.codexConfig();
                     CodexChannelSwitch.run(target, configPath, CodexChannel.tokenPro(), selected.stream().map(CodexConfig::routedModelId).toList(), () -> {
-                        stopSharedCodex();
+                        stopCodexTarget(cli);
                     }, () -> {
                         BridgeLifecycle.removeLegacyCodexAdapter(target);
                         CodexConfig config = codex;
                         config.apply("https://tokenpro.work/v1", selected, key.key(), accountLabel, relayPlanToApply);
                         saveCodexSelection(target, selected, key, owner);
-                    }, () -> restartSharedCodex(cli, codexRunning[0], codexRunning[1]));
+                    }, () -> restartCodexTarget(cli, codexRunning[cli ? 1 : 0]));
                     return selected.size();
                 }
                 ChannelSettingsBackup.switchClaude(target, cli, () -> {

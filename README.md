@@ -4,6 +4,11 @@
 
 TokenPro 现在只有一套 Java 21/Swing 客户端源码，支持 Windows、macOS 和 Linux。macOS 的 Intel 与 Apple 芯片版本、Windows x64 版本和 Linux x64 版本由 GitHub Actions 分别在对应系统构建。
 
+## v1.3.33 更新
+
+- 点击任一入口的“连接”只启动该入口，不会联动启动或重启另外三个端。
+- Codex 客户端与 Codex CLI 继续共用配置和历史，但连接、重启、切换和修复都只作用于当前点击的入口。
+
 ## v1.3.32 更新
 
 - 四个入口的启动按钮仅打开对应客户端或命令行，沿用已保存的配置，不再执行渠道切换或联动重启其他入口。
