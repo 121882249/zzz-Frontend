@@ -350,7 +350,7 @@ final class TokenProFrame extends JFrame {
                 status("请先安装 " + iconName + " 客户端");
                 return;
             }
-            showModelMenu(menu, chooseModel, restore, iconName.equals("Codex") ? this::repairCodexConversations : null);
+            showModelMenu(menu, chooseModel, restore, iconName.equals("Codex") ? () -> repairCodexConversations(false) : null);
         });
         if (iconName.equals("Codex")) codexModelMenuButton = menu; else claudeModelMenuButton = menu;
         state.setFont(appFont(11, Font.BOLD)); state.setHorizontalAlignment(SwingConstants.RIGHT);
@@ -456,7 +456,8 @@ final class TokenProFrame extends JFrame {
             if(!(codexCli ? codexCliInstalled : claudeCliInstalled)) {
                 status("请先安装 " + iconName + " 命令行工具"); return;
             }
-            showModelMenu(menu, () -> chooseModels(iconName, true, false), () -> restoreCli(command), null);
+            showModelMenu(menu, () -> chooseModels(iconName, true, false), () -> restoreCli(command),
+                codexCli ? () -> repairCodexConversations(true) : null);
         });
         if(codexCli) codexCliModelMenuButton = menu; else claudeCliModelMenuButton = menu;
         state.setFont(appFont(11, Font.BOLD)); state.setHorizontalAlignment(SwingConstants.RIGHT);
@@ -657,13 +658,22 @@ final class TokenProFrame extends JFrame {
         catch (Exception ex) { error(ex); }
     }
 
-    private void repairCodexConversations() {
-        Path configPath = Platform.codexConfig();
+    private void repairCodexConversations(boolean cli) {
+        SecureStore targetStore;
+        try {
+            targetStore = cli ? store.cli("codex") : store;
+        } catch (Exception error) {
+            error(error);
+            return;
+        }
+        Path configPath = cli ? targetStore.root().resolve("home/config.toml") : Platform.codexConfig();
+        String label = cli ? "Codex 命令行" : "Codex 客户端";
         try {
             String current = Files.exists(configPath) ? Files.readString(configPath) : "";
             String activeProvider = CodexSwitchConfig.rootValue(current, "model_provider").orElse("openai");
             String choice = TokenProDialogs.choose(this, "修复历史对话",
-                "选择当前渠道，仅修复未归档的普通对话并重启 Codex，请先保存。", "CCSwitch", "OpenAI");
+                "仅修复 " + label + " 独立配置中的未归档普通对话并重启；不会修改其他客户端或命令行的对话，请先保存。",
+                "CCSwitch", "OpenAI");
             if (choice == null) return;
             String targetProvider;
             if ("OpenAI".equals(choice)) {
@@ -678,24 +688,24 @@ final class TokenProFrame extends JFrame {
             }
             String model = CodexSwitchConfig.rootValue(current, "model").orElse("");
             String targetLabel = "OpenAI".equals(choice) ? "OpenAI" : "CCSwitch";
-            String identity = "codex-conversation-repair";
+            String identity = cli ? "codex-cli" : "codex-desktop";
             if (!connectingClients.begin(identity)) return;
             refreshConnectControls();
-            status("正在把历史对话修复为 " + targetLabel + "…");
+            status("正在修复 " + label + " 历史对话为 " + targetLabel + "…");
             new SwingWorker<CodexConversationRepair.Result,Void>() {
                 protected CodexConversationRepair.Result doInBackground() throws Exception {
                     boolean stopped = false;
                     Exception failure = null;
                     CodexConversationRepair.Result result = null;
                     try {
-                        ClientReconnect.stopForSettings(store, "Codex", false);
+                        ClientReconnect.stopForSettings(store, "Codex", cli);
                         stopped = true;
                         result = CodexConversationRepair.repair(configPath.getParent(), targetProvider, model);
                     } catch (Exception error) {
                         failure = error;
                     }
                     if (stopped) try {
-                        startAndAwaitProfile("Codex", false);
+                        startAndAwaitProfile("Codex", cli);
                     } catch (Exception restart) {
                         if (failure == null) failure = restart;
                         else failure.addSuppressed(restart);
@@ -707,14 +717,14 @@ final class TokenProFrame extends JFrame {
                     finishConnection(identity);
                     try {
                         CodexConversationRepair.Result result = get();
-                        updateCodexStatus();
-                        status("当前对话修复完成：成功 " + result.visibleRepaired() + "，失败 " + result.failed()
+                        if (cli) updateCommandControls("codex", codexCliInstalled); else updateCodexStatus();
+                        status(label + " 对话修复完成：成功 " + result.visibleRepaired() + "，失败 " + result.failed()
                             + (result.failureReasons().isEmpty() ? "" : "（" + result.failureReasons() + "）"));
-                        String detail = "当前对话修复成功 " + result.visibleRepaired() + " 个，失败 "
+                        String detail = label + " 对话修复成功 " + result.visibleRepaired() + " 个，失败 "
                             + result.failed() + " 个。";
                         TokenProDialogs.info(TokenProFrame.this, "修复完成", detail);
                     } catch (Exception error) {
-                        connectionFailure("Codex", false, error);
+                        connectionFailure("Codex", cli, error);
                     }
                 }
             }.execute();

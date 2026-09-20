@@ -4,6 +4,11 @@
 
 TokenPro 现在只有一套 Java 21/Swing 客户端源码，支持 Windows、macOS 和 Linux。macOS 的 Intel 与 Apple 芯片版本、Windows x64 版本和 Linux x64 版本由 GitHub Actions 分别在对应系统构建。
 
+## v1.3.30 更新
+
+- Codex 命令行现在与 Codex 客户端一样提供“修复历史对话”：只修复该入口独立 `CODEX_HOME` 中未归档的普通对话，不会改写桌面端会话。
+- 四个入口继续共用同一套安全切换约束：先停止目标程序，写入并校验目标配置；失败时恢复原配置。
+
 ## v1.3.29 更新
 
 - 生图模型严格以服务端分组字段识别：`groupPlatform == openai` 且分组描述去除首尾空白后为“生图”。
