@@ -34,6 +34,12 @@ final class ChannelSettingsBackup {
         Path teamoSkill = config.getParent().resolve("skills").resolve("teamorouter-imagegen");
         paths.add(teamoSkill.resolve("SKILL.md"));
         paths.add(teamoSkill.resolve("SKILL.md.disabled-by-tokenpro"));
+        for (String name : List.of("tokenpro-imagegen", "imagegen")) {
+            Path skill = config.getParent().resolve("skills").resolve(name);
+            paths.add(skill.resolve("SKILL.md"));
+            paths.add(skill.resolve("SKILL.md.disabled-by-tokenpro"));
+            paths.add(skill.resolve("SKILL.md.before-tokenpro"));
+        }
         Path catalogs = store.root().resolve("codex-models");
         if (Files.isDirectory(catalogs, LinkOption.NOFOLLOW_LINKS)) try (var files = Files.list(catalogs)) {
             paths.addAll(files.filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)).toList());
