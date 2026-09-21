@@ -91,13 +91,11 @@ final class CodexSwitchConfigTest {
             CodexConfig config = new CodexConfig(store, configPath);
             config.apply("https://tokenpro.work/v1", List.of(new PricedModel("gpt-5.4", "openai", "fixture", 1)), "fixture-route-key", "fixture@example.test");
             String applied = Files.readString(configPath);
-            check(applied.contains("model_provider = \"tokenpro\"")
-                && applied.contains("base_url = \"https://tokenpro.work/v1\"")
+            check(applied.contains("model_provider = \"openai\"")
+                && applied.contains("openai_base_url = \"https://tokenpro.work/v1\"")
                 && !applied.contains("[model_providers.custom]")
-                && applied.contains("experimental_bearer_token = \"fixture-route-key\"")
-                && applied.contains("\"x-tokenpro-image-mode\" = \"native-v2\"")
-                && applied.contains("\"x-openai-actor-authorization\" = \"fixture@example.test\""),
-                "TokenPro native-v2 provider preserves global-key and actor routing");
+                && !applied.contains("experimental_bearer_token"),
+                "TokenPro keeps the original OpenAI provider and global-key auth");
             check(Files.readString(auth).contains("\"auth_mode\":\"apikey\""), "TokenPro activation installs API-key auth");
             check(store.read(CodexChannelState.OFFICIAL_AUTH_FILE).orElseThrow().equals(OFFICIAL_AUTH),
                 "official OAuth login has an independent private copy");
@@ -126,8 +124,7 @@ final class CodexSwitchConfigTest {
             config.deleteForOfficial();
             String restored = Files.readString(configPath);
             check(!CodexConfig.tokenProActive(configPath), "official route is not reported as TokenPro active");
-            check(!restored.contains("tokenpro.work") && !restored.contains("model_provider = \"tokenpro\"")
-                && !restored.contains("fixture-route-key"), "actual official restore removes TokenPro endpoint and credential");
+            check(!restored.contains("tokenpro.work") && !restored.contains("model_provider = \"openai\""), "actual official restore removes TokenPro endpoint and route");
             check(restored.contains("sandbox_private_desktop = true") && restored.contains("trust_level = \"trusted\""), "official restore retains Windows and project state");
             check(Files.readString(auth).equals(OFFICIAL_AUTH), "official OAuth login is restored from TokenPro's private copy");
             check(Files.readString(configPath.resolveSibling("models_cache.json")).contains("1970-01-01T00:00:00Z"),

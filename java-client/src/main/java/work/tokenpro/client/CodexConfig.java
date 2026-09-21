@@ -43,10 +43,8 @@ final class CodexConfig {
             Path path = Path.of(catalog.group(2));
             CodexChannelState.Detected detected = CodexChannelState.detect(configPath);
             return Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
-                && (("openai".equals(detected.modelProvider())
-                        && "https://tokenpro.work/v1".equals(detected.openAiBaseUrl().replaceAll("/+$", "")))
-                    || ("tokenpro".equals(detected.modelProvider())
-                        && "https://tokenpro.work/v1".equals(detected.providerBaseUrl().replaceAll("/+$", ""))))
+                && "openai".equals(detected.modelProvider())
+                && "https://tokenpro.work/v1".equals(detected.openAiBaseUrl().replaceAll("/+$", ""))
                 && detected.markerOwners().contains("tokenpro")
                 && "apikey".equals(detected.authMode());
         } catch (Exception ignored) { return false; }
@@ -208,7 +206,8 @@ final class CodexConfig {
         String routedModel = routedModelId(model);
         out.append(START).append('\n');
         out.append("model = ").append(toml(routedModel)).append('\n');
-        out.append("model_provider = \"tokenpro\"\n\n");
+        out.append("model_provider = \"openai\"\n");
+        out.append("openai_base_url = ").append(toml(providerBaseUrl(url))).append("\n\n");
         out.append("model_context_window = 372000\nmodel_auto_compact_token_limit = 372000\n");
         // Keep the exact group-qualified slug. Codex's custom Responses provider
         // enables its native image handler; built-in OpenAI + apikey auth does not.
@@ -217,15 +216,6 @@ final class CodexConfig {
             .filter(entry -> routedModel.equals(entry.get("slug"))).findFirst().orElseThrow();
         out.append(CodexPreferences.retainedLines(current, profile));
         out.append("model_catalog_json = ").append(toml(catalog.toAbsolutePath().toString())).append("\n");
-        out.append("\n[model_providers.tokenpro]\n");
-        out.append("name = \"TokenPro\"\nbase_url = ").append(toml(providerBaseUrl(url))).append('\n');
-        out.append("wire_api = \"responses\"\nrequires_openai_auth = false\n");
-        // Codex requires this provider's bearer token to be in config.toml;
-        // writeAtomic applies owner-only permissions, like auth.json.
-        out.append("experimental_bearer_token = ").append(toml(key.trim())).append('\n');
-        out.append("http_headers = { \"x-openai-actor-authorization\" = ").append(toml(accountEmail))
-            .append(", \"x-tokenpro-image-mode\" = \"native-v2\" }\n");
-        out.append("supports_websockets = false\n");
         out.append(END).append('\n');
         return out.toString();
     }
