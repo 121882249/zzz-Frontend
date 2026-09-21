@@ -4,6 +4,12 @@
 
 TokenPro 现在只有一套 Java 21/Swing 客户端源码，支持 Windows、macOS 和 Linux。macOS 的 Intel 与 Apple 芯片版本、Windows x64 版本和 Linux x64 版本由 GitHub Actions 分别在对应系统构建。
 
+## v1.3.38 更新
+
+- 切换到 TokenPro 时自动停用 TeamoRouter 生图 Skill，避免图片请求仍被 Teamo 抢占；文件原地保留，切换失败时随配置一起回滚。
+- Codex 命令行模型目录、应用配置和“已选模型”数量统一排除专用生图组；Codex 客户端继续保留生图模型。
+- 保留 v1.3.37 的可读 Codex 路由模型 ID 与后端兼容逻辑。
+
 ## v1.3.37 更新
 
 - Codex 路由 ID 对普通模型改用可读格式，例如 `tp-g57-gpt-5.6-luna`；左侧仍保留精确分组，模型名称不再显示为 Base64。

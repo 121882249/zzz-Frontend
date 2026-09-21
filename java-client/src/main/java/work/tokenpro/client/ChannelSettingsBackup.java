@@ -31,6 +31,9 @@ final class ChannelSettingsBackup {
         paths.addAll(List.of(config, CodexChannelState.auth(config), CodexChannelState.modelsCache(config)));
         for (String name : List.of("codex-original.toml", "codex-selected.json", "codex-model-catalog.json",
                 "codex-official-mode.txt", "codex-last-switch-config.toml")) paths.add(store.root().resolve(name));
+        Path teamoSkill = config.getParent().resolve("skills").resolve("teamorouter-imagegen");
+        paths.add(teamoSkill.resolve("SKILL.md"));
+        paths.add(teamoSkill.resolve("SKILL.md.disabled-by-tokenpro"));
         Path catalogs = store.root().resolve("codex-models");
         if (Files.isDirectory(catalogs, LinkOption.NOFOLLOW_LINKS)) try (var files = Files.list(catalogs)) {
             paths.addAll(files.filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)).toList());

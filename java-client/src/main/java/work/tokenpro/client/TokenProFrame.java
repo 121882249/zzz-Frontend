@@ -1053,8 +1053,15 @@ final class TokenProFrame extends JFrame {
             if (command.equals("codex") && "official".equals(CodexChannelState.detect(Platform.codexConfig()).channel())) return 0;
             if(command.equals("claude")) return ClaudeBridgeConfig.load(selected).routes().size();
             Map<String,Object> data = Json.object(Json.parse(selected.read("codex-selected.json").orElse("{}")));
-            return data.get("models") instanceof List<?> rows ? rows.size() : 0;
+            if (!(data.get("models") instanceof List<?> rows)) return 0;
+            return (int) rows.stream().map(Json::object).filter(row -> !isDedicatedImageRow(row)).count();
         } catch(Exception ignored) { return 0; }
+    }
+
+    private static boolean isDedicatedImageRow(Map<String,Object> row) {
+        String platform = string(row.get("group_platform"));
+        String description = string(row.get("group_description")).trim();
+        return "openai".equalsIgnoreCase(platform) && "生图".equals(description);
     }
 
     private void copyCliCommand(String command) {
@@ -2277,41 +2284,37 @@ final class TokenProFrame extends JFrame {
                 List<PricedModel> saved = requestedModels != null ? requestedModels : app.equals("Codex") ? savedCodexModels(target)
                     : ClaudeBridgeConfig.load(target).routes().stream()
                         .map(r -> new PricedModel(r.name(), r.platform(), r.groupName(), r.groupId())).toList();
-                if (app.equals("Codex") && cli && requestedModels != null) {
-                    // The CLI picker edits text choices only; hidden desktop image
-                    // choices must survive applying the filtered selection.
-                    List<PricedModel> combined = new ArrayList<>(saved);
-                    savedCodexModels(target).stream().filter(PricedModel::isImageGeneration).forEach(combined::add);
-                    saved = combined;
-                }
                 // The picker already supplies the exact model/group pair. Availability
                 // is decided on invocation by the gateway, not by a second catalog fetch.
                 List<PricedModel> selected = app.equals("Codex") ? ModelPickerDialog.orderedModels(saved, app, false)
                     : ModelSelectionReconciler.currentModels(saved, api.pricedModels(token), app);
+                if (app.equals("Codex") && cli)
+                    selected = selected.stream().filter(model -> !model.isImageGeneration()).toList();
                 if(!Objects.equals(token, accessToken)) throw new IllegalStateException("账户已变化，连接已取消");
                 if (selected.isEmpty()) throw new IllegalStateException("之前选择的模型已不可用，请重新选择模型；原程序未关闭");
+                List<PricedModel> selectedForConnect = List.copyOf(selected);
                 ApiClient.ManagedKey key = api.globalKey(token);
                 if (!Objects.equals(token, accessToken)) throw new IllegalStateException("账户已变化，连接已取消；设置未修改");
                 if (app.equals("Codex")) {
                     Path configPath = Platform.codexConfig();
-                    CodexChannelSwitch.run(target, configPath, CodexChannel.tokenPro(), selected.stream().map(CodexConfig::routedModelId).toList(), () -> {
+                    CodexChannelSwitch.run(target, configPath, CodexChannel.tokenPro(), selectedForConnect.stream().map(CodexConfig::routedModelId).toList(), () -> {
                         stopCodexTarget(cli);
                     }, () -> {
                         BridgeLifecycle.removeLegacyCodexAdapter(target);
                         CodexConfig config = codex;
-                        config.apply("https://tokenpro.work/v1", selected, key.key(), accountLabel, relayPlanToApply);
-                        saveCodexSelection(target, selected, key, owner);
+                        config.apply("https://tokenpro.work/v1", selectedForConnect, key.key(), accountLabel, relayPlanToApply);
+                        saveCodexSelection(target, selectedForConnect, key, owner);
                     }, () -> restartCodexTarget(cli, codexRunning[cli ? 1 : 0]));
-                    return selected.size();
+                    return selectedForConnect.size();
                 }
                 ChannelSettingsBackup.switchClaude(target, cli, () -> {
                     ClientReconnect.stopForSettings(store, app, cli);
                     ClaudeBridgeManager.stop(target);
                 }, () -> {
-                    ClaudeBridgeConfig config = cli ? ClaudeBridgeConfig.createCliWithHistory(target, owner, token, key, selected)
-                        : ClaudeBridgeConfig.createWithHistory(target, owner, token, key, selected);
+                    ClaudeBridgeConfig config = cli ? ClaudeBridgeConfig.createCliWithHistory(target, owner, token, key, selectedForConnect)
+                        : ClaudeBridgeConfig.createWithHistory(target, owner, token, key, selectedForConnect);
                     config.save(target);
-                    if (cli) ClaudeCliConfig.install(target, selected, config);
+                    if (cli) ClaudeCliConfig.install(target, selectedForConnect, config);
                     else ClaudeDesktopConfig.install(target, config, accountLabel);
                 }, () -> startAndAwaitProfile(app, cli), () -> startAndAwaitProfile(app, cli));
                 return selected.size();
@@ -2320,8 +2323,10 @@ final class TokenProFrame extends JFrame {
                 finishConnection(identity);
                 try {
                     int count = get();
-                    if (app.equals("Codex")) {
+                    if (app.equals("Codex") && !cli) {
                         setDesktopCardState(app, selectionStatus(count), true);
+                        updateCommandControls("codex", codexCliInstalled);
+                    } else if (app.equals("Codex")) {
                         updateCommandControls("codex", codexCliInstalled);
                     } else if (!cli) setDesktopCardState(app, selectionStatus(count), true);
                     else updateCommandControls(command, true);

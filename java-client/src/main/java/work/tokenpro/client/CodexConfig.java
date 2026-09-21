@@ -16,6 +16,8 @@ final class CodexConfig {
     private static final Pattern ROOT_MODEL_ASSIGNMENT = Pattern.compile("(?m)^model\\s*=.*$");
     private static final Pattern REVIEW_MODEL_ASSIGNMENT = Pattern.compile("(?m)^review_model\\s*=.*$");
     private static final Pattern READABLE_ROUTE_MODEL = Pattern.compile("[\\p{L}\\p{N}][\\p{L}\\p{N}._:/-]{0,511}");
+    private static final String TEAMO_IMAGE_SKILL = "teamorouter-imagegen";
+    private static final String DISABLED_IMAGE_SKILL = "SKILL.md.disabled-by-tokenpro";
     private final SecureStore store;
     private final Path configPath;
     record ForeignRelayPlan(String original, String cleaned, List<String> changes) {}
@@ -77,6 +79,10 @@ final class CodexConfig {
         // Image models stay in their own picker group and are also written to
         // Codex's catalog so they can run directly without a selected LLM.
         Path catalog = writeModelCatalog(models);
+        // TeamoRouter's global image skill otherwise wins before the active
+        // TokenPro route. Preserve it in place, but hide only its discoverable
+        // SKILL.md; reopening Teamo can recreate/reactivate it later.
+        deactivateForeignImageSkill();
         // Each turn selects its group-qualified slug. Native Images requests
         // correlate through the backend's authenticated turn map.
         String block = managedBlock(url, primaryModel, catalog, current);
@@ -144,6 +150,12 @@ final class CodexConfig {
         CodexChannelState.markOfficialCacheStale(configPath);
     }
 
+    void deactivateForeignImageSkill() throws IOException {
+        Path skill = configPath.getParent().resolve("skills").resolve(TEAMO_IMAGE_SKILL).resolve("SKILL.md");
+        if (Files.exists(skill, LinkOption.NOFOLLOW_LINKS))
+            Files.move(skill, skill.resolveSibling(DISABLED_IMAGE_SKILL), StandardCopyOption.REPLACE_EXISTING);
+    }
+
     /** Atomically replace the active TokenPro catalog after stale selections are pruned. */
     void refreshModelCatalog(List<PricedModel> models) throws Exception {
         models = ModelPickerDialog.orderedModels(models, "Codex");
@@ -154,6 +166,7 @@ final class CodexConfig {
         ChannelSettingsBackup backup = new ChannelSettingsBackup(store, configPath);
         try {
             Path catalog = writeModelCatalog(models);
+            deactivateForeignImageSkill();
             PricedModel primary = models.stream().filter(model -> !model.isImageGeneration()).findFirst().orElse(models.getFirst());
             String candidate = MODEL_CATALOG_ASSIGNMENT.matcher(current)
                 .replaceFirst(Matcher.quoteReplacement("model_catalog_json = " + toml(catalog.toString())));

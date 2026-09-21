@@ -174,8 +174,10 @@ final class CodexSwitchConfigTest {
                 "switching preserves another channel's proxy, auth, history state, and backups");
             check(Files.exists(genericRelayFile) && Files.exists(genericRouterBackup),
                 "generic router and relay named artifacts are preserved");
-            check(Files.exists(legacyImageSkill) && Files.exists(legacyImageState),
-                "another channel's skill and state remain owned by that channel");
+            check(!Files.exists(legacyImageSkill)
+                && Files.exists(legacyImageSkill.resolveSibling("SKILL.md.disabled-by-tokenpro"))
+                && Files.exists(legacyImageState),
+                "foreign image skill is hidden from Codex while its files and state remain recoverable");
             config.deleteForOfficial();
             String officialAfterForeign = Files.readString(configPath);
             check(!officialAfterForeign.contains("relay.example") && !officialAfterForeign.contains("tokenpro.work")
