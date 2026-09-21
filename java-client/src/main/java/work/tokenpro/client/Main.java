@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 public final class Main {
-    public static final String VERSION = "1.3.41";
+    public static final String VERSION = "1.3.42";
     private Main() {}
 
     public static void main(String[] args) throws Exception {
@@ -33,6 +33,10 @@ public final class Main {
         }
         if (args.length == 2 && "--route-token".equals(args[0])) {
             System.out.print(store.credential(args[1]));
+            return;
+        }
+        if (args.length > 0 && "--tokenpro-imagegen".equals(args[0])) {
+            System.exit(TokenProImageCli.run(java.util.Arrays.copyOfRange(args, 1, args.length)));
             return;
         }
         if (args.length > 0 && ("--codex-cli".equals(args[0]) || "--claude-cli".equals(args[0]))) {

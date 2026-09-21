@@ -16,6 +16,11 @@ rm -rf build/classes build/TokenPro.jar build/TokenPro-update.jar
 mkdir -p build/classes
 find src/main/java -name '*.java' -print0 | xargs -0 "$JAVA_HOME/bin/javac" --release 21 --add-modules jdk.httpserver -encoding UTF-8 -d build/classes
 mkdir -p build/classes/assets
+mkdir -p build/classes/tokenpro-imagegen/agents build/classes/tokenpro-imagegen/scripts
+cp src/main/resources/tokenpro-imagegen/SKILL.md build/classes/tokenpro-imagegen/SKILL.md
+cp src/main/resources/tokenpro-imagegen/agents/openai.yaml build/classes/tokenpro-imagegen/agents/openai.yaml
+cp src/main/resources/tokenpro-imagegen/scripts/tokenpro-imagegen build/classes/tokenpro-imagegen/scripts/tokenpro-imagegen
+cp src/main/resources/tokenpro-imagegen/scripts/tokenpro-imagegen.cmd build/classes/tokenpro-imagegen/scripts/tokenpro-imagegen.cmd
 cp ../Resources/TokenProCosmosIcon.png build/classes/assets/TokenProCosmosIcon.png
 cp ../Resources/LoginCosmos-v2.png build/classes/assets/LoginCosmos-v2.png
 cp ../Resources/ModelUniverseVortex.png build/classes/assets/ModelUniverseVortex.png

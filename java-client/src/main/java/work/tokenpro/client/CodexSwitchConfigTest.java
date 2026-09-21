@@ -91,13 +91,14 @@ final class CodexSwitchConfigTest {
             CodexConfig config = new CodexConfig(store, configPath);
             config.apply("https://tokenpro.work/v1", List.of(new PricedModel("gpt-5.4", "openai", "fixture", 1)), "fixture-route-key", "fixture@example.test");
             String applied = Files.readString(configPath);
-            check(applied.contains("model_provider = \"custom\"")
-                && applied.contains("base_url = \"https://tokenpro.work/v1\"")
-                && applied.contains("[model_providers.custom]")
-                && applied.contains("experimental_bearer_token = \"fixture-route-key\"")
-                && applied.contains("name = \"fixture@example.test\"")
-                && applied.contains("\"x-tokenpro-image-mode\" = \"native-v2\""),
-                "TokenPro custom provider preserves global-key and native-v2 routing");
+            check(applied.contains("model_provider = \"openai\"")
+                && applied.contains("openai_base_url = \"https://tokenpro.work/v1\""),
+                "TokenPro openai provider preserves the API-key route");
+            check(Files.exists(configPath.getParent().resolve("skills/tokenpro-imagegen/SKILL.md")),
+                "TokenPro activation installs tokenpro-imagegen");
+            check(Files.readString(configPath.getParent().resolve("skills/tokenpro-imagegen/SKILL.md"))
+                .contains("\"" + configPath.getParent().resolve("skills/tokenpro-imagegen/scripts/tokenpro-imagegen") + "\" generate"),
+                "TokenPro image Skill installs a runnable absolute CLI path");
             check(Files.readString(auth).contains("\"auth_mode\":\"apikey\""), "TokenPro activation installs API-key auth");
             check(store.read(CodexChannelState.OFFICIAL_AUTH_FILE).orElseThrow().equals(OFFICIAL_AUTH),
                 "official OAuth login has an independent private copy");
@@ -126,7 +127,7 @@ final class CodexSwitchConfigTest {
             config.deleteForOfficial();
             String restored = Files.readString(configPath);
             check(!CodexConfig.tokenProActive(configPath), "official route is not reported as TokenPro active");
-            check(!restored.contains("tokenpro.work") && !restored.contains("model_provider = \"custom\"")
+            check(!restored.contains("tokenpro.work") && !restored.contains("model_provider = \"openai\"")
                 && !restored.contains("fixture-route-key"), "actual official restore removes TokenPro endpoint and credential");
             check(restored.contains("sandbox_private_desktop = true") && restored.contains("trust_level = \"trusted\""), "official restore retains Windows and project state");
             check(Files.readString(auth).equals(OFFICIAL_AUTH), "official OAuth login is restored from TokenPro's private copy");

@@ -106,6 +106,7 @@ final class CodexConfig {
             writeAtomic(target, candidate);
         }
         CodexChannelState.writeChannelCache(target, catalog);
+        installTokenProImageSkill();
         // Retire only our old generated catalogs after the new config is committed.
         // Failure is housekeeping, not a reason to restore a previous channel.
         try { pruneModelCatalogs(catalog); store.delete("codex-model-catalog.json"); }
@@ -151,6 +152,7 @@ final class CodexConfig {
         store.delete("codex-selected.json");
         store.delete("codex-official-mode.txt");
         pruneModelCatalogs(null);
+        deactivateTokenProImageSkill();
         CodexChannelState.markOfficialCacheStale(configPath);
     }
 
@@ -158,6 +160,14 @@ final class CodexConfig {
         Path skill = configPath.getParent().resolve("skills").resolve(TEAMO_IMAGE_SKILL).resolve("SKILL.md");
         if (Files.exists(skill, LinkOption.NOFOLLOW_LINKS))
             Files.move(skill, skill.resolveSibling(DISABLED_IMAGE_SKILL), StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    void installTokenProImageSkill() throws IOException {
+        TokenProImageSkill.install(configPath);
+    }
+
+    void deactivateTokenProImageSkill() throws IOException {
+        TokenProImageSkill.deactivate(configPath);
     }
 
     /** Atomically replace the active TokenPro catalog after stale selections are pruned. */
@@ -209,10 +219,11 @@ final class CodexConfig {
         String routedModel = routedModelId(model);
         out.append(START).append('\n');
         out.append("model = ").append(toml(routedModel)).append('\n');
-        out.append("model_provider = \"custom\"\n\n");
+        out.append("model_provider = \"openai\"\n");
+        out.append("openai_base_url = ").append(toml(providerBaseUrl(url))).append("\n\n");
         out.append("model_context_window = 372000\nmodel_auto_compact_token_limit = 372000\n");
-        // Keep the exact group-qualified slug. The custom Responses provider
-        // enables Codex's native image handler while preserving global-key routing.
+        // Keep the exact group-qualified slug. Native image requests are handled
+        // by the bundled TokenPro image Skill while Codex remains on openai.
         Map<String, Object> catalogRoot = Json.object(Json.parse(Files.readString(catalog)));
         Map<String, Object> profile = ((List<?>) catalogRoot.get("models")).stream().map(Json::object)
             .filter(entry -> routedModel.equals(entry.get("slug"))).findFirst().orElseThrow();

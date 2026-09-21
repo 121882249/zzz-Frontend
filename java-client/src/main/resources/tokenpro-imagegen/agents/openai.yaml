@@ -1,0 +1,6 @@
+interface:
+  display_name: "TokenPro ImageGen"
+  short_description: "Generate images through TokenPro while Codex stays on openai"
+  default_prompt: "Use $tokenpro-imagegen for image generation and editing through TokenPro."
+policy:
+  allow_implicit_invocation: true
