@@ -9,6 +9,12 @@ New-Item -ItemType Directory -Force build/classes | Out-Null
 $sources = Get-ChildItem -Recurse src/main/java -Filter *.java | ForEach-Object FullName
 & "$env:JAVA_HOME/bin/javac.exe" --release 21 --add-modules jdk.httpserver -encoding UTF-8 -d build/classes $sources
 if ($LASTEXITCODE -ne 0) { throw "javac failed with exit code $LASTEXITCODE" }
+New-Item -ItemType Directory -Force build/classes/tokenpro-imagegen/agents | Out-Null
+New-Item -ItemType Directory -Force build/classes/tokenpro-imagegen/scripts | Out-Null
+Copy-Item src/main/resources/tokenpro-imagegen/SKILL.md build/classes/tokenpro-imagegen/SKILL.md
+Copy-Item src/main/resources/tokenpro-imagegen/agents/openai.yaml build/classes/tokenpro-imagegen/agents/openai.yaml
+Copy-Item src/main/resources/tokenpro-imagegen/scripts/tokenpro-imagegen build/classes/tokenpro-imagegen/scripts/tokenpro-imagegen
+Copy-Item src/main/resources/tokenpro-imagegen/scripts/tokenpro-imagegen.cmd build/classes/tokenpro-imagegen/scripts/tokenpro-imagegen.cmd
 New-Item -ItemType Directory -Force build/classes/assets | Out-Null
 Copy-Item ../Resources/TokenProCosmosIcon.png build/classes/assets/TokenProCosmosIcon.png
 Copy-Item ../Resources/LoginCosmos-v2.png build/classes/assets/LoginCosmos-v2.png
