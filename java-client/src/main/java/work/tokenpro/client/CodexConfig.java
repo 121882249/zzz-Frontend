@@ -42,9 +42,12 @@ final class CodexConfig {
             if (!catalog.find()) return false;
             Path path = Path.of(catalog.group(2));
             CodexChannelState.Detected detected = CodexChannelState.detect(configPath);
+            boolean custom = "custom".equals(detected.modelProvider())
+                && "https://tokenpro.work/v1".equals(detected.providerBaseUrl().replaceAll("/+$", ""));
+            boolean legacyOpenAi = "openai".equals(detected.modelProvider())
+                && "https://tokenpro.work/v1".equals(detected.openAiBaseUrl().replaceAll("/+$", ""));
             return Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
-                && "openai".equals(detected.modelProvider())
-                && "https://tokenpro.work/v1".equals(detected.openAiBaseUrl().replaceAll("/+$", ""))
+                && (custom || legacyOpenAi)
                 && detected.markerOwners().contains("tokenpro")
                 && "apikey".equals(detected.authMode());
         } catch (Exception ignored) { return false; }
@@ -206,16 +209,23 @@ final class CodexConfig {
         String routedModel = routedModelId(model);
         out.append(START).append('\n');
         out.append("model = ").append(toml(routedModel)).append('\n');
-        out.append("model_provider = \"openai\"\n");
-        out.append("openai_base_url = ").append(toml(providerBaseUrl(url))).append("\n\n");
+        out.append("model_provider = \"custom\"\n\n");
         out.append("model_context_window = 372000\nmodel_auto_compact_token_limit = 372000\n");
-        // Keep the exact group-qualified slug. Codex's custom Responses provider
-        // enables its native image handler; built-in OpenAI + apikey auth does not.
+        // Keep the exact group-qualified slug. The custom Responses provider
+        // enables Codex's native image handler while preserving global-key routing.
         Map<String, Object> catalogRoot = Json.object(Json.parse(Files.readString(catalog)));
         Map<String, Object> profile = ((List<?>) catalogRoot.get("models")).stream().map(Json::object)
             .filter(entry -> routedModel.equals(entry.get("slug"))).findFirst().orElseThrow();
         out.append(CodexPreferences.retainedLines(current, profile));
         out.append("model_catalog_json = ").append(toml(catalog.toAbsolutePath().toString())).append("\n");
+        out.append("\n[model_providers.custom]\n");
+        out.append("name = ").append(toml(accountEmail)).append("\n");
+        out.append("base_url = ").append(toml(providerBaseUrl(url))).append("\n");
+        out.append("wire_api = \"responses\"\nrequires_openai_auth = false\n");
+        out.append("experimental_bearer_token = ").append(toml(key.trim())).append("\n");
+        out.append("http_headers = { \"x-openai-actor-authorization\" = ").append(toml(accountEmail))
+            .append(", \"x-tokenpro-image-mode\" = \"native-v2\" }\n");
+        out.append("supports_websockets = false\n");
         out.append(END).append('\n');
         return out.toString();
     }

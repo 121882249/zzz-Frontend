@@ -57,8 +57,8 @@ public final class CodexOpenAiProviderIntegrationTest {
                 "http://127.0.0.1:" + server.getAddress().getPort() + "/v1",
                 List.of(selected), "fixture-global-key", "fixture@example.test");
             String config = Files.readString(home.resolve("config.toml"));
-            require(config.contains("model_provider = \"openai\""), "TokenPro did not preserve the OpenAI provider");
-            require(config.contains("openai_base_url = \"http://127.0.0.1:"), "TokenPro endpoint override is missing");
+            require(config.contains("model_provider = \"custom\""), "TokenPro did not select the custom provider");
+            require(config.contains("[model_providers.custom]"), "TokenPro custom provider is missing");
             try (var rpc = new CodexAppServerRpc(home)) {
                 Map<String,Object> started = rpc.call("thread/start", Map.of(
                     "cwd", root.toString(), "approvalPolicy", "never", "sandbox", "read-only"));
@@ -68,7 +68,7 @@ public final class CodexOpenAiProviderIntegrationTest {
                 require(requestReceived.await(20, TimeUnit.SECONDS), "installed Codex never called the fixture endpoint");
                 if (failure.get() != null) throw new AssertionError("native-v2 provider probe failed", failure.get());
             }
-            System.out.println("Installed Codex preserved TokenPro global key and tp-g group route on model_provider=openai.");
+            System.out.println("Installed Codex preserved TokenPro global key and tp-g group route on model_provider=custom.");
         } finally {
             server.stop(0);
         }
