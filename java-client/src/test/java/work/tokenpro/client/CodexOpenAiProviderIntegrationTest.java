@@ -13,7 +13,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-/** Proves the installed Codex keeps TokenPro's API key and routed model on its built-in OpenAI provider. */
+/** Proves the installed Codex keeps TokenPro's global key and group-qualified model on its native-v2 provider. */
 public final class CodexOpenAiProviderIntegrationTest {
     public static void main(String[] args) throws Exception {
         Path root = Files.createTempDirectory("tokenpro-openai-provider-");
@@ -33,7 +33,9 @@ public final class CodexOpenAiProviderIntegrationTest {
                     new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8)));
                 require(routedModel.equals(body.get("model")), "Codex changed the group-qualified model slug");
                 require("Bearer fixture-global-key".equals(exchange.getRequestHeaders().getFirst("Authorization")),
-                    "Codex did not send the global key from auth.json");
+                    "Codex did not send the configured global key");
+                require("native-v2".equals(exchange.getRequestHeaders().getFirst("x-tokenpro-image-mode")),
+                    "native-v2 turn routing header missing");
                 requestReceived.countDown();
                 Map<String,Object> item = Map.of("type", "message", "id", "msg_fixture", "role", "assistant",
                     "status", "completed", "content", List.of(Map.of("type", "output_text", "text", "OK", "annotations", List.of())));
@@ -57,7 +59,7 @@ public final class CodexOpenAiProviderIntegrationTest {
                 "http://127.0.0.1:" + server.getAddress().getPort() + "/v1",
                 List.of(selected), "fixture-global-key", "fixture@example.test");
             String config = Files.readString(home.resolve("config.toml"));
-            require(config.contains("model_provider = \"openai\""), "TokenPro did not select the built-in OpenAI provider");
+            require(config.contains("model_provider = \"tokenpro\""), "TokenPro did not select its native-v2 provider");
             require(!config.contains("[model_providers.custom]"), "legacy custom provider survived activation");
             try (var rpc = new CodexAppServerRpc(home)) {
                 Map<String,Object> started = rpc.call("thread/start", Map.of(
@@ -66,9 +68,9 @@ public final class CodexOpenAiProviderIntegrationTest {
                 rpc.call("turn/start", Map.of("threadId", threadId,
                     "input", List.of(Map.of("type", "text", "text", "route probe"))));
                 require(requestReceived.await(20, TimeUnit.SECONDS), "installed Codex never called the fixture endpoint");
-                if (failure.get() != null) throw new AssertionError("built-in OpenAI provider probe failed", failure.get());
+                if (failure.get() != null) throw new AssertionError("native-v2 provider probe failed", failure.get());
             }
-            System.out.println("Installed Codex preserved TokenPro global key and tp-g group route on model_provider=openai.");
+            System.out.println("Installed Codex preserved TokenPro global key and tp-g group route on model_provider=tokenpro.");
         } finally {
             server.stop(0);
         }

@@ -43,8 +43,10 @@ final class CodexConfig {
             Path path = Path.of(catalog.group(2));
             CodexChannelState.Detected detected = CodexChannelState.detect(configPath);
             return Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
-                && "openai".equals(detected.modelProvider())
-                && "https://tokenpro.work/v1".equals(detected.openAiBaseUrl().replaceAll("/+$", ""))
+                && (("openai".equals(detected.modelProvider())
+                        && "https://tokenpro.work/v1".equals(detected.openAiBaseUrl().replaceAll("/+$", "")))
+                    || ("tokenpro".equals(detected.modelProvider())
+                        && "https://tokenpro.work/v1".equals(detected.providerBaseUrl().replaceAll("/+$", ""))))
                 && detected.markerOwners().contains("tokenpro")
                 && "apikey".equals(detected.authMode());
         } catch (Exception ignored) { return false; }
@@ -59,6 +61,7 @@ final class CodexConfig {
         models = ModelPickerDialog.orderedModels(models, "Codex");
         String url = validateUrl(baseUrl);
         required(accountEmail, "账户邮箱");
+        required(key, "全局 Key");
         if (models.isEmpty()) throw new IllegalArgumentException("请至少选择一个 Codex 模型");
         List<PricedModel> chatModels = models.stream().filter(model -> !model.isImageGeneration()).toList();
         List<PricedModel> imageModels = models.stream().filter(PricedModel::isImageGeneration).toList();
@@ -85,7 +88,7 @@ final class CodexConfig {
         deactivateForeignImageSkill();
         // Each turn selects its group-qualified slug. Native Images requests
         // correlate through the backend's authenticated turn map.
-        String block = managedBlock(url, primaryModel, catalog, current);
+        String block = managedBlock(url, primaryModel, catalog, current, key, accountEmail);
         String candidate = CodexSwitchConfig.merge(preserved, block);
         String latest = Files.exists(target) ? Files.readString(target) : "";
         if (!originalCurrent.equals(latest))
@@ -199,21 +202,30 @@ final class CodexConfig {
         }
     }
 
-    private String managedBlock(String url, PricedModel model, Path catalog, String current) throws IOException {
+    private String managedBlock(String url, PricedModel model, Path catalog, String current,
+                                String key, String accountEmail) throws IOException {
         StringBuilder out = new StringBuilder();
         String routedModel = routedModelId(model);
         out.append(START).append('\n');
         out.append("model = ").append(toml(routedModel)).append('\n');
-        out.append("model_provider = \"openai\"\n");
-        out.append("openai_base_url = ").append(toml(providerBaseUrl(url))).append("\n\n");
+        out.append("model_provider = \"tokenpro\"\n\n");
         out.append("model_context_window = 372000\nmodel_auto_compact_token_limit = 372000\n");
-        // Keep the exact group-qualified slug while using Codex's built-in
-        // OpenAI provider. auth.json supplies TokenPro's global API key.
+        // Keep the exact group-qualified slug. Codex's custom Responses provider
+        // enables its native image handler; built-in OpenAI + apikey auth does not.
         Map<String, Object> catalogRoot = Json.object(Json.parse(Files.readString(catalog)));
         Map<String, Object> profile = ((List<?>) catalogRoot.get("models")).stream().map(Json::object)
             .filter(entry -> routedModel.equals(entry.get("slug"))).findFirst().orElseThrow();
         out.append(CodexPreferences.retainedLines(current, profile));
         out.append("model_catalog_json = ").append(toml(catalog.toAbsolutePath().toString())).append("\n");
+        out.append("\n[model_providers.tokenpro]\n");
+        out.append("name = \"TokenPro\"\nbase_url = ").append(toml(providerBaseUrl(url))).append('\n');
+        out.append("wire_api = \"responses\"\nrequires_openai_auth = false\n");
+        // Codex requires this provider's bearer token to be in config.toml;
+        // writeAtomic applies owner-only permissions, like auth.json.
+        out.append("experimental_bearer_token = ").append(toml(key.trim())).append('\n');
+        out.append("http_headers = { \"x-openai-actor-authorization\" = ").append(toml(accountEmail))
+            .append(", \"x-tokenpro-image-mode\" = \"native-v2\" }\n");
+        out.append("supports_websockets = false\n");
         out.append(END).append('\n');
         return out.toString();
     }

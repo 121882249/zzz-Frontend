@@ -27,10 +27,17 @@ public final class CodexNativeRoutingIntegrationTest {
         String chatRoute = imageOnly ? imageRoute : CodexConfig.routedModelId(new PricedModel("gpt-6-astra", "openai", "Chat", 16));
         server.createContext("/v1/responses", exchange -> {
             try {
-                Map<String,Object> body = Json.object(Json.parse(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8)));
+                if ("GET".equals(exchange.getRequestMethod())) {
+                    reply(exchange, "application/json", "{}");
+                    return;
+                }
+                byte[] requestBytes = exchange.getRequestBody().readAllBytes();
+                require(requestBytes.length > 0, "empty Responses request: " + exchange.getRequestMethod() + " " + exchange.getRequestURI());
+                Map<String,Object> body = Json.object(Json.parse(new String(requestBytes, StandardCharsets.UTF_8)));
                 require(chatRoute.equals(body.get("model")), "text model lost its group-qualified slug");
                 require("Bearer fixture-key".equals(exchange.getRequestHeaders().getFirst("Authorization")), "missing configured Bearer");
-                require(exchange.getRequestHeaders().getFirst("x-tokenpro-image-mode") == null, "provider must not enable native mode for every group");
+                require("native-v2".equals(exchange.getRequestHeaders().getFirst("x-tokenpro-image-mode")), "native-v2 turn route mode missing");
+                require("fixture@example.com".equals(exchange.getRequestHeaders().getFirst("x-openai-actor-authorization")), "actor header missing");
                 imageTurn.set(Objects.toString(Json.object(body.get("client_metadata")).get("turn_id")));
                 require(exchange.getRequestHeaders().getFirst("x-tokenpro-group-id") == null, "text and image groups must not share a static group header");
                 text.countDown();

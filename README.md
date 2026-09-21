@@ -92,7 +92,7 @@ TokenPro 现在只有一套 Java 21/Swing 客户端源码，支持 Windows、mac
 | Codex CLI | 共用 Codex 客户端的 `CODEX_HOME` | 直连 `tokenpro.work` | 终端开发、脚本和 Agent 任务 |
 | Claude Code | 独立 `CLAUDE_CONFIG_DIR` | `127.0.0.1:23181` | Claude Code 终端工作流 |
 
-Codex 的原生图片模式由后端按当前回合的真实分组启用：仅适用于全局 Key、平台为 `openai` 且描述去除首尾空白后等于“生图”的分组。其他分组走普通请求流程；客户端不再在共用 provider 上固定配置 `native-v2`。升级时先部署支持该分组策略的后端，再更新客户端并重新应用连接配置。
+Codex 使用 TokenPro 专属 Responses provider 和 `native-v2` 图片路由；全局 Key 下的每个回合仍按选中的 `tp-g<分组>-<模型>` 解析和鉴权，不会把文字分组切到固定图片分组。纯生图分组以及后端允许生图的文字分组可调用本机生图工具；其他分组不能借此越权生图。Codex 的自定义 provider 需要将全局 Key 写入仅本机用户可读的 `config.toml`，同时保留 `auth.json` 以便安全切换渠道。更新客户端后需重新应用连接配置。
 
 ```mermaid
 flowchart LR

@@ -91,11 +91,13 @@ final class CodexSwitchConfigTest {
             CodexConfig config = new CodexConfig(store, configPath);
             config.apply("https://tokenpro.work/v1", List.of(new PricedModel("gpt-5.4", "openai", "fixture", 1)), "fixture-route-key", "fixture@example.test");
             String applied = Files.readString(configPath);
-            check(applied.contains("model_provider = \"openai\"")
-                && applied.contains("openai_base_url = \"https://tokenpro.work/v1\"")
+            check(applied.contains("model_provider = \"tokenpro\"")
+                && applied.contains("base_url = \"https://tokenpro.work/v1\"")
                 && !applied.contains("[model_providers.custom]")
-                && !applied.contains("experimental_bearer_token"),
-                "TokenPro uses Codex's built-in OpenAI provider without a persistent custom alias");
+                && applied.contains("experimental_bearer_token = \"fixture-route-key\"")
+                && applied.contains("\"x-tokenpro-image-mode\" = \"native-v2\"")
+                && applied.contains("\"x-openai-actor-authorization\" = \"fixture@example.test\""),
+                "TokenPro native-v2 provider preserves global-key and actor routing");
             check(Files.readString(auth).contains("\"auth_mode\":\"apikey\""), "TokenPro activation installs API-key auth");
             check(store.read(CodexChannelState.OFFICIAL_AUTH_FILE).orElseThrow().equals(OFFICIAL_AUTH),
                 "official OAuth login has an independent private copy");
@@ -104,6 +106,9 @@ final class CodexSwitchConfigTest {
             if (Platform.OS_KIND != Platform.OS.WINDOWS)
                 check(Files.getPosixFilePermissions(auth).equals(Set.of(java.nio.file.attribute.PosixFilePermission.OWNER_READ,
                     java.nio.file.attribute.PosixFilePermission.OWNER_WRITE)), "Codex auth is written with mode 0600");
+            if (Platform.OS_KIND != Platform.OS.WINDOWS)
+                check(Files.getPosixFilePermissions(configPath).equals(Set.of(java.nio.file.attribute.PosixFilePermission.OWNER_READ,
+                    java.nio.file.attribute.PosixFilePermission.OWNER_WRITE)), "provider config containing the global key is written with mode 0600");
             check(CodexConfig.tokenProActive(configPath), "fresh TokenPro route is recognized as active");
             check(applied.contains("trust_level = \"trusted\"") && applied.contains("args = [\n  \"--name\""), "actual apply preserves project and MCP settings");
             check(applied.contains("sandbox_mode = \"workspace-write\"") && applied.contains("approval_policy = \"on-request\""), "actual apply preserves permission policy");
@@ -121,7 +126,8 @@ final class CodexSwitchConfigTest {
             config.deleteForOfficial();
             String restored = Files.readString(configPath);
             check(!CodexConfig.tokenProActive(configPath), "official route is not reported as TokenPro active");
-            check(!restored.contains("tokenpro.work") && !restored.contains("model_provider = \"openai\""), "actual official restore removes TokenPro endpoint and route");
+            check(!restored.contains("tokenpro.work") && !restored.contains("model_provider = \"tokenpro\"")
+                && !restored.contains("fixture-route-key"), "actual official restore removes TokenPro endpoint and credential");
             check(restored.contains("sandbox_private_desktop = true") && restored.contains("trust_level = \"trusted\""), "official restore retains Windows and project state");
             check(Files.readString(auth).equals(OFFICIAL_AUTH), "official OAuth login is restored from TokenPro's private copy");
             check(Files.readString(configPath.resolveSibling("models_cache.json")).contains("1970-01-01T00:00:00Z"),
