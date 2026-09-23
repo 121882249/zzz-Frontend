@@ -163,15 +163,16 @@ final class ModelPickerDialog extends JDialog {
         // makes the row intercept clicks intended for the action buttons.
         JPanel footer = new JPanel(new BorderLayout()) {
             @Override protected void paintComponent(Graphics graphics) {
+                super.paintComponent(graphics);
                 Graphics2D g = (Graphics2D) graphics.create();
                 g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 g.setColor(LIST_BACKGROUND);
                 g.fillRect(0, 0, getWidth(), getHeight());
                 g.dispose();
-                super.paintComponent(graphics);
             }
         };
         footer.setOpaque(true);
+        footer.setBackground(LIST_BACKGROUND);
         footer.setBorder(new EmptyBorder(17, 0, 0, 0));
         // Reserve a real, non-collapsible footer row.  This keeps the scroll
         // viewport from extending under the buttons when the dialog is resized
