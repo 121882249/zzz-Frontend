@@ -209,6 +209,9 @@ final class ModelPickerDialog extends JDialog {
         actions.add(apply);
         footer.add(actions, BorderLayout.EAST);
         root.add(footer, BorderLayout.SOUTH);
+        // Keep the fixed action bar above the viewport even on translucent
+        // Windows repaint paths where child painting can overlap visually.
+        root.setComponentZOrder(footer, 0);
         return root;
     }
 
@@ -615,25 +618,13 @@ final class ModelPickerDialog extends JDialog {
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             Shape surface = new java.awt.geom.RoundRectangle2D.Double(0, 0,
                 Math.max(0, getWidth() - 1), Math.max(0, getHeight() - 1), 18, 18);
-            if (dedicatedImageGroup && !subscription) {
-                g.setClip(surface);
-                g.setPaint(new GradientPaint(0, 0, new Color(28, 35, 111, 246),
-                    getWidth(), getHeight(), new Color(8, 78, 106, 238)));
-                g.fill(surface);
-                float radius = Math.max(90f, getWidth() * .42f);
-                g.setPaint(new RadialGradientPaint(getWidth() * .68f, getHeight() * .18f, radius,
-                    new float[]{0f, 1f}, new Color[]{new Color(56, 189, 248, 115), new Color(56, 189, 248, 0)}));
-                g.fill(surface);
-                g.setPaint(new RadialGradientPaint(getWidth() * .38f, getHeight() * .92f, radius,
-                    new float[]{0f, 1f}, new Color[]{new Color(139, 92, 246, 105), new Color(139, 92, 246, 0)}));
-                g.fill(surface);
-                paintImageMotif(g, getWidth(), getHeight());
-                g.setClip(null);
-                g.setStroke(new BasicStroke(1.4f));
-                g.setPaint(new LinearGradientPaint(0, 0, Math.max(1, getWidth()), 0,
-                    new float[]{0f, .48f, 1f},
-                    new Color[]{new Color(72, 214, 255, 220), new Color(139, 92, 246, 220), new Color(60, 196, 255, 220)}));
-                g.draw(surface);
+            if (dedicatedImageGroup) {
+                // Image models use the same flat list surface as the other
+                // groups.  The large gradient card and motif made the scroll
+                // content look like a second dialog and visually ran into the
+                // fixed footer at the bottom.
+                g.setColor(LIST_BACKGROUND);
+                g.fillRect(0, 0, getWidth(), getHeight());
             } else {
                 g.setColor(subscription ? SUBSCRIPTION_SURFACE : platformStyle.surface());
                 g.fill(surface);
