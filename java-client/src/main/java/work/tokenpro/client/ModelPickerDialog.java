@@ -150,7 +150,23 @@ final class ModelPickerDialog extends JDialog {
         scroll.getVerticalScrollBar().setUnitIncrement(18);
         root.add(scroll, BorderLayout.CENTER);
 
-        JPanel footer = transparent(new BorderLayout());
+        // The list is scrollable and can be much taller than the dialog.  A
+        // transparent footer lets the last selected row show through on
+        // macOS when Swing repaints the viewport during a scroll, which also
+        // makes the row intercept clicks intended for the action buttons.
+        JPanel footer = new JPanel(new BorderLayout()) {
+            @Override protected void paintComponent(Graphics graphics) {
+                Graphics2D g = (Graphics2D) graphics.create();
+                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g.setColor(new Color(20, 29, 70));
+                g.fillRect(0, 0, getWidth(), getHeight());
+                g.setColor(new Color(126, 151, 235, 44));
+                g.fillRect(0, 0, getWidth(), 1);
+                g.dispose();
+                super.paintComponent(graphics);
+            }
+        };
+        footer.setOpaque(true);
         footer.setBorder(new EmptyBorder(17, 0, 0, 0));
         JLabel count = new JLabel();
         count.setFont(font(12, Font.BOLD));
