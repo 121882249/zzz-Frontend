@@ -148,7 +148,14 @@ final class ModelPickerDialog extends JDialog {
         scroll.getViewport().setOpaque(true);
         scroll.getViewport().setScrollMode(JViewport.SIMPLE_SCROLL_MODE);
         scroll.getVerticalScrollBar().setUnitIncrement(18);
-        root.add(scroll, BorderLayout.CENTER);
+        // Keep the viewport in its own opaque center cell.  Without this
+        // wrapper, translucent/undecorated Windows windows can let the view's
+        // painted surface appear over the fixed action bar during repaint.
+        JPanel scrollArea = new JPanel(new BorderLayout());
+        scrollArea.setOpaque(true);
+        scrollArea.setBackground(LIST_BACKGROUND);
+        scrollArea.add(scroll, BorderLayout.CENTER);
+        root.add(scrollArea, BorderLayout.CENTER);
 
         // The list is scrollable and can be much taller than the dialog.  A
         // transparent footer lets the last selected row show through on
@@ -168,6 +175,12 @@ final class ModelPickerDialog extends JDialog {
         };
         footer.setOpaque(true);
         footer.setBorder(new EmptyBorder(17, 0, 0, 0));
+        // Reserve a real, non-collapsible footer row.  This keeps the scroll
+        // viewport from extending under the buttons when the dialog is resized
+        // or when Swing recalculates the BoxLayout view height.
+        footer.setPreferredSize(new Dimension(0, 74));
+        footer.setMinimumSize(new Dimension(0, 74));
+        footer.setMaximumSize(new Dimension(Integer.MAX_VALUE, 74));
         JLabel count = new JLabel();
         count.setFont(font(12, Font.BOLD));
         count.setForeground(new Color(105, 220, 194));
