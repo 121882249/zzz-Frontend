@@ -90,7 +90,7 @@ final class CodexConfig {
         // Each turn selects its group-qualified slug. Native Images requests
         // correlate through the backend's authenticated turn map.
         String block = managedBlock(url, primaryModel, catalog, current, key, accountEmail);
-        String candidate = CodexSwitchConfig.merge(preserved, block);
+        String candidate = CodexSwitchConfig.ensureRuntimeSettings(CodexSwitchConfig.merge(preserved, block));
         String latest = Files.exists(target) ? Files.readString(target) : "";
         if (!originalCurrent.equals(latest))
             throw new IllegalStateException("Codex 配置在切换期间已被其他程序修改；为避免覆盖，已取消连接，请重试");
@@ -138,6 +138,7 @@ final class CodexConfig {
         String restored = CodexSwitchConfig.foreignRelayCleanup(current)
             .map(CodexSwitchConfig.ForeignRelayCleanup::cleaned).orElseGet(() -> CodexSwitchConfig.clean(current));
         if (Platform.OS_KIND == Platform.OS.WINDOWS) restored = CodexSwitchConfig.withoutAdministrator(restored);
+        restored = CodexSwitchConfig.ensureRuntimeSettings(restored);
         CodexChannelState.restoreOfficialAuth(store, configPath);
         String latest = Files.exists(configPath) ? Files.readString(configPath) : "";
         if (!current.equals(latest))

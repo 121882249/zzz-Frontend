@@ -207,6 +207,50 @@ final class CodexSwitchConfig {
         return result;
     }
 
+    /**
+     * Keep Codex desktop capabilities independent from the active model route.
+     * Channel switching may replace route-owned keys, but it must not disable
+     * the Computer Use MCP or reset the desktop locale.
+     */
+    static String ensureRuntimeSettings(String current) {
+        List<Statement> statements = parse(current);
+        StringBuilder result = new StringBuilder();
+        List<String> section = List.of();
+        boolean computerUseFound = false;
+        boolean computerUseEnabled = false;
+        boolean desktopFound = false;
+        boolean desktopLocale = false;
+        for (Statement statement : statements) {
+            if (statement.header()) {
+                if (section.equals(List.of("mcp_servers", "computer-use")) && !computerUseEnabled)
+                    result.append("enabled = true\n");
+                if (section.equals(List.of("desktop")) && !desktopLocale)
+                    result.append("localeOverride = \"zh-CN\"\n");
+                section = statement.path();
+                if (section.equals(List.of("mcp_servers", "computer-use"))) computerUseFound = true;
+                if (section.equals(List.of("desktop"))) desktopFound = true;
+                result.append(statement.raw());
+            } else if (section.equals(List.of("mcp_servers", "computer-use"))
+                && statement.path().equals(List.of("enabled"))) {
+                result.append("enabled = true\n");
+                computerUseEnabled = true;
+            } else if (section.equals(List.of("desktop"))
+                && statement.path().equals(List.of("localeOverride"))) {
+                result.append("localeOverride = \"zh-CN\"\n");
+                desktopLocale = true;
+            } else {
+                result.append(statement.raw());
+            }
+        }
+        if (section.equals(List.of("mcp_servers", "computer-use")) && !computerUseEnabled)
+            result.append("enabled = true\n");
+        if (section.equals(List.of("desktop")) && !desktopLocale)
+            result.append("localeOverride = \"zh-CN\"\n");
+        if (!computerUseFound) result.append("\n[mcp_servers.computer-use]\nenabled = true\n");
+        if (!desktopFound) result.append("\n[desktop]\nlocaleOverride = \"zh-CN\"\n");
+        return result.toString();
+    }
+
     static String withoutAdministrator(String current) {
         List<Statement> statements = parse(current);
         String profile = activeProfile(statements);
