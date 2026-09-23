@@ -165,10 +165,8 @@ final class ModelPickerDialog extends JDialog {
             @Override protected void paintComponent(Graphics graphics) {
                 Graphics2D g = (Graphics2D) graphics.create();
                 g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g.setColor(new Color(20, 29, 70));
+                g.setColor(LIST_BACKGROUND);
                 g.fillRect(0, 0, getWidth(), getHeight());
-                g.setColor(new Color(126, 151, 235, 44));
-                g.fillRect(0, 0, getWidth(), 1);
                 g.dispose();
                 super.paintComponent(graphics);
             }
