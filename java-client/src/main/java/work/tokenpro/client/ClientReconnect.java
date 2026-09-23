@@ -23,26 +23,35 @@ final class ClientReconnect {
         if (!Set.of("Codex", "Claude").contains(client)) throw new IllegalArgumentException("未知客户端");
         List<ProcessHandle> matched = ProcessHandle.allProcesses().filter(p ->
             Platform.desktopProcessMatches(Platform.OS_KIND, client, p.info().command().orElse(""))).toList();
+        final Map<Long, String> executablePaths = new HashMap<>();
+        matched.forEach(process -> executablePaths.put(process.pid(), process.info().command().orElse("")));
         if (Platform.OS_KIND == Platform.OS.WINDOWS) {
             // Windows Store/MSIX apps are launched through explorer.exe. On some
             // Windows/JDK combinations ProcessHandle does not expose the package
             // executable path, even though the app is already running. Query the
             // native process table as a fallback so a successful restart is not
             // reported as an 8-second startup failure.
-            List<ProcessHandle> nativeMatches = windowsDesktopProcesses(client);
-            if (!nativeMatches.isEmpty()) matched = nativeMatches;
+            Map<Long, String> nativeMatches = windowsDesktopProcesses(client);
+            if (!nativeMatches.isEmpty()) {
+                matched = nativeMatches.keySet().stream().flatMap(pid -> ProcessHandle.of(pid).stream()).toList();
+                executablePaths.clear();
+                executablePaths.putAll(nativeMatches);
+            }
         }
         if (Platform.OS_KIND == Platform.OS.WINDOWS && client.equals("Codex")) {
-            boolean nativeAvailable = matched.stream().anyMatch(p -> windowsCodexExecutable(p).equals("codex.exe"))
-                || matched.stream().filter(p -> windowsCodexExecutable(p).equals("chatgpt.exe"))
-                    .anyMatch(ClientReconnect::windowsCodexSiblingExists);
-            matched = matched.stream().filter(p -> manageWindowsCodexProcess(p.info().command().orElse(""), nativeAvailable)).toList();
+            boolean nativeAvailable = executablePaths.values().stream()
+                .anyMatch(path -> windowsCodexExecutable(path).equals("codex.exe"));
+            matched = matched.stream().filter(process -> {
+                String executable = executablePaths.getOrDefault(process.pid(), process.info().command().orElse(""));
+                if (!Platform.desktopProcessMatches(Platform.OS.WINDOWS, "Codex", executable)) return false;
+                return windowsCodexExecutable(executable).equals("codex.exe") || !nativeAvailable;
+            }).toList();
         }
         Set<Long> ids = new HashSet<>(); matched.forEach(p -> ids.add(p.pid()));
         return matched.stream().filter(p -> p.parent().map(parent -> !ids.contains(parent.pid())).orElse(true)).toList();
     }
 
-    private static List<ProcessHandle> windowsDesktopProcesses(String client) {
+    private static Map<Long, String> windowsDesktopProcesses(String client) {
         String powershell = Path.of(System.getenv().getOrDefault("SystemRoot", "C:\\Windows"),
             "System32", "WindowsPowerShell", "v1.0", "powershell.exe").toString();
         String names = client.equals("Codex")
@@ -56,24 +65,24 @@ final class ClientReconnect {
                 .redirectError(ProcessBuilder.Redirect.DISCARD).start();
             if (!query.waitFor(5, TimeUnit.SECONDS)) {
                 query.destroyForcibly();
-                return List.of();
+                return Map.of();
             }
-            if (query.exitValue() != 0) return List.of();
+            if (query.exitValue() != 0) return Map.of();
             String json = new String(query.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
-            if (json.isBlank()) return List.of();
+            if (json.isBlank()) return Map.of();
             Object parsed = Json.parse(json);
             List<?> rows = parsed instanceof List<?> list ? list : List.of(parsed);
-            List<ProcessHandle> matches = new ArrayList<>();
+            Map<Long, String> matches = new LinkedHashMap<>();
             for (Object raw : rows) {
                 Map<String, Object> row = Json.object(raw);
                 String executable = Objects.toString(row.get("ExecutablePath"), "");
                 if (!Platform.desktopProcessMatches(Platform.OS.WINDOWS, client, executable)) continue;
                 if (row.get("ProcessId") instanceof Number pid)
-                    ProcessHandle.of(pid.longValue()).ifPresent(matches::add);
+                    ProcessHandle.of(pid.longValue()).ifPresent(process -> matches.put(process.pid(), executable));
             }
             return matches;
         } catch (Exception ignored) {
-            return List.of();
+            return Map.of();
         }
     }
 
