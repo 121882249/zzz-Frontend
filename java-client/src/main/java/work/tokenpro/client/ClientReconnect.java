@@ -8,6 +8,7 @@ import java.util.concurrent.TimeUnit;
 /** Restarts only the explicitly confirmed target after configuration preflight succeeds. */
 final class ClientReconnect {
     static final int DESKTOP_START_TIMEOUT_SECONDS = 8;
+    static final int WINDOWS_DESKTOP_START_TIMEOUT_SECONDS = 20;
     static final int CLI_START_TIMEOUT_SECONDS = 20;
     private ClientReconnect() {}
     interface Action { void run() throws Exception; }
@@ -22,6 +23,15 @@ final class ClientReconnect {
         if (!Set.of("Codex", "Claude").contains(client)) throw new IllegalArgumentException("未知客户端");
         List<ProcessHandle> matched = ProcessHandle.allProcesses().filter(p ->
             Platform.desktopProcessMatches(Platform.OS_KIND, client, p.info().command().orElse(""))).toList();
+        if (Platform.OS_KIND == Platform.OS.WINDOWS) {
+            // Windows Store/MSIX apps are launched through explorer.exe. On some
+            // Windows/JDK combinations ProcessHandle does not expose the package
+            // executable path, even though the app is already running. Query the
+            // native process table as a fallback so a successful restart is not
+            // reported as an 8-second startup failure.
+            List<ProcessHandle> nativeMatches = windowsDesktopProcesses(client);
+            if (!nativeMatches.isEmpty()) matched = nativeMatches;
+        }
         if (Platform.OS_KIND == Platform.OS.WINDOWS && client.equals("Codex")) {
             boolean nativeAvailable = matched.stream().anyMatch(p -> windowsCodexExecutable(p).equals("codex.exe"))
                 || matched.stream().filter(p -> windowsCodexExecutable(p).equals("chatgpt.exe"))
@@ -30,6 +40,41 @@ final class ClientReconnect {
         }
         Set<Long> ids = new HashSet<>(); matched.forEach(p -> ids.add(p.pid()));
         return matched.stream().filter(p -> p.parent().map(parent -> !ids.contains(parent.pid())).orElse(true)).toList();
+    }
+
+    private static List<ProcessHandle> windowsDesktopProcesses(String client) {
+        String powershell = Path.of(System.getenv().getOrDefault("SystemRoot", "C:\\Windows"),
+            "System32", "WindowsPowerShell", "v1.0", "powershell.exe").toString();
+        String names = client.equals("Codex")
+            ? "'codex.exe','chatgpt.exe'"
+            : "'claude.exe'";
+        String command = "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); "
+            + "Get-CimInstance Win32_Process | Where-Object {$_.Name -in @(" + names + ")} "
+            + "| Select-Object ProcessId,ExecutablePath | ConvertTo-Json -Compress";
+        try {
+            Process query = new ProcessBuilder(powershell, "-NoProfile", "-NonInteractive", "-Command", command)
+                .redirectError(ProcessBuilder.Redirect.DISCARD).start();
+            if (!query.waitFor(5, TimeUnit.SECONDS)) {
+                query.destroyForcibly();
+                return List.of();
+            }
+            if (query.exitValue() != 0) return List.of();
+            String json = new String(query.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
+            if (json.isBlank()) return List.of();
+            Object parsed = Json.parse(json);
+            List<?> rows = parsed instanceof List<?> list ? list : List.of(parsed);
+            List<ProcessHandle> matches = new ArrayList<>();
+            for (Object raw : rows) {
+                Map<String, Object> row = Json.object(raw);
+                String executable = Objects.toString(row.get("ExecutablePath"), "");
+                if (!Platform.desktopProcessMatches(Platform.OS.WINDOWS, client, executable)) continue;
+                if (row.get("ProcessId") instanceof Number pid)
+                    ProcessHandle.of(pid.longValue()).ifPresent(matches::add);
+            }
+            return matches;
+        } catch (Exception ignored) {
+            return List.of();
+        }
     }
 
     static boolean manageWindowsCodexProcess(String command, boolean nativeCodexAvailable) {
@@ -192,7 +237,8 @@ final class ClientReconnect {
     }
 
     static void awaitStarted(SecureStore store, String app, boolean cli) throws Exception {
-        int timeout = cli ? CLI_START_TIMEOUT_SECONDS : DESKTOP_START_TIMEOUT_SECONDS;
+        int timeout = cli ? CLI_START_TIMEOUT_SECONDS
+            : Platform.OS_KIND == Platform.OS.WINDOWS ? WINDOWS_DESKTOP_START_TIMEOUT_SECONDS : DESKTOP_START_TIMEOUT_SECONDS;
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeout);
         while (System.nanoTime() < deadline) {
             if (cli ? !cliProcesses(store, app.toLowerCase(Locale.ROOT)).isEmpty() : !desktopProcesses(app).isEmpty()) return;

@@ -48,8 +48,9 @@ final class ApplicationLaunchTest {
         check(!Platform.desktopProcessMatches(Platform.OS.MAC, "Codex",
             "/Applications/Claude.app/Contents/MacOS/Claude"), "desktop aliases remain vendor isolated"); passed++;
         check(ClientReconnect.DESKTOP_START_TIMEOUT_SECONDS == 8
+            && ClientReconnect.WINDOWS_DESKTOP_START_TIMEOUT_SECONDS == 20
             && ClientReconnect.CLI_START_TIMEOUT_SECONDS > ClientReconnect.DESKTOP_START_TIMEOUT_SECONDS,
-            "desktop startup fails fast without narrowing CLI compatibility"); passed++;
+            "desktop startup waits for slow Windows package activation without narrowing CLI compatibility"); passed++;
         check(!Platform.desktopProcessMatches(Platform.OS.MAC, "Claude", "/Users/test/.local/bin/claude"),
             "macOS CLI does not keep desktop bridge alive"); passed++;
         check(Platform.desktopProcessMatches(Platform.OS.LINUX, "Claude", "/opt/claude/claude"),
