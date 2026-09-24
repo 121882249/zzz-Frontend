@@ -25,9 +25,11 @@ final class CodexSwitchConfigTest {
         check(merged.contains("instructions = \"\"\"Keep this text:\n[windows]\n# >>> TokenPro managed >>>\n\"\"\""), "TOML strings containing table names and markers preserved"); passed++;
         check(CodexSwitchConfig.clean(merged).equals(SETTINGS), "round trip removes TokenPro roots and credentials without losing user settings"); passed++;
         check(CodexSwitchConfig.merge(CodexSwitchConfig.clean(merged), ROUTE).equals(merged), "repeated model switches are idempotent"); passed++;
-        String runtime = "[mcp_servers.computer-use]\nenabled = false\n[desktop]\nlocaleOverride = \"en-US\"\n[plugins.\"browser@openai-bundled\"]\nenabled = true\n";
+        String runtime = "[mcp_servers.computer-use]\ncommand = \"computer-use.exe\"\nargs = [\"mcp\"]\ntransport = \"native\"\nenabled = false\n[desktop]\nlocaleOverride = \"en-US\"\n[plugins.\"browser@openai-bundled\"]\nenabled = true\n";
         String keptRuntime = CodexSwitchConfig.ensureRuntimeSettings(runtime);
-        check(keptRuntime.contains("[mcp_servers.computer-use]\nenabled = false"), "Computer Use MCP is not modified during channel switching"); passed++;
+        check(keptRuntime.contains("command = \"computer-use.exe\"") && keptRuntime.contains("args = [\"mcp\"]")
+            && keptRuntime.contains("enabled = false") && !keptRuntime.contains("transport ="),
+            "only stale Computer Use transport is removed during channel switching"); passed++;
         check(keptRuntime.contains("[desktop]\nlocaleOverride = \"zh-CN\""), "desktop locale remains Simplified Chinese during channel switching"); passed++;
         check(keptRuntime.contains("[plugins.\"browser@openai-bundled\"]\nenabled = true"), "browser plugin settings are untouched"); passed++;
         String addedRuntime = CodexSwitchConfig.ensureRuntimeSettings("approval_policy = \"on-request\"\n");
@@ -153,6 +155,12 @@ final class CodexSwitchConfigTest {
                 "official restore marks the model cache stale for Codex to refresh");
             config.deleteForOfficial();
             check(Files.readString(configPath).equals(restored), "repeated official restore leaves config stable");
+            Files.writeString(configPath, "[mcp_servers.computer-use]\ncommand = 'computer-use.exe'\ntransport = 'native'\nenabled = true\n");
+            check(config.repairRuntimeSettings(), "startup repair writes a stale Computer Use transport fix");
+            String repairedRuntime = Files.readString(configPath);
+            check(!repairedRuntime.contains("transport") && repairedRuntime.contains("command = 'computer-use.exe'")
+                && repairedRuntime.contains("enabled = true"), "startup repair keeps all non-transport Computer Use settings");
+            check(!config.repairRuntimeSettings(), "startup repair is a no-op after the stale selector is removed");
             String foreignConfig = "openai_base_url='https://relay.example/v1'\nmodel_provider='custom'\n"
                 + "approval_policy='on-request'\n[model_providers.custom]\nbase_url='https://relay.example/v1'\nexperimental_bearer_token='foreign-key'\n";
             Files.writeString(configPath, foreignConfig);
@@ -218,7 +226,7 @@ final class CodexSwitchConfigTest {
                 throw new AssertionError("stale cleanup plan accepted");
             } catch (IllegalStateException expected) { }
             check(Files.readString(configPath).equals(externallyChanged), "stale cleanup plan cannot overwrite a newer Codex config");
-            return 20;
+            return 23;
         } finally {
             try (var paths = Files.walk(root)) { for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path); }
         }

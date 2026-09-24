@@ -207,7 +207,12 @@ final class CodexSwitchConfig {
         return result;
     }
 
-    /** Channel switching must not reset the user's Codex desktop locale. */
+    /**
+     * Preserve desktop settings while removing the obsolete Computer Use
+     * transport selector. Command-based MCP servers use Codex's default stdio
+     * transport; some older Windows configurations retain an unsupported value
+     * here and make the complete config unloadable.
+     */
     static String ensureRuntimeSettings(String current) {
         List<Statement> statements = parse(current);
         StringBuilder result = new StringBuilder();
@@ -221,6 +226,10 @@ final class CodexSwitchConfig {
                 section = statement.path();
                 if (section.equals(List.of("desktop"))) desktopFound = true;
                 result.append(statement.raw());
+            } else if (section.equals(List.of("mcp_servers", "computer-use"))
+                && statement.path().equals(List.of("transport"))) {
+                // Omit only the stale selector; preserve command, args, enabled,
+                // and every other user-owned MCP setting verbatim.
             } else if (section.equals(List.of("desktop"))
                 && statement.path().equals(List.of("localeOverride"))) {
                 result.append("localeOverride = \"zh-CN\"\n");

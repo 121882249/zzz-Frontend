@@ -180,8 +180,10 @@ final class TokenProFrame extends JFrame {
         restoreSession();
         new SwingWorker<Boolean, Void>() {
             protected Boolean doInBackground() throws Exception {
-                // Channel settings are only changed by the explicit switch flow,
-                // after the corresponding client has exited.
+                // Remove the one obsolete Computer Use selector that can make
+                // newer Codex builds reject config.toml. Other channel settings
+                // remain exclusive to the explicit switch flow.
+                codex.repairRuntimeSettings();
                 BridgeLifecycle.resumeConfigured(store);
                 return true;
             }

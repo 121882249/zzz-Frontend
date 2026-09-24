@@ -171,6 +171,19 @@ final class CodexConfig {
         TokenProImageSkill.deactivate(configPath);
     }
 
+    /** Repair only the known stale Computer Use transport selector at startup. */
+    boolean repairRuntimeSettings() throws IOException {
+        if (!Files.isRegularFile(configPath, LinkOption.NOFOLLOW_LINKS)) return false;
+        String current = Files.readString(configPath);
+        String repaired = CodexSwitchConfig.ensureRuntimeSettings(current);
+        if (current.equals(repaired)) return false;
+        String latest = Files.readString(configPath);
+        if (!current.equals(latest))
+            throw new IOException("Codex 配置在修复期间已被其他程序修改；请重试");
+        writeAtomic(configPath, repaired);
+        return true;
+    }
+
     /** Atomically replace the active TokenPro catalog after stale selections are pruned. */
     void refreshModelCatalog(List<PricedModel> models) throws Exception {
         models = ModelPickerDialog.orderedModels(models, "Codex");
