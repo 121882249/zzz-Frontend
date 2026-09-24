@@ -27,12 +27,12 @@ final class CodexSwitchConfigTest {
         check(CodexSwitchConfig.merge(CodexSwitchConfig.clean(merged), ROUTE).equals(merged), "repeated model switches are idempotent"); passed++;
         String runtime = "[mcp_servers.computer-use]\nenabled = false\n[desktop]\nlocaleOverride = \"en-US\"\n[plugins.\"browser@openai-bundled\"]\nenabled = true\n";
         String keptRuntime = CodexSwitchConfig.ensureRuntimeSettings(runtime);
-        check(keptRuntime.contains("[mcp_servers.computer-use]\nenabled = true"), "Computer Use MCP remains enabled during channel switching"); passed++;
+        check(keptRuntime.contains("[mcp_servers.computer-use]\nenabled = false"), "Computer Use MCP is not modified during channel switching"); passed++;
         check(keptRuntime.contains("[desktop]\nlocaleOverride = \"zh-CN\""), "desktop locale remains Simplified Chinese during channel switching"); passed++;
         check(keptRuntime.contains("[plugins.\"browser@openai-bundled\"]\nenabled = true"), "browser plugin settings are untouched"); passed++;
         String addedRuntime = CodexSwitchConfig.ensureRuntimeSettings("approval_policy = \"on-request\"\n");
-        check(addedRuntime.contains("[mcp_servers.computer-use]\nenabled = true")
-            && addedRuntime.contains("[desktop]\nlocaleOverride = \"zh-CN\""), "missing runtime settings are restored without touching route keys"); passed++;
+        check(!addedRuntime.contains("mcp_servers.computer-use")
+            && addedRuntime.contains("[desktop]\nlocaleOverride = \"zh-CN\""), "missing locale is restored without creating an MCP server"); passed++;
         String compatible = CodexSwitchConfig.withoutAdministrator(retained);
         check(compatible.contains("[windows]\nsandbox = \"unelevated\"\nsandbox_private_desktop = true"), "Windows mode changes without dropping private desktop setting"); passed++;
         check(compatible.contains("sandbox_mode = \"workspace-write\"") && compatible.contains("approval_policy = \"on-request\""), "no-admin mode does not disable sandbox or approvals"); passed++;
