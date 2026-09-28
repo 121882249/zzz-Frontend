@@ -89,7 +89,8 @@ final class CodexConfig {
         deactivateForeignImageSkill();
         // Each turn selects its group-qualified slug. Native Images requests
         // correlate through the backend's authenticated turn map.
-        String block = managedBlock(url, primaryModel, catalog, current, key, accountEmail);
+        boolean imageOnly = chatModels.isEmpty();
+        String block = managedBlock(url, primaryModel, catalog, current, key, accountEmail, imageOnly);
         String candidate = CodexSwitchConfig.ensureRuntimeSettings(CodexSwitchConfig.merge(preserved, block));
         String latest = Files.exists(target) ? Files.readString(target) : "";
         if (!originalCurrent.equals(latest))
@@ -106,7 +107,8 @@ final class CodexConfig {
             writeAtomic(target, candidate);
         }
         CodexChannelState.writeChannelCache(target, catalog);
-        installTokenProImageSkill();
+        if (imageOnly) deactivateTokenProImageSkill();
+        else installTokenProImageSkill();
         // Retire only our old generated catalogs after the new config is committed.
         // Failure is housekeeping, not a reason to restore a previous channel.
         try { pruneModelCatalogs(catalog); store.delete("codex-model-catalog.json"); }
@@ -228,16 +230,20 @@ final class CodexConfig {
     }
 
     private String managedBlock(String url, PricedModel model, Path catalog, String current,
-                                String key, String accountEmail) throws IOException {
+                                String key, String accountEmail, boolean imageOnly) throws IOException {
         StringBuilder out = new StringBuilder();
         String routedModel = routedModelId(model);
         out.append(START).append('\n');
         out.append("model = ").append(toml(routedModel)).append('\n');
-        out.append("model_provider = \"openai\"\n");
-        out.append("openai_base_url = ").append(toml(providerBaseUrl(url))).append("\n\n");
+        if (imageOnly) out.append("model_provider = \"custom\"\n\n");
+        else {
+            out.append("model_provider = \"openai\"\n");
+            out.append("openai_base_url = ").append(toml(providerBaseUrl(url))).append("\n\n");
+        }
         out.append("model_context_window = 372000\nmodel_auto_compact_token_limit = 372000\n");
-        // Keep the exact group-qualified slug. Native image requests are handled
-        // by the bundled TokenPro image Skill while Codex remains on openai.
+        // Keep the exact group-qualified slug. Pure image selections use the
+        // custom Responses provider so Codex can invoke its native image route;
+        // mixed selections use the OpenAI-compatible Skill CLI path.
         Map<String, Object> catalogRoot = Json.object(Json.parse(Files.readString(catalog)));
         Map<String, Object> profile = ((List<?>) catalogRoot.get("models")).stream().map(Json::object)
             .filter(entry -> routedModel.equals(entry.get("slug"))).findFirst().orElseThrow();
