@@ -104,18 +104,9 @@ final class CodexSwitchConfigTest {
             check(applied.contains("model_provider = \"openai\"")
                 && applied.contains("openai_base_url = \"https://tokenpro.work/v1\""),
                 "TokenPro openai provider preserves the API-key route");
-            check(Files.exists(configPath.getParent().resolve("skills/tokenpro-imagegen/SKILL.md")),
-                "TokenPro activation installs tokenpro-imagegen");
-            check(Files.readString(configPath.getParent().resolve("skills/tokenpro-imagegen/SKILL.md"))
-                .contains("\"" + configPath.getParent().resolve("skills/tokenpro-imagegen/scripts/tokenpro-imagegen") + "\" generate"),
-                "TokenPro image Skill installs a runnable absolute CLI path");
-            check(Files.exists(configPath.getParent().resolve("skills/imagegen/SKILL.md")),
-                "TokenPro activation installs the implicit imagegen compatibility skill");
-            check(Files.readString(configPath.getParent().resolve("skills/imagegen/SKILL.md"))
-                .contains("name: imagegen")
-                && Files.readString(configPath.getParent().resolve("skills/imagegen/SKILL.md"))
-                    .contains("\"" + configPath.getParent().resolve("skills/imagegen/scripts/tokenpro-imagegen") + "\" generate"),
-                "imagegen compatibility skill points to its own TokenPro CLI path");
+            check(Files.exists(configPath.getParent().resolve("skills/tokenpro-imagegen/SKILL.md"))
+                && Files.exists(configPath.getParent().resolve("skills/imagegen/SKILL.md")),
+                "TokenPro activation installs the image Skill route");
             check(Files.readString(auth).contains("\"auth_mode\":\"apikey\""), "TokenPro activation installs API-key auth");
             check(store.read(CodexChannelState.OFFICIAL_AUTH_FILE).orElseThrow().equals(OFFICIAL_AUTH),
                 "official OAuth login has an independent private copy");
@@ -144,9 +135,8 @@ final class CodexSwitchConfigTest {
             config.deleteForOfficial();
             String restored = Files.readString(configPath);
             check(!CodexConfig.tokenProActive(configPath), "official route is not reported as TokenPro active");
-            check(!Files.exists(configPath.getParent().resolve("skills/imagegen/SKILL.md"))
-                && Files.exists(configPath.getParent().resolve("skills/imagegen/SKILL.md.disabled-by-tokenpro")),
-                "official restore disables the implicit imagegen compatibility skill");
+            check(!Files.exists(configPath.getParent().resolve("skills/imagegen/SKILL.md")),
+                "official restore leaves no active image Skill");
             check(!restored.contains("tokenpro.work") && !restored.contains("model_provider = \"openai\"")
                 && !restored.contains("fixture-route-key"), "actual official restore removes TokenPro endpoint and credential");
             check(restored.contains("sandbox_private_desktop = true") && restored.contains("trust_level = \"trusted\""), "official restore retains Windows and project state");

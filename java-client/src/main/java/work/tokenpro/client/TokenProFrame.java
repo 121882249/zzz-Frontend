@@ -188,9 +188,7 @@ final class TokenProFrame extends JFrame {
                 if (CodexConfig.tokenProActive(Platform.codexConfig())) {
                     // Upgrades must refresh the CLI Skill path and contents even
                     // when the user has not clicked Apply Model again.
-                    CodexChannelState.Detected route = CodexChannelState.detect(Platform.codexConfig());
-                    if ("custom".equals(route.modelProvider())) codex.deactivateTokenProImageSkill();
-                    else codex.installTokenProImageSkill();
+                    codex.installTokenProImageSkill();
                 } else if ("official".equals(detected.channel())) {
                     // Official Codex owns native image generation; a stale
                     // TokenPro compatibility Skill must not intercept requests.

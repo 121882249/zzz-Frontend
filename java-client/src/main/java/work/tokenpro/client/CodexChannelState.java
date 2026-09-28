@@ -119,10 +119,9 @@ final class CodexChannelState {
             if (!detected.modelProvider().isBlank()) problems.add("官方渠道仍存在 model_provider=" + detected.modelProvider());
             if (!detected.openAiBaseUrl().isBlank()) problems.add("官方渠道仍存在 openai_base_url");
         } else {
-            boolean tokenProImageProvider = "tokenpro".equals(target.id()) && "custom".equals(detected.modelProvider());
-            if (!target.modelProvider().equals(detected.modelProvider()) && !tokenProImageProvider)
+            if (!target.modelProvider().equals(detected.modelProvider()))
                 problems.add("model_provider 应为 " + target.modelProvider() + "，实际为 " + label(detected.modelProvider()));
-            String activeUrl = "openai".equals(detected.modelProvider())
+            String activeUrl = detected.providerBaseUrl().isBlank()
                 ? detected.openAiBaseUrl() : detected.providerBaseUrl();
             if (!sameUrl(target.baseUrl(), activeUrl))
                 problems.add("活动渠道 base_url 与目标渠道不一致");
