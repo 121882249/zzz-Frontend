@@ -102,17 +102,19 @@ final class TokenProImageSkill {
     }
 
     static void deactivate(Path configPath) throws IOException {
-        deactivateAt(configPath, NAME);
-        deactivateAt(configPath, COMPATIBILITY_NAME);
+        deactivateAt(configPath, NAME, true);
+        // Official Codex must use its native image tool. Keep any previous
+        // compatibility skill disabled so it cannot silently take precedence.
+        deactivateAt(configPath, COMPATIBILITY_NAME, false);
     }
 
-    private static void deactivateAt(Path configPath, String name) throws IOException {
+    private static void deactivateAt(Path configPath, String name, boolean restorePrevious) throws IOException {
         Path root = configPath.getParent().resolve("skills").resolve(name);
         Path active = root.resolve("SKILL.md");
         if (Files.exists(active, LinkOption.NOFOLLOW_LINKS))
             Files.move(active, root.resolve(DISABLED), StandardCopyOption.REPLACE_EXISTING);
         Path previous = root.resolve(PREVIOUS);
-        if (Files.exists(previous, LinkOption.NOFOLLOW_LINKS) && !Files.exists(active, LinkOption.NOFOLLOW_LINKS))
+        if (restorePrevious && Files.exists(previous, LinkOption.NOFOLLOW_LINKS) && !Files.exists(active, LinkOption.NOFOLLOW_LINKS))
             Files.move(previous, active, StandardCopyOption.REPLACE_EXISTING);
     }
 

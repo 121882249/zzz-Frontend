@@ -184,6 +184,16 @@ final class TokenProFrame extends JFrame {
                 // newer Codex builds reject config.toml. Other channel settings
                 // remain exclusive to the explicit switch flow.
                 codex.repairRuntimeSettings();
+                CodexChannelState.Detected detected = CodexChannelState.detect(Platform.codexConfig());
+                if (CodexConfig.tokenProActive(Platform.codexConfig())) {
+                    // Upgrades must refresh the CLI Skill path and contents even
+                    // when the user has not clicked Apply Model again.
+                    codex.installTokenProImageSkill();
+                } else if ("official".equals(detected.channel())) {
+                    // Official Codex owns native image generation; a stale
+                    // TokenPro compatibility Skill must not intercept requests.
+                    codex.deactivateTokenProImageSkill();
+                }
                 BridgeLifecycle.resumeConfigured(store);
                 return true;
             }

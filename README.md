@@ -92,7 +92,7 @@ TokenPro 现在只有一套 Java 21/Swing 客户端源码，支持 Windows、mac
 | Codex CLI | 共用 Codex 客户端的 `CODEX_HOME` | 直连 `tokenpro.work` | 终端开发、脚本和 Agent 任务 |
 | Claude Code | 独立 `CLAUDE_CONFIG_DIR` | `127.0.0.1:23181` | Claude Code 终端工作流 |
 
-Codex 使用 TokenPro 专属 Responses provider 和 `native-v2` 图片路由；全局 Key 下的每个回合仍按选中的 `tp-g<分组>-<模型>` 解析和鉴权，不会把文字分组切到固定图片分组。纯生图分组以及后端允许生图的文字分组可调用本机生图工具；其他分组不能借此越权生图。Codex 的自定义 provider 需要将全局 Key 写入仅本机用户可读的 `config.toml`，同时保留 `auth.json` 以便安全切换渠道。更新客户端后需重新应用连接配置。
+TokenPro 渠道的生图请求通过本地 `imagegen` Skill CLI 发送到 TokenPro；切换到 Codex 官方渠道后会停用该 Skill，由 Codex 官方原生图片工具处理。全局 Key 下的每个 TokenPro 回合仍按选中的 `tp-g<分组>-<模型>` 解析和鉴权，不会把文字分组切到固定图片分组。Codex 的自定义 provider 需要将全局 Key 写入仅本机用户可读的 `config.toml`，同时保留 `auth.json` 以便安全切换渠道。升级客户端后启动时会自动同步当前渠道对应的生图方式。
 
 ```mermaid
 flowchart LR
