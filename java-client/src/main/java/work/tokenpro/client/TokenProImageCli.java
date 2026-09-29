@@ -40,9 +40,10 @@ final class TokenProImageCli {
         String key = String.valueOf(authJson.getOrDefault("OPENAI_API_KEY", "")).trim();
         if (key.isBlank()) throw new IllegalStateException("TokenPro 全局 Key 不存在，请先在 TokenPro 中连接 Codex");
         String baseUrl = tomlValue(config, "openai_base_url").orElse("https://tokenpro.work/v1").replaceAll("/+$", "");
-        String model = options.model == null || options.model.isBlank() ? selectedImageModel(config).orElse("gpt-image-2") : options.model;
+        String routeModel = options.model == null || options.model.isBlank() ? selectedTextRoute(config).orElseThrow(() -> new IllegalStateException("当前没有已应用的 GPT 文本分组路由")) : options.model;
+        if (!routeModel.matches("tp-g\\d+-.+")) throw new IllegalArgumentException("生图必须使用当前 GPT 文本组路由：" + routeModel);
         Map<String,Object> body = new LinkedHashMap<>();
-        body.put("model", model);
+        body.put("model", "gpt-image-2");
         body.put("prompt", options.prompt);
         body.put("n", 1);
         if (options.size != null) body.put("size", options.size);
@@ -52,6 +53,8 @@ final class TokenProImageCli {
         HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/images/generations"))
             .timeout(Duration.ofMinutes(5))
             .header("Authorization", "Bearer " + key)
+            .header("X-TokenPro-Image-Mode", "native-v1")
+            .header("X-TokenPro-Image-Route", routeModel)
             .header("Accept", "application/json")
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(Json.stringify(body)))
@@ -69,6 +72,10 @@ final class TokenProImageCli {
         Files.createDirectories(output.getParent());
         Files.write(output, Base64.getDecoder().decode(base64));
         System.out.println(output);
+    }
+
+    private static Optional<String> selectedTextRoute(Path config) throws IOException {
+        return tomlValue(config, "model").filter(value -> value.matches("tp-g\\d+-.+"));
     }
 
     private static Optional<String> selectedImageModel(Path config) {

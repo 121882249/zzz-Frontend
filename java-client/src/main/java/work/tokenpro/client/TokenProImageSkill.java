@@ -25,7 +25,7 @@ final class TokenProImageSkill {
         When TokenPro is connected, use the bundled local command below for image
         generation. Image requests always use this TokenPro Skill CLI and the command
         calls the TokenPro `/v1/images/generations` endpoint with the existing
-        global Key and selected image-group model route.
+        global Key and the currently selected GPT text-group route as the image driver.
 
         ## Generate
 
@@ -36,8 +36,8 @@ final class TokenProImageSkill {
         ```
 
         Optional arguments are `--model`, `--size`, `--quality`, and `--background`.
-        If `--model` is omitted, the command uses the first selected image model
-        from the TokenPro Codex catalog and otherwise falls back to `gpt-image-2`.
+        If `--model` is omitted, the command uses the currently applied GPT
+        text-group route; no separate image model selection is required.
 
         Always use an absolute output path and return the generated file exactly
         once using an absolute Markdown image path. Do not call `view_image` for
