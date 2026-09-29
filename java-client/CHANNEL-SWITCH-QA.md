@@ -11,8 +11,9 @@ Normal TokenPro channel switching does not list, resume, migrate, rewrite, or ba
 
 The Codex desktop channel menu also exposes a separate, explicit **修复历史对话** action. It is never invoked by a normal channel switch. The dialog offers `CCSwitch` and `OpenAI`: the selected target must already be the active disk configuration, so its provider, endpoint, credentials, and model stay consistent. It lists and repairs only active, user-visible root conversations; archived conversations and Codex internal guardian/sub-agent tasks are not scanned. For each eligible conversation it stops Codex, backs up the rollout, changes only `session_meta.model_provider`, uses Codex's app-server settings API to persist the current route model, verifies with a fresh app-server session, and restarts Codex automatically. The result shows only current-conversation success and failure counts. It does not submit a turn, change conversation content, or directly edit SQLite.
 
-The TokenPro activation block uses the named Responses provider so the client can
-carry the account and selected-group billing headers:
+The TokenPro activation block uses the named Responses provider with the global
+Key. The backend resolves the request group from the routed model slug and the
+native image turn ID; the client does not pin billing with custom headers:
 
 ```toml
 # >>> tokenpro-codex
@@ -25,12 +26,11 @@ base_url = "https://tokenpro.work/v1"
 wire_api = "responses"
 requires_openai_auth = false
 experimental_bearer_token = "<global key>"
-http_headers = { "x-openai-actor-authorization" = "<account email>", "x-tokenpro-group-id" = "<group-id>", "x-tokenpro-image-mode" = "native-v2" }
 # <<< tokenpro-codex
 ```
 
-The global key is also stored in `auth.json`; the group-qualified model slug and
-`x-tokenpro-group-id` must refer to the same selected group.
+The global key is stored in `auth.json`; the group-qualified model slug carries
+the selected group and native image requests carry only their exact turn ID.
 
 Switching from an older release removes marked or unmarked `custom -> tokenpro.work` provider tables. Switching from a foreign channel removes only that channel's active config block and route credentials; its application, skills, catalogs, caches, and backups remain untouched.
 

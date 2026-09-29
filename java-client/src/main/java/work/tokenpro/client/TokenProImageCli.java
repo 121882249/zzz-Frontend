@@ -16,7 +16,6 @@ import java.util.regex.Pattern;
 /** Small local CLI used by the bundled Skill; it never prints the global Key. */
 final class TokenProImageCli {
     private static final Pattern TOML_STRING = Pattern.compile("(?m)^%s\\s*=\\s*([\\\"'])(.*?)\\1\\s*$");
-    private static final Pattern ROUTED_IMAGE_MODEL = Pattern.compile("^tp-g(\\d+)-.+$");
     private TokenProImageCli() {}
 
     static int run(String[] args) {
@@ -53,7 +52,6 @@ final class TokenProImageCli {
         HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/images/generations"))
             .timeout(Duration.ofMinutes(5))
             .header("Authorization", "Bearer " + key)
-            .header("x-tokenpro-group-id", groupId(model))
             .header("Accept", "application/json")
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(Json.stringify(body)))
@@ -71,12 +69,6 @@ final class TokenProImageCli {
         Files.createDirectories(output.getParent());
         Files.write(output, Base64.getDecoder().decode(base64));
         System.out.println(output);
-    }
-
-    private static String groupId(String model) {
-        Matcher matcher = ROUTED_IMAGE_MODEL.matcher(model == null ? "" : model.trim());
-        if (!matcher.matches()) throw new IllegalArgumentException("图片模型缺少 TokenPro 分组路由：" + model);
-        return matcher.group(1);
     }
 
     private static Optional<String> selectedImageModel(Path config) {

@@ -7,7 +7,7 @@ description: Generate or edit raster images through TokenPro when the TokenPro c
 
 When TokenPro is connected, use the bundled local command below for image
 generation. This is intentionally separate from Codex's built-in `image_gen`
-tool: Codex stays on the built-in `openai` provider and the command calls the
+tool: image requests always use this TokenPro Skill CLI and the command calls the
 TokenPro `/v1/images/generations` endpoint with the existing global Key and
 the selected image-group model route.
 

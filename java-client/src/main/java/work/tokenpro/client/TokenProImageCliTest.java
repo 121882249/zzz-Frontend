@@ -18,7 +18,7 @@ final class TokenProImageCliTest {
         server.createContext("/v1/images/generations", exchange -> {
             try {
                 require("Bearer fixture-global-key".equals(exchange.getRequestHeaders().getFirst("Authorization")), "global Key is missing");
-                require("65".equals(exchange.getRequestHeaders().getFirst("x-tokenpro-group-id")), "image group billing header is missing");
+                require(exchange.getRequestHeaders().getFirst("x-tokenpro-group-id") == null, "client must not pin the backend group");
                 require(exchange.getRequestHeaders().getFirst("x-tokenpro-image-mode") == null, "plugin must not impersonate a native turn");
                 Map<String,Object> body = Json.object(Json.parse(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8)));
                 require("tp-g65-gpt-image-2.5-flare".equals(body.get("model")), "image group route was not selected");

@@ -233,8 +233,9 @@ final class CodexConfig {
         out.append("model = ").append(toml(routedModel)).append('\n');
         out.append("model_provider = \"custom\"\n\n");
         out.append("model_context_window = 372000\nmodel_auto_compact_token_limit = 372000\n");
-        // Keep the exact group-qualified slug and restore the per-group billing
-        // headers used by the original TokenPro router.
+        // Keep the exact group-qualified slug. The TokenPro backend resolves the
+        // global key's request group from this slug (and native image turn ID);
+        // the client must not guess or pin billing with static headers.
         Map<String, Object> catalogRoot = Json.object(Json.parse(Files.readString(catalog)));
         Map<String, Object> profile = ((List<?>) catalogRoot.get("models")).stream().map(Json::object)
             .filter(entry -> routedModel.equals(entry.get("slug"))).findFirst().orElseThrow();
@@ -245,9 +246,6 @@ final class CodexConfig {
         out.append("base_url = ").append(toml(providerBaseUrl(url))).append('\n');
         out.append("wire_api = \"responses\"\nrequires_openai_auth = false\n");
         out.append("experimental_bearer_token = ").append(toml(key.trim())).append('\n');
-        out.append("http_headers = { \"x-openai-actor-authorization\" = ").append(toml(accountEmail));
-        out.append(", \"x-tokenpro-group-id\" = ").append(toml(Long.toString(model.groupId())));
-        out.append(", \"x-tokenpro-image-mode\" = \"native-v2\" }\n");
         out.append("supports_websockets = false\n");
         out.append(END).append('\n');
         return out.toString();
@@ -313,10 +311,9 @@ final class CodexConfig {
             entry.put("priority", priority++);
             entry.put("availability_nux", null);
             entry.put("upgrade", null);
-            // TokenPro uses Codex's built-in OpenAI API-key provider. Responses
-            // Lite is a ChatGPT-only wire mode and rejects hosted tools such as
-            // image_generation before the gateway can normalize image-only
-            // selections into a text driver plus image tool.
+            // Keep Responses Lite disabled for the TokenPro Skill route; image
+            // requests are handled by the bundled local CLI, not Codex native
+            // image_generation.
             disableResponsesLite(entry);
             applyNativeCapabilities(entry, model, exact);
             entries.add(entry);

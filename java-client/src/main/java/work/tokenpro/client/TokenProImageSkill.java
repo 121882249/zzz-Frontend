@@ -23,7 +23,7 @@ final class TokenProImageSkill {
         # TokenPro Image Generation
 
         When TokenPro is connected, use the bundled local command below for image
-        generation. Codex stays on the built-in `openai` provider and the command
+        generation. Image requests always use this TokenPro Skill CLI and the command
         calls the TokenPro `/v1/images/generations` endpoint with the existing
         global Key and selected image-group model route.
 
@@ -47,7 +47,7 @@ final class TokenProImageSkill {
     private static final String AGENT_FALLBACK = """
         interface:
           display_name: \"TokenPro ImageGen\"
-          short_description: \"Generate images through TokenPro while Codex stays on openai\"
+          short_description: \"Generate images through the TokenPro Skill CLI\"
           default_prompt: \"Use $tokenpro-imagegen for image generation and editing through TokenPro.\"
         policy:
           allow_implicit_invocation: true

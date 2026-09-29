@@ -103,9 +103,12 @@ final class CodexSwitchConfigTest {
             String applied = Files.readString(configPath);
             check(applied.contains("model_provider = \"custom\"")
                 && applied.contains("[model_providers.custom]")
-                && applied.contains("x-tokenpro-group-id")
-                && applied.contains("x-openai-actor-authorization"),
-                "TokenPro custom provider preserves group billing and actor routing");
+                && applied.contains("experimental_bearer_token")
+                && !applied.contains("x-tokenpro-group-id")
+                && !applied.contains("x-openai-actor-authorization")
+                && !applied.contains("x-tokenpro-image-mode")
+                && !applied.contains("x-tokenpro-group-id"),
+                "TokenPro custom provider leaves group and billing resolution to the backend");
             check(Files.exists(configPath.getParent().resolve("skills/tokenpro-imagegen/SKILL.md"))
                 && Files.exists(configPath.getParent().resolve("skills/imagegen/SKILL.md")),
                 "TokenPro activation installs the image Skill route");

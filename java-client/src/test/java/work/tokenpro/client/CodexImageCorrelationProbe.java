@@ -35,6 +35,9 @@ public final class CodexImageCorrelationProbe {
             try {
                 Map<String,Object> body = body(exchange);
                 capture("responses", exchange, body);
+                if (exchange.getRequestHeaders().getFirst("x-tokenpro-group-id") != null
+                    || exchange.getRequestHeaders().getFirst("x-openai-actor-authorization") != null)
+                    throw new AssertionError("client must not pin backend group or billing identity");
                 String marker = marker(body);
                 String turn = Objects.toString(Json.object(body.get("client_metadata")).get("turn_id"));
                 turns.put(turn, marker);
