@@ -31,16 +31,22 @@ final class TokenProImageCli {
     }
 
     static void generateForTest(String[] args, Path config) throws Exception {
-        generate(Options.parse(args), config);
+        generate(Options.parse(args), config, config.getParent().resolve("codex-selected.json"));
     }
 
     private static void generate(Options options, Path config) throws Exception {
+        generate(options, config, Platform.dataDirectory().resolve("codex-selected.json"));
+    }
+
+    private static void generate(Options options, Path config, Path selection) throws Exception {
         Path auth = config.resolveSibling("auth.json");
         Map<String, Object> authJson = Json.object(Json.parse(Files.readString(auth, StandardCharsets.UTF_8)));
         String key = String.valueOf(authJson.getOrDefault("OPENAI_API_KEY", "")).trim();
         if (key.isBlank()) throw new IllegalStateException("TokenPro 全局 Key 不存在，请先在 TokenPro 中连接 Codex");
         String baseUrl = tomlValue(config, "openai_base_url").orElse("https://tokenpro.work/v1").replaceAll("/+$", "");
-        String routeModel = options.model == null || options.model.isBlank() ? selectedRoute(config).orElseThrow(() -> new IllegalStateException("当前没有已应用的 GPT 分组路由")) : options.model;
+        String routeModel = options.model == null || options.model.isBlank()
+            ? selectedRoute(config, selection).orElseThrow(() -> new IllegalStateException("当前没有已应用的 GPT 分组路由"))
+            : options.model;
         if (!routeModel.matches("tp-g\\d+-.+")) throw new IllegalArgumentException("生图必须使用当前 GPT 分组路由：" + routeModel);
         Map<String,Object> body = new LinkedHashMap<>();
         // A dedicated image group must reach the backend with its real public
@@ -76,8 +82,28 @@ final class TokenProImageCli {
         System.out.println(output);
     }
 
-    private static Optional<String> selectedRoute(Path config) throws IOException {
-        return tomlValue(config, "model").filter(value -> value.matches("tp-g\\d+-.+"));
+    private static Optional<String> selectedRoute(Path config, Path selection) throws IOException {
+        Optional<String> imageRoute = selectedImageRoute(selection);
+        return imageRoute.isPresent()
+            ? imageRoute
+            : tomlValue(config, "model").filter(value -> value.matches("tp-g\\d+-.+"));
+    }
+
+    static Optional<String> selectedImageRoute(Path selection) throws IOException {
+        if (!Files.isRegularFile(selection, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
+        Map<String, Object> root = Json.object(Json.parse(Files.readString(selection, StandardCharsets.UTF_8)));
+        String imageModel = String.valueOf(root.getOrDefault("image_model", "")).trim();
+        if (imageModel.isBlank()) return Optional.empty();
+        if (imageModel.matches("tp-g\\d+-.+")) return Optional.of(imageModel);
+        Object rawModels = root.get("models");
+        if (!(rawModels instanceof List<?> models)) return Optional.empty();
+        for (Object item : models) {
+            Map<String, Object> row = Json.object(item);
+            String name = String.valueOf(row.getOrDefault("name", row.getOrDefault("model", ""))).trim();
+            if (!imageModel.equals(name) || !(row.get("group_id") instanceof Number group)) continue;
+            return Optional.of("tp-g" + group.longValue() + "-" + name);
+        }
+        return Optional.empty();
     }
 
     static String imageRequestModel(String routeModel) {

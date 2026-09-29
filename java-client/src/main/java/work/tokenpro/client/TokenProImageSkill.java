@@ -40,9 +40,11 @@ final class TokenProImageSkill {
         ```
 
         Optional arguments are `--model`, `--size`, `--quality`, and `--background`.
-        If `--model` is omitted, the command uses the currently active TokenPro
-        route; selecting a dedicated GPT image model in Codex therefore uses
-        that image group.
+        If `--model` is omitted, the command uses the saved TokenPro image
+        selection (`image_model` plus its `group_id`) when one exists; otherwise
+        it falls back to the active Codex text route. This keeps ordinary Codex
+        text on its text group while direct Skill image requests can use the
+        dedicated GPT image group.
 
         Always use an absolute output path and return the generated file exactly
         once using an absolute Markdown image path. Do not call `view_image` for

@@ -14,15 +14,18 @@ final class TokenProImageCliTest {
         Path root = Files.createTempDirectory("tokenpro-imagegen-test-");
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         AtomicReference<Throwable> failure = new AtomicReference<>();
+        AtomicReference<String> expectedRoute = new AtomicReference<>("tp-g57-gpt-5.6-sol");
+        AtomicReference<String> expectedBodyModel = new AtomicReference<>("gpt-image-2");
+        AtomicReference<String> expectedPrompt = new AtomicReference<>("a fixture cat");
         byte[] expected = new byte[]{1, 2, 3, 4};
         server.createContext("/v1/images/generations", exchange -> {
             try {
                 require("Bearer fixture-global-key".equals(exchange.getRequestHeaders().getFirst("Authorization")), "global Key is missing");
                 require("native-v1".equals(exchange.getRequestHeaders().getFirst("x-tokenpro-image-mode")), "plugin image mode is missing");
-                require("tp-g57-gpt-5.6-sol".equals(exchange.getRequestHeaders().getFirst("x-tokenpro-image-route")), "plugin must use the selected text group route");
+                require(expectedRoute.get().equals(exchange.getRequestHeaders().getFirst("x-tokenpro-image-route")), "plugin must use the selected image route");
                 Map<String,Object> body = Json.object(Json.parse(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8)));
-                require("gpt-image-2".equals(body.get("model")), "plugin must use the backend image driver model");
-                require("a fixture cat".equals(body.get("prompt")), "prompt was changed");
+                require(expectedBodyModel.get().equals(body.get("model")), "plugin must use the selected image model");
+                require(expectedPrompt.get().equals(body.get("prompt")), "prompt was changed");
                 byte[] response = Json.stringify(Map.of("created", 1, "data", List.of(Map.of("b64_json", Base64.getEncoder().encodeToString(expected))))).getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().set("Content-Type", "application/json");
                 exchange.sendResponseHeaders(200, response.length);
@@ -42,6 +45,17 @@ final class TokenProImageCliTest {
             TokenProImageCli.generateForTest(new String[]{"generate", "--prompt", "a fixture cat", "--out", output.toString()}, config);
             require(Arrays.equals(expected, Files.readAllBytes(output)), "generated image bytes were not saved");
             if (failure.get() != null) throw new AssertionError("image endpoint assertion failed", failure.get());
+
+            Files.writeString(config.resolveSibling("codex-selected.json"), Json.stringify(Map.of(
+                "image_model", "gpt-image-2.5-sunburst",
+                "models", List.of(Map.of("name", "gpt-image-2.5-sunburst", "group_id", 65)))));
+            expectedRoute.set("tp-g65-gpt-image-2.5-sunburst");
+            expectedBodyModel.set("gpt-image-2.5-sunburst");
+            expectedPrompt.set("a dedicated image group fixture");
+            Path dedicatedOutput = root.resolve("dedicated-output.png");
+            TokenProImageCli.generateForTest(new String[]{"generate", "--prompt", expectedPrompt.get(), "--out", dedicatedOutput.toString()}, config);
+            require(Arrays.equals(expected, Files.readAllBytes(dedicatedOutput)), "dedicated image group bytes were not saved");
+            if (failure.get() != null) throw new AssertionError("dedicated image endpoint assertion failed", failure.get());
             require("gpt-image-2".equals(TokenProImageCli.imageRequestModel("tp-g57-gpt-5.6-sol")),
                 "text group must use the native TokenPro image driver");
             require("gpt-image-2.5-sunburst".equals(TokenProImageCli.imageRequestModel("tp-g65-gpt-image-2.5-sunburst")),
