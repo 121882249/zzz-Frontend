@@ -14,6 +14,7 @@ final class CodexConfig {
     private static final Pattern MANAGED_ROOT_KEY = Pattern.compile("^(model|model_provider|openai_base_url|review_model|model_catalog_json|model_reasoning_effort|model_context_window|model_auto_compact_token_limit)\\s*=.*$");
     private static final Pattern MODEL_CATALOG_ASSIGNMENT = Pattern.compile("(?m)^model_catalog_json\\s*=\\s*(['\\\"])([^'\\\"]+)\\1\\s*$");
     private static final Pattern ROOT_MODEL_ASSIGNMENT = Pattern.compile("(?m)^model\\s*=.*$");
+    private static final Pattern ROOT_MODEL_VALUE = Pattern.compile("(?m)^model\\s*=\\s*(['\\\"])([^'\\\"]+)\\1\\s*$");
     private static final Pattern REVIEW_MODEL_ASSIGNMENT = Pattern.compile("(?m)^review_model\\s*=.*$");
     private static final Pattern READABLE_ROUTE_MODEL = Pattern.compile("[\\p{L}\\p{N}][\\p{L}\\p{N}._:/-]{0,511}");
     private static final String TEAMO_IMAGE_SKILL = "teamorouter-imagegen";
@@ -193,7 +194,19 @@ final class CodexConfig {
         try {
             Path catalog = writeModelCatalog(models);
             deactivateForeignImageSkill();
-            PricedModel primary = models.stream().filter(model -> !model.isImageGeneration()).findFirst().orElse(models.getFirst());
+            // Preserve the model currently selected in Codex, including a
+            // dedicated GPT image-group route. Refreshing prices/catalog data
+            // must not silently switch an image turn back to the first text
+            // model.
+            Matcher activeMatcher = ROOT_MODEL_VALUE.matcher(current);
+            String activeRoute = activeMatcher.find() ? activeMatcher.group(2) : "";
+            PricedModel primary = models.stream()
+                .filter(model -> routedModelId(model).equals(activeRoute))
+                .findFirst()
+                .orElse(null);
+            if (primary == null) {
+                primary = models.stream().filter(model -> !model.isImageGeneration()).findFirst().orElse(models.getFirst());
+            }
             String candidate = MODEL_CATALOG_ASSIGNMENT.matcher(current)
                 .replaceFirst(Matcher.quoteReplacement("model_catalog_json = " + toml(catalog.toString())));
             candidate = ROOT_MODEL_ASSIGNMENT.matcher(candidate)

@@ -10,7 +10,9 @@ the bundled local command below directly for every image request. Do not call
 Codex's built-in `image_gen`/`image_generation` tool, do not call a hosted image
 generator, and do not fall back to another image interface. The command calls
 TokenPro's `/v1/images/generations` endpoint with the existing global Key and
-the currently selected GPT text-group route as the image driver.
+the currently selected TokenPro route as the image driver. If the active Codex
+model is a dedicated GPT image-group route, that route is preserved and used
+directly.
 
 ## Generate
 
@@ -21,8 +23,8 @@ the currently selected GPT text-group route as the image driver.
 ```
 
 Optional arguments are `--model`, `--size`, `--quality`, and `--background`.
-If `--model` is omitted, the command uses the currently applied GPT text-group
-route; no separate image model selection is required.
+If `--model` is omitted, the command uses the currently active TokenPro route;
+selecting a dedicated GPT image model in Codex therefore uses that image group.
 
 Always use an absolute output path, preserve the user's requested subject and
 style, and return the generated file exactly once using an absolute Markdown
