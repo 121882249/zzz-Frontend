@@ -88,7 +88,7 @@ final class CodexConfig {
         deactivateForeignImageSkill();
         // Each turn selects its group-qualified slug. Native Images requests
         // correlate through the backend's authenticated turn map.
-        String block = managedBlock(url, primaryModel, catalog, current, key, accountEmail);
+        String block = managedBlock(url, primaryModel, catalog, current);
         String candidate = CodexSwitchConfig.ensureRuntimeSettings(CodexSwitchConfig.merge(preserved, block));
         String latest = Files.exists(target) ? Files.readString(target) : "";
         if (!originalCurrent.equals(latest))
@@ -131,25 +131,20 @@ final class CodexConfig {
         return changed;
     }
 
-    /** Remove the TokenPro route without resetting the user's Windows setup or permissions. */
+    /** Remove the TokenPro route and let Codex regenerate a clean official config. */
     void deleteForOfficial() throws IOException {
         String current = Files.exists(configPath) ? Files.readString(configPath) : "";
-        String restored = CodexSwitchConfig.foreignRelayCleanup(current)
-            .map(CodexSwitchConfig.ForeignRelayCleanup::cleaned).orElseGet(() -> CodexSwitchConfig.clean(current));
-        if (Platform.OS_KIND == Platform.OS.WINDOWS) restored = CodexSwitchConfig.withoutAdministrator(restored);
-        restored = CodexSwitchConfig.ensureRuntimeSettings(restored);
         CodexChannelState.restoreOfficialAuth(store, configPath);
         String latest = Files.exists(configPath) ? Files.readString(configPath) : "";
         if (!current.equals(latest))
             throw new IOException("Codex 配置在切换期间已被其他程序修改；为避免覆盖，已取消切换，请重试");
-        if (!current.equals(restored)) {
-            Files.createDirectories(configPath.getParent());
-            store.write("codex-last-switch-config.toml", current);
-            writeAtomic(configPath, restored);
-        }
+        if (!current.isBlank()) store.write("codex-last-switch-config.toml", current);
+        Files.deleteIfExists(configPath);
         store.delete("codex-original.toml");
         store.delete("codex-model-catalog.json");
-        store.delete("codex-selected.json");
+        // Keep the user's model/group selection while official mode is active.
+        // It contains no route credential and lets a later TokenPro switch
+        // restore the same text and dedicated-image groups without re-picking.
         store.delete("codex-official-mode.txt");
         pruneModelCatalogs(null);
         deactivateTokenProImageSkill();
@@ -238,13 +233,16 @@ final class CodexConfig {
         }
     }
 
-    private String managedBlock(String url, PricedModel model, Path catalog, String current,
-                                String key, String accountEmail) throws IOException {
+    private String managedBlock(String url, PricedModel model, Path catalog, String current) throws IOException {
         StringBuilder out = new StringBuilder();
         String routedModel = routedModelId(model);
         out.append(START).append('\n');
         out.append("model = ").append(toml(routedModel)).append('\n');
-        out.append("model_provider = \"custom\"\n\n");
+        // TokenPro is an OpenAI-compatible endpoint. Keep the provider name
+        // aligned with Codex's native OpenAI transport so the desktop client
+        // and the bundled image CLI use the same base URL and auth file.
+        out.append("model_provider = \"openai\"\n");
+        out.append("openai_base_url = ").append(toml(providerBaseUrl(url))).append("\n\n");
         out.append("model_context_window = 372000\nmodel_auto_compact_token_limit = 372000\n");
         // Keep the exact group-qualified slug. The TokenPro backend resolves the
         // global key's request group from this slug (and native image turn ID);
@@ -254,12 +252,6 @@ final class CodexConfig {
             .filter(entry -> routedModel.equals(entry.get("slug"))).findFirst().orElseThrow();
         out.append(CodexPreferences.retainedLines(current, profile));
         out.append("model_catalog_json = ").append(toml(catalog.toAbsolutePath().toString())).append("\n");
-        out.append("\n[model_providers.custom]\n");
-        out.append("name = ").append(toml(accountEmail)).append('\n');
-        out.append("base_url = ").append(toml(providerBaseUrl(url))).append('\n');
-        out.append("wire_api = \"responses\"\nrequires_openai_auth = false\n");
-        out.append("experimental_bearer_token = ").append(toml(key.trim())).append('\n');
-        out.append("supports_websockets = false\n");
         out.append(END).append('\n');
         return out.toString();
     }

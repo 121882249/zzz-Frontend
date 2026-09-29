@@ -40,10 +40,12 @@ final class TokenProImageCli {
         String key = String.valueOf(authJson.getOrDefault("OPENAI_API_KEY", "")).trim();
         if (key.isBlank()) throw new IllegalStateException("TokenPro 全局 Key 不存在，请先在 TokenPro 中连接 Codex");
         String baseUrl = tomlValue(config, "openai_base_url").orElse("https://tokenpro.work/v1").replaceAll("/+$", "");
-        String routeModel = options.model == null || options.model.isBlank() ? selectedTextRoute(config).orElseThrow(() -> new IllegalStateException("当前没有已应用的 GPT 文本分组路由")) : options.model;
-        if (!routeModel.matches("tp-g\\d+-.+")) throw new IllegalArgumentException("生图必须使用当前 GPT 文本组路由：" + routeModel);
+        String routeModel = options.model == null || options.model.isBlank() ? selectedRoute(config).orElseThrow(() -> new IllegalStateException("当前没有已应用的 GPT 分组路由")) : options.model;
+        if (!routeModel.matches("tp-g\\d+-.+")) throw new IllegalArgumentException("生图必须使用当前 GPT 分组路由：" + routeModel);
         Map<String,Object> body = new LinkedHashMap<>();
-        body.put("model", "gpt-image-2");
+        // A dedicated image group must reach the backend with its real public
+        // model. Text groups use the TokenPro native image driver instead.
+        body.put("model", imageRequestModel(routeModel));
         body.put("prompt", options.prompt);
         body.put("n", 1);
         if (options.size != null) body.put("size", options.size);
@@ -74,24 +76,16 @@ final class TokenProImageCli {
         System.out.println(output);
     }
 
-    private static Optional<String> selectedTextRoute(Path config) throws IOException {
+    private static Optional<String> selectedRoute(Path config) throws IOException {
         return tomlValue(config, "model").filter(value -> value.matches("tp-g\\d+-.+"));
     }
 
-    private static Optional<String> selectedImageModel(Path config) {
-        try {
-            String catalog = tomlValue(config, "model_catalog_json").orElse("");
-            if (catalog.isBlank()) return Optional.empty();
-            Object raw = Json.object(Json.parse(Files.readString(Path.of(catalog), StandardCharsets.UTF_8))).get("models");
-            if (!(raw instanceof List<?> models)) return Optional.empty();
-            for (Object item : models) {
-                Map<String,Object> row = Json.object(item);
-                String slug = String.valueOf(row.getOrDefault("slug", ""));
-                String text = (slug + " " + row.getOrDefault("display_name", "")).toLowerCase(Locale.ROOT);
-                if (text.contains("image") || text.contains("dall-e")) return Optional.of(slug);
-            }
-        } catch (Exception ignored) {}
-        return Optional.empty();
+    static String imageRequestModel(String routeModel) {
+        Matcher matcher = Pattern.compile("^tp-g\\d+-(.+)$").matcher(routeModel == null ? "" : routeModel);
+        if (!matcher.matches()) return "gpt-image-2";
+        String publicModel = matcher.group(1);
+        String lower = publicModel.toLowerCase(Locale.ROOT);
+        return lower.contains("image") || lower.startsWith("dall-e") ? publicModel : "gpt-image-2";
     }
 
     private static Optional<String> tomlValue(Path config, String key) throws IOException {

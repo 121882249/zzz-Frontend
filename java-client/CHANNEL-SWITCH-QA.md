@@ -11,21 +11,17 @@ Normal TokenPro channel switching does not list, resume, migrate, rewrite, or ba
 
 The Codex desktop channel menu also exposes a separate, explicit **修复历史对话** action. It is never invoked by a normal channel switch. The dialog offers `CCSwitch` and `OpenAI`: the selected target must already be the active disk configuration, so its provider, endpoint, credentials, and model stay consistent. It lists and repairs only active, user-visible root conversations; archived conversations and Codex internal guardian/sub-agent tasks are not scanned. For each eligible conversation it stops Codex, backs up the rollout, changes only `session_meta.model_provider`, uses Codex's app-server settings API to persist the current route model, verifies with a fresh app-server session, and restarts Codex automatically. The result shows only current-conversation success and failure counts. It does not submit a turn, change conversation content, or directly edit SQLite.
 
-The TokenPro activation block uses the named Responses provider with the global
-Key. The backend resolves the request group from the routed model slug and the
-native image turn ID; the client does not pin billing with custom headers:
+TokenPro activation uses Codex's built-in OpenAI-compatible provider with the
+global Key in `auth.json`. The backend resolves the request group from the
+routed model slug and the native image turn ID; the client does not pin billing
+with custom headers:
 
 ```toml
 # >>> tokenpro-codex
 model = "tp-g<group-id>-<base64url-model>"
-model_provider = "custom"
+model_provider = "openai"
+openai_base_url = "https://tokenpro.work/v1"
 model_catalog_json = "<immutable TokenPro catalog>"
-[model_providers.custom]
-name = "<account email>"
-base_url = "https://tokenpro.work/v1"
-wire_api = "responses"
-requires_openai_auth = false
-experimental_bearer_token = "<global key>"
 # <<< tokenpro-codex
 ```
 

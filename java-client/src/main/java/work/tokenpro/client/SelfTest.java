@@ -49,8 +49,8 @@ final class SelfTest {
             check(officialStore.read("codex-image-bridge.json").isPresent() && officialStore.read("codex-cleanup-warning.txt").isPresent(),
                 "failed helper shutdown is reported with state retained"); passed++;
             BridgeLifecycle.finishLegacyCodexCleanup(officialStore, false);
-            check(Files.exists(officialConfig) && !Files.readString(officialConfig).contains("model_provider") && officialStore.read("codex-selected.json").isEmpty()
-                && officialStore.read("codex-model-catalog.json").isEmpty(), "official switch removes route fields and mapping without deleting config"); passed++;
+            check(!Files.exists(officialConfig) && officialStore.read("codex-selected.json").orElse("").equals("selected")
+                && officialStore.read("codex-model-catalog.json").isEmpty(), "official switch removes the stale route while preserving model selections"); passed++;
             check(officialStore.read("codex-image-bridge.json").isEmpty(), "official switch removes legacy bridge file"); passed++;
             check(officialStore.read("codex-cleanup-warning.txt").isEmpty(), "successful cleanup clears prior warning"); passed++;
             check(Files.readString(officialConfig.getParent().resolve("auth.json")).equals(officialAuth)

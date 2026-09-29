@@ -42,6 +42,10 @@ final class TokenProImageCliTest {
             TokenProImageCli.generateForTest(new String[]{"generate", "--prompt", "a fixture cat", "--out", output.toString()}, config);
             require(Arrays.equals(expected, Files.readAllBytes(output)), "generated image bytes were not saved");
             if (failure.get() != null) throw new AssertionError("image endpoint assertion failed", failure.get());
+            require("gpt-image-2".equals(TokenProImageCli.imageRequestModel("tp-g57-gpt-5.6-sol")),
+                "text group must use the native TokenPro image driver");
+            require("gpt-image-2.5-sunburst".equals(TokenProImageCli.imageRequestModel("tp-g65-gpt-image-2.5-sunburst")),
+                "dedicated image group must preserve its selected public model");
             return 5;
         } finally { server.stop(0); }
     }

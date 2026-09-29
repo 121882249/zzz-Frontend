@@ -101,14 +101,15 @@ final class CodexSwitchConfigTest {
             CodexConfig config = new CodexConfig(store, configPath);
             config.apply("https://tokenpro.work/v1", List.of(new PricedModel("gpt-5.4", "openai", "fixture", 1)), "fixture-route-key", "fixture@example.test");
             String applied = Files.readString(configPath);
-            check(applied.contains("model_provider = \"custom\"")
-                && applied.contains("[model_providers.custom]")
-                && applied.contains("experimental_bearer_token")
+            check(applied.contains("model_provider = \"openai\"")
+                && applied.contains("openai_base_url = \"https://tokenpro.work/v1\"")
+                && !applied.contains("[model_providers.custom]")
+                && !applied.contains("experimental_bearer_token")
                 && !applied.contains("x-tokenpro-group-id")
                 && !applied.contains("x-openai-actor-authorization")
                 && !applied.contains("x-tokenpro-image-mode")
                 && !applied.contains("x-tokenpro-group-id"),
-                "TokenPro custom provider leaves group and billing resolution to the backend");
+                "TokenPro OpenAI-compatible provider leaves group and billing resolution to the backend");
             check(Files.exists(configPath.getParent().resolve("skills/tokenpro-imagegen/SKILL.md"))
                 && Files.exists(configPath.getParent().resolve("skills/imagegen/SKILL.md")),
                 "TokenPro activation installs the image Skill route");
@@ -138,18 +139,16 @@ final class CodexSwitchConfigTest {
                 check(catalogs.filter(Files::isRegularFile).count() == 1, "catalog refresh retires the stale TokenPro catalog");
             }
             config.deleteForOfficial();
-            String restored = Files.readString(configPath);
             check(!CodexConfig.tokenProActive(configPath), "official route is not reported as TokenPro active");
+            check(!Files.exists(configPath),
+                "official restore removes the stale config so Codex regenerates a clean official baseline");
             check(!Files.exists(configPath.getParent().resolve("skills/imagegen/SKILL.md")),
                 "official restore leaves no active image Skill");
-            check(!restored.contains("tokenpro.work") && !restored.contains("model_provider = \"openai\"")
-                && !restored.contains("fixture-route-key"), "actual official restore removes TokenPro endpoint and credential");
-            check(restored.contains("sandbox_private_desktop = true") && restored.contains("trust_level = \"trusted\""), "official restore retains Windows and project state");
             check(Files.readString(auth).equals(OFFICIAL_AUTH), "official OAuth login is restored from TokenPro's private copy");
             check(Files.readString(configPath.resolveSibling("models_cache.json")).contains("1970-01-01T00:00:00Z"),
                 "official restore marks the model cache stale for Codex to refresh");
             config.deleteForOfficial();
-            check(Files.readString(configPath).equals(restored), "repeated official restore leaves config stable");
+            check(!Files.exists(configPath), "repeated official restore leaves the clean official state stable");
             Files.writeString(configPath, "[mcp_servers.computer-use]\ncommand = 'computer-use.exe'\ntransport = 'native'\nenabled = true\n");
             check(config.repairRuntimeSettings(), "startup repair writes a stale Computer Use transport fix");
             String repairedRuntime = Files.readString(configPath);
@@ -207,10 +206,7 @@ final class CodexSwitchConfigTest {
                 && Files.exists(legacyImageState),
                 "foreign image skill is hidden from Codex while its files and state remain recoverable");
             config.deleteForOfficial();
-            String officialAfterForeign = Files.readString(configPath);
-            check(!officialAfterForeign.contains("relay.example") && !officialAfterForeign.contains("tokenpro.work")
-                && officialAfterForeign.contains("approval_policy='on-request'"),
-                "switching official after cleanup never restores the foreign relay");
+            check(!Files.exists(configPath), "switching official after cleanup removes the foreign relay config");
             Files.writeString(configPath, foreignConfig);
             CodexConfig.ForeignRelayPlan stale = CodexConfig.foreignRelayPlan(configPath).orElseThrow();
             String externallyChanged = foreignConfig + "# changed by another process\n";

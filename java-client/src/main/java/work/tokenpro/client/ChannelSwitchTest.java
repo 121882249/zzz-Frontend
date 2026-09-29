@@ -46,7 +46,7 @@ final class ChannelSwitchTest {
             () -> { steps.add("write"); writeTokenPro(config, "model"); }, () -> steps.add("start"));
         require(steps.equals(List.of("stop", "write", "start")), "switch stops after the verified restart without history maintenance");
         String activeConfig = Files.readString(config);
-            require(CodexChannelState.detect(config).channel().equals("named-provider:custom:tokenpro.work"),
+        require(CodexChannelState.detect(config).channel().equals("override-openai:tokenpro.work"),
             "TokenPro provider state is detected from its endpoint and API-key auth");
         steps.clear();
         int[] overwritingStarts = {0};
@@ -104,8 +104,8 @@ final class ChannelSwitchTest {
         return 22;
     }
     private static void writeTokenPro(Path config, String model) throws Exception {
-        Files.writeString(config, "# >>> tokenpro-codex\nmodel=\"" + model + "\"\nmodel_provider=\"custom\"\n"
-            + "[model_providers.custom]\nbase_url=\"https://tokenpro.work/v1\"\n# <<< tokenpro-codex\n");
+        Files.writeString(config, "# >>> tokenpro-codex\nmodel=\"" + model + "\"\nmodel_provider=\"openai\"\n"
+            + "openai_base_url=\"https://tokenpro.work/v1\"\n# <<< tokenpro-codex\n");
         Files.writeString(config.resolveSibling("auth.json"), "{\"auth_mode\":\"apikey\",\"OPENAI_API_KEY\":\"fixture-key\"}");
         Files.writeString(config.resolveSibling("models_cache.json"), "{\"models\":[{\"slug\":\"" + model + "\"}]}");
     }

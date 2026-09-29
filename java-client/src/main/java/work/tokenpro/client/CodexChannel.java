@@ -10,7 +10,7 @@ record CodexChannel(String id, String name, String authMode, String modelProvide
     }
 
     static CodexChannel tokenPro() {
-        return new CodexChannel("tokenpro", "TokenPro", "apikey", "custom",
+        return new CodexChannel("tokenpro", "TokenPro", "apikey", "openai",
             "https://tokenpro.work/v1", "tokenpro", CacheStrategy.CHANNEL);
     }
 
