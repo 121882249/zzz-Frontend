@@ -101,9 +101,11 @@ final class CodexSwitchConfigTest {
             CodexConfig config = new CodexConfig(store, configPath);
             config.apply("https://tokenpro.work/v1", List.of(new PricedModel("gpt-5.4", "openai", "fixture", 1)), "fixture-route-key", "fixture@example.test");
             String applied = Files.readString(configPath);
-            check(applied.contains("model_provider = \"openai\"")
-                && applied.contains("openai_base_url = \"https://tokenpro.work/v1\""),
-                "TokenPro openai provider preserves the API-key route");
+            check(applied.contains("model_provider = \"custom\"")
+                && applied.contains("[model_providers.custom]")
+                && applied.contains("x-tokenpro-group-id")
+                && applied.contains("x-openai-actor-authorization"),
+                "TokenPro custom provider preserves group billing and actor routing");
             check(Files.exists(configPath.getParent().resolve("skills/tokenpro-imagegen/SKILL.md"))
                 && Files.exists(configPath.getParent().resolve("skills/imagegen/SKILL.md")),
                 "TokenPro activation installs the image Skill route");
