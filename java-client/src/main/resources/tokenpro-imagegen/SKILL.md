@@ -5,10 +5,11 @@ description: Generate or edit raster images through TokenPro when the TokenPro c
 
 # TokenPro Image Generation
 
-When TokenPro is connected, use the bundled local command below for image
-generation. This is intentionally separate from Codex's built-in `image_gen`
-tool: image requests always use this TokenPro Skill CLI and the command calls the
-TokenPro `/v1/images/generations` endpoint with the existing global Key and
+When TokenPro is connected, this Skill is the only image-generation path. Invoke
+the bundled local command below directly for every image request. Do not call
+Codex's built-in `image_gen`/`image_generation` tool, do not call a hosted image
+generator, and do not fall back to another image interface. The command calls
+TokenPro's `/v1/images/generations` endpoint with the existing global Key and
 the currently selected GPT text-group route as the image driver.
 
 ## Generate
