@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 public final class Main {
-    public static final String VERSION = "1.3.63";
+    public static final String VERSION = "1.3.64";
     private Main() {}
 
     public static void main(String[] args) throws Exception {
@@ -85,8 +85,19 @@ public final class Main {
     }
 
     private static void repairCodexRoute(SecureStore store) throws Exception {
-        Map<String, Object> session = Json.object(Json.parse(store.read("java-session.json")
-            .orElseThrow(() -> new IllegalStateException("TokenPro 尚未登录"))));
+        CodexConfig local = new CodexConfig(store);
+        if (store.read("java-session.json").isEmpty()) {
+            boolean repaired = local.repairStaleImageCatalog();
+            if (CodexConfig.tokenProActive(Platform.codexConfig())) {
+                local.installTokenProImageSkill();
+                System.out.println(repaired
+                    ? "Codex TokenPro route repaired from the saved local catalog."
+                    : "Codex TokenPro route is already current; image Skill refreshed.");
+                return;
+            }
+            throw new IllegalStateException("TokenPro 尚未登录，且当前没有可修复的 TokenPro 路由");
+        }
+        Map<String, Object> session = Json.object(Json.parse(store.read("java-session.json").orElseThrow()));
         String token = String.valueOf(session.getOrDefault("access_token", ""));
         if (token.isBlank()) throw new IllegalStateException("TokenPro 登录已失效");
         ApiClient api = new ApiClient();
@@ -96,7 +107,7 @@ public final class Main {
             TokenProFrame.savedCodexModels(store), api.pricedModels(token), "Codex");
         if (selected.isEmpty()) throw new IllegalStateException("当前账户没有已选的可用 Codex 模型");
         ApiClient.ManagedKey key = api.globalKey(token);
-        CodexConfig config = new CodexConfig(store);
+        CodexConfig config = local;
         CodexConfig.ForeignRelayPlan plan = CodexConfig.foreignRelayPlan(Platform.codexConfig()).orElse(null);
         CodexChannelSwitch.run(store, Platform.codexConfig(), CodexChannel.tokenPro(),
             selected.stream().map(CodexConfig::routedModelId).toList(), () -> {},

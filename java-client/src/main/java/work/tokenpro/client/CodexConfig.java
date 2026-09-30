@@ -65,9 +65,8 @@ final class CodexConfig {
         if (models.isEmpty()) throw new IllegalArgumentException("请至少选择一个 Codex 模型");
         List<PricedModel> chatModels = models.stream().filter(model -> !model.isImageGeneration()).toList();
         List<PricedModel> imageModels = models.stream().filter(PricedModel::isImageGeneration).toList();
-        PricedModel imageModel = imageModels.isEmpty() ? null : imageModels.getFirst();
-        PricedModel primaryModel = chatModels.isEmpty() ? imageModel : chatModels.getFirst();
-        required(primaryModel.name(), "模型 ID");
+        if (chatModels.isEmpty()) throw new IllegalArgumentException("Codex 至少需要选择一款文本模型；生图组由 tokenpro-imagegen 单独调用");
+        PricedModel primaryModel = chatModels.getFirst();
         Path target = configPath;
         Files.createDirectories(target.getParent());
         String originalCurrent = Files.exists(target) ? Files.readString(target) : "";
@@ -79,8 +78,10 @@ final class CodexConfig {
         }
         String preserved = CodexSwitchConfig.clean(current);
         if (Platform.OS_KIND == Platform.OS.WINDOWS) preserved = CodexSwitchConfig.withoutAdministrator(preserved);
-        // Image models stay in their own picker group and are also written to
-        // Codex's catalog so they can run directly without a selected LLM.
+        // Keep image models in Codex's visible catalog so the user can see and
+        // select the image group. The active/default model is still forced to a
+        // conversational model above; actual image requests use the local
+        // tokenpro-imagegen Skill route.
         Path catalog = writeModelCatalog(models);
         // TeamoRouter's global image skill otherwise wins before the active
         // TokenPro route. Preserve it in place, but hide only its discoverable
@@ -178,10 +179,85 @@ final class CodexConfig {
         return true;
     }
 
+    /**
+     * Repair an already-active TokenPro route when the desktop login session is
+     * unavailable. Older client versions wrote dedicated image models into
+     * Codex's conversational catalog. Keep those models in codex-selected.json
+     * for tokenpro-imagegen, but remove them from the catalog Codex loads as its
+     * main model list.
+     */
+    boolean repairStaleImageCatalog() throws IOException {
+        if (!tokenProActive(configPath)) return false;
+        String current = Files.readString(configPath, StandardCharsets.UTF_8);
+        Matcher catalogMatcher = MODEL_CATALOG_ASSIGNMENT.matcher(current);
+        if (!catalogMatcher.find()) return false;
+        Path oldCatalog = Path.of(catalogMatcher.group(2));
+        if (!Files.isRegularFile(oldCatalog, LinkOption.NOFOLLOW_LINKS)) return false;
+
+        Map<String, Object> root;
+        try { root = Json.object(Json.parse(Files.readString(oldCatalog, StandardCharsets.UTF_8))); }
+        catch (RuntimeException malformed) { return false; }
+        Object rawModels = root.get("models");
+        if (!(rawModels instanceof List<?> models) || models.isEmpty()) return false;
+
+        List<Map<String, Object>> conversational = new ArrayList<>();
+        for (Object raw : models) {
+            Map<String, Object> model = Json.object(raw);
+            if (!isCatalogImageModel(model)) conversational.add(new LinkedHashMap<>(model));
+        }
+        if (conversational.isEmpty() || conversational.size() == models.size()) return false;
+
+        String active = ROOT_MODEL_VALUE.matcher(current).find()
+            ? ROOT_MODEL_VALUE.matcher(current).results().findFirst().map(match -> match.group(2)).orElse("")
+            : "";
+        String replacementModel = conversational.stream()
+            .map(model -> String.valueOf(model.getOrDefault("slug", "")))
+            .filter(slug -> !slug.isBlank())
+            .filter(slug -> !isImageSlug(slug))
+            .findFirst().orElseThrow();
+        if (!conversational.stream().map(model -> String.valueOf(model.getOrDefault("slug", ""))).anyMatch(active::equals)) {
+            active = replacementModel;
+        }
+
+        Path target = store.root().resolve("codex-models").resolve(UUID.randomUUID() + ".json");
+        Map<String, Object> repairedRoot = new LinkedHashMap<>(root);
+        repairedRoot.put("models", conversational);
+        CodexChannelState.writeAtomic(target, Json.stringify(repairedRoot));
+        String candidate = MODEL_CATALOG_ASSIGNMENT.matcher(current)
+            .replaceFirst(Matcher.quoteReplacement("model_catalog_json = " + toml(target.toAbsolutePath().toString())));
+        candidate = ROOT_MODEL_ASSIGNMENT.matcher(candidate)
+            .replaceFirst(Matcher.quoteReplacement("model = " + toml(active)));
+        if (!current.equals(Files.readString(configPath, StandardCharsets.UTF_8))) {
+            Files.deleteIfExists(target);
+            throw new IOException("Codex 配置在生图目录修复期间已被其他程序修改；请重试");
+        }
+        writeAtomic(configPath, candidate);
+        CodexChannelState.writeChannelCache(configPath, target);
+        deactivateForeignImageSkill();
+        installTokenProImageSkill();
+        try { pruneModelCatalogs(target); } catch (IOException ignored) { }
+        return true;
+    }
+
+    private static boolean isCatalogImageModel(Map<String, Object> model) {
+        String slug = String.valueOf(model.getOrDefault("slug", ""));
+        String display = String.valueOf(model.getOrDefault("display_name", ""));
+        String description = String.valueOf(model.getOrDefault("description", ""));
+        return isImageSlug(slug) || isImageSlug(display) || isImageSlug(description)
+            || display.contains("生图") || description.contains("生图");
+    }
+
+    private static boolean isImageSlug(String value) {
+        String normalized = value == null ? "" : value.toLowerCase(Locale.ROOT);
+        return normalized.contains("gpt-image") || normalized.contains("dall-e")
+            || normalized.contains("imagen") || normalized.contains("flux");
+    }
+
     /** Atomically replace the active TokenPro catalog after stale selections are pruned. */
     void refreshModelCatalog(List<PricedModel> models) throws Exception {
         models = ModelPickerDialog.orderedModels(models, "Codex");
-        if (models.isEmpty() || !Files.exists(configPath)) return;
+        List<PricedModel> chatModels = models.stream().filter(model -> !model.isImageGeneration()).toList();
+        if (models.isEmpty() || chatModels.isEmpty() || !Files.exists(configPath)) return;
         String current = Files.readString(configPath);
         if (!CodexSwitchConfig.markerOwners(current).contains("tokenpro")
             || !MODEL_CATALOG_ASSIGNMENT.matcher(current).find()) return;
@@ -189,19 +265,15 @@ final class CodexConfig {
         try {
             Path catalog = writeModelCatalog(models);
             deactivateForeignImageSkill();
-            // Preserve the model currently selected in Codex, including a
-            // dedicated GPT image-group route. Refreshing prices/catalog data
-            // must not silently switch an image turn back to the first text
-            // model.
+            // Preserve the active conversational model. Image models remain
+            // visible in the catalog, but never become Codex's default model.
             Matcher activeMatcher = ROOT_MODEL_VALUE.matcher(current);
             String activeRoute = activeMatcher.find() ? activeMatcher.group(2) : "";
-            PricedModel primary = models.stream()
+            PricedModel primary = chatModels.stream()
                 .filter(model -> routedModelId(model).equals(activeRoute))
                 .findFirst()
                 .orElse(null);
-            if (primary == null) {
-                primary = models.stream().filter(model -> !model.isImageGeneration()).findFirst().orElse(models.getFirst());
-            }
+            if (primary == null) primary = chatModels.getFirst();
             String candidate = MODEL_CATALOG_ASSIGNMENT.matcher(current)
                 .replaceFirst(Matcher.quoteReplacement("model_catalog_json = " + toml(catalog.toString())));
             candidate = ROOT_MODEL_ASSIGNMENT.matcher(candidate)

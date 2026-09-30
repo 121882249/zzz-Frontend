@@ -1,2 +1,2 @@
 @echo off
-"{{TOKENPRO_EXECUTABLE}}" --tokenpro-imagegen %*
+{{TOKENPRO_EXECUTABLE}} --tokenpro-imagegen %*

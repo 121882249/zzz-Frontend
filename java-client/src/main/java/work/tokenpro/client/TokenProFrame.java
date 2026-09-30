@@ -186,6 +186,10 @@ final class TokenProFrame extends JFrame {
                 codex.repairRuntimeSettings();
                 CodexChannelState.Detected detected = CodexChannelState.detect(Platform.codexConfig());
                 if (CodexConfig.tokenProActive(Platform.codexConfig())) {
+                    // A client upgrade may leave an older catalog referenced by
+                    // config.toml. Repair that local catalog even when the user
+                    // is not currently logged into the TokenPro dashboard.
+                    codex.repairStaleImageCatalog();
                     // Upgrades must refresh the CLI Skill path and contents even
                     // when the user has not clicked Apply Model again.
                     codex.installTokenProImageSkill();

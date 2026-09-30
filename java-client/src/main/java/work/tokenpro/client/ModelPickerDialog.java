@@ -66,7 +66,7 @@ final class ModelPickerDialog extends JDialog {
         titleLine.add(title, BorderLayout.WEST);
         boolean codex = "Codex".equals(client);
         boolean supportsImages = codex && !cli;
-        JLabel detail = new JLabel(supportsImages ? "文本和生图模型均可多选；每次使用 Codex 中当前选择的模型" : "LLM Model 至少选择 1 个，可同时选择多个");
+        JLabel detail = new JLabel(supportsImages ? "文本模型用于 Codex 对话；生图组仅作为 tokenpro-imagegen 的图片路由" : "LLM Model 至少选择 1 个，可同时选择多个");
         detail.setFont(font(12, Font.PLAIN));
         detail.setForeground(MUTED);
         header.add(titleLine);
@@ -200,6 +200,11 @@ final class ModelPickerDialog extends JDialog {
             if (selected.isEmpty()) {
                 TokenProDialogs.warning(this, "请选择模型",
                     "请至少选择 1 款模型。");
+                return;
+            }
+            if (supportsImages && selected.stream().noneMatch(model -> !model.isImageGeneration())) {
+                TokenProDialogs.warning(this, "请先选择文本模型",
+                    "Codex 当前对话必须使用文本模型；生图组会保存给 tokenpro-imagegen 单独调用。");
                 return;
             }
             dispose();
