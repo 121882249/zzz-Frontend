@@ -9,7 +9,7 @@ import java.util.*;
 final class SelfTest {
     static void run() throws Exception {
         int passed = NetworkProxyTest.run() + CodexSwitchConfigTest.run() + CodexConversationRepairTest.run() + CodexCliCatalogTest.run()
-            + TokenProImageCliTest.run();
+            + TokenProImageCliTest.run() + TokenProImageSkillTest.run();
         String manifestVersion = Main.class.getPackage().getImplementationVersion();
         check(manifestVersion == null || Main.VERSION.equals(manifestVersion), "JAR manifest version matches the application version"); passed++;
         passed += ChannelSwitchTest.run();

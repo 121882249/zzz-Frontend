@@ -6,7 +6,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.net.URISyntaxException;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 /** Installs the TokenPro image Skill beside Codex's user-managed Skills. */
 final class TokenProImageSkill {
@@ -86,26 +89,83 @@ final class TokenProImageSkill {
 
     /** Return a complete command, not only the JVM executable. */
     private static String launcherCommand() throws IOException {
-        String java = javaExecutable();
+        Path location = codeSourceLocation().orElseThrow(() -> new IOException("无法定位 TokenPro.jar，未安装 tokenpro-imagegen"));
+        String java = javaExecutable(location);
+        if (!Files.isRegularFile(location) || !location.toString().toLowerCase().endsWith(".jar"))
+            throw new IOException("无法定位 TokenPro.jar，未安装 tokenpro-imagegen");
         try {
-            Path location = Path.of(TokenProImageSkill.class.getProtectionDomain().getCodeSource().getLocation().toURI())
-                .toAbsolutePath().normalize();
-            if (Files.isRegularFile(location) && location.toString().toLowerCase().endsWith(".jar")) {
-                if (Platform.OS_KIND == Platform.OS.WINDOWS)
-                    return "\"" + java + "\" -jar \"" + location + "\"";
-                return shellQuote(java) + " -jar " + shellQuote(location.toString());
-            }
-        } catch (URISyntaxException | NullPointerException ignored) { }
-        throw new IOException("无法定位 TokenPro.jar，未安装 tokenpro-imagegen");
+            if (Platform.OS_KIND == Platform.OS.WINDOWS)
+                return "\"" + java + "\" -jar \"" + location + "\"";
+            return shellQuote(java) + " -jar " + shellQuote(location.toString());
+        } catch (RuntimeException ignored) {
+            throw new IOException("无法定位 TokenPro.jar，未安装 tokenpro-imagegen", ignored);
+        }
     }
 
-    private static String javaExecutable() throws IOException {
+    private static Optional<Path> codeSourceLocation() {
+        try {
+            return Optional.of(Path.of(TokenProImageSkill.class.getProtectionDomain().getCodeSource().getLocation().toURI())
+                .toAbsolutePath().normalize());
+        } catch (URISyntaxException | NullPointerException | SecurityException ignored) {
+            return Optional.empty();
+        }
+    }
+
+    private static String javaExecutable(Path codeSource) throws IOException {
         String executable = Platform.OS_KIND == Platform.OS.WINDOWS ? "java.exe" : "java";
-        Path bundled = Path.of(System.getProperty("java.home", ""), "bin", executable);
-        if (Files.isExecutable(bundled)) return bundled.toAbsolutePath().normalize().toString();
-        String process = ProcessHandle.current().info().command().orElse("");
-        if (!process.isBlank() && (process.endsWith("/java") || process.endsWith("\\java.exe"))) return process;
-        throw new IOException("无法定位 Java 运行时，未安装 tokenpro-imagegen");
+        Optional<Path> found = findJavaExecutable(codeSource, Path.of(System.getProperty("java.home", "")),
+            ProcessHandle.current().info().command().orElse(""), System.getenv("PATH"), Platform.OS_KIND);
+        if (found.isPresent()) return found.get().toString();
+        throw new IOException("无法定位 Java 运行时。TokenPro 安装包中的运行时不存在或当前安装不完整");
+    }
+
+    /**
+     * Finds Java without requiring a system-wide installation. jpackage places
+     * the runtime beside the application jar: Contents/runtime on macOS,
+     * runtime beside app on Windows, and lib/runtime on Linux.
+     */
+    static Optional<Path> findJavaExecutable(Path codeSource, Path javaHome, String process,
+                                             String pathEnvironment, Platform.OS os) {
+        String executable = os == Platform.OS.WINDOWS ? "java.exe" : "java";
+        Set<Path> candidates = new LinkedHashSet<>();
+        if (codeSource != null) {
+            Path source = codeSource.toAbsolutePath().normalize();
+            Path appDir = source.getParent();
+            if (appDir != null) {
+                if (os == Platform.OS.MAC && appDir.getFileName() != null
+                    && appDir.getFileName().toString().equalsIgnoreCase("app")) {
+                    Path contents = appDir.getParent();
+                    if (contents != null && contents.getFileName() != null
+                        && contents.getFileName().toString().equalsIgnoreCase("Contents"))
+                        candidates.add(contents.resolve("runtime/bin").resolve(executable));
+                } else if (appDir.getFileName() != null
+                    && appDir.getFileName().toString().equalsIgnoreCase("app")) {
+                    Path installRoot = appDir.getParent();
+                    if (installRoot != null) {
+                        Path runtimeRoot = installRoot.resolve("runtime");
+                        candidates.add(runtimeRoot.resolve("bin").resolve(executable));
+                    }
+                }
+            }
+        }
+        if (javaHome != null && !javaHome.toString().isBlank())
+            candidates.add(javaHome.resolve("bin").resolve(executable));
+        if (process != null && !process.isBlank()) {
+            Path processPath = Path.of(process);
+            String name = processPath.getFileName() == null ? "" : processPath.getFileName().toString();
+            if (name.equalsIgnoreCase("java") || name.equalsIgnoreCase("java.exe") || name.equalsIgnoreCase("javaw.exe"))
+                candidates.add(processPath);
+        }
+        if (pathEnvironment != null) {
+            for (String directory : pathEnvironment.split(java.util.regex.Pattern.quote(java.io.File.pathSeparator))) {
+                if (!directory.isBlank()) candidates.add(Path.of(directory).resolve(executable));
+            }
+        }
+        return candidates.stream()
+            .map(path -> path.toAbsolutePath().normalize())
+            .filter(Files::isRegularFile)
+            .filter(path -> os == Platform.OS.WINDOWS || Files.isExecutable(path))
+            .findFirst();
     }
 
     private static void installAt(Path configPath, String name, String launcher) throws IOException {
