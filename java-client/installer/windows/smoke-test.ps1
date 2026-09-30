@@ -84,9 +84,9 @@ foreach ($linkPath in @($desktopLink, $startLink)) {
         throw "Shortcut target/description mismatch: $details"
     }
 }
-Invoke-FixtureProcess (Join-Path $installRoot 'TokenPro.exe') @('--self-test') 'native-self-test'
-$testOutput = [IO.File]::ReadAllText((Join-Path $testRoot 'native-self-test.stdout.log'))
-if ($testOutput -notmatch '(\d+) checks passed') { throw 'Installed native runtime self-test did not pass' }
+Invoke-FixtureProcess (Join-Path $installRoot 'runtime\bin\java.exe') @('-jar', (Join-Path $installRoot 'app\TokenPro.jar'), '--self-test') 'packaged-runtime-self-test'
+$testOutput = [IO.File]::ReadAllText((Join-Path $testRoot 'packaged-runtime-self-test.stdout.log'))
+if ($testOutput -notmatch '(\d+) checks passed') { throw 'Installed packaged runtime self-test did not pass' }
 $nativeTestResult = $Matches[0]
 if ([IO.File]::ReadAllText($marker) -ne $markerValue) { throw 'Installation changed existing user data' }
 
