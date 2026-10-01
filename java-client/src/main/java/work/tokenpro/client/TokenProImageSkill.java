@@ -90,16 +90,66 @@ final class TokenProImageSkill {
     /** Return a complete command, not only the JVM executable. */
     private static String launcherCommand() throws IOException {
         Path location = codeSourceLocation().orElseThrow(() -> new IOException("无法定位 TokenPro.jar，未安装 tokenpro-imagegen"));
-        String java = javaExecutable(location);
         if (!Files.isRegularFile(location) || !location.toString().toLowerCase().endsWith(".jar"))
             throw new IOException("无法定位 TokenPro.jar，未安装 tokenpro-imagegen");
         try {
+            // A jpackage app already has a native launcher that loads its
+            // bundled runtime. Use it for the Skill CLI so end users never
+            // need a system-wide Java installation. This also works when the
+            // runtime is a macOS jpackage runtime without Contents/Home/bin/java.
+            Optional<Path> nativeLauncher = nativeLauncher(location);
+            if (nativeLauncher.isPresent()) {
+                String executable = nativeLauncher.get().toString();
+                if (Platform.OS_KIND == Platform.OS.WINDOWS)
+                    return "\"" + executable + "\"";
+                return shellQuote(executable);
+            }
+
+            String java = javaExecutable(location);
             if (Platform.OS_KIND == Platform.OS.WINDOWS)
                 return "\"" + java + "\" -jar \"" + location + "\"";
             return shellQuote(java) + " -jar " + shellQuote(location.toString());
         } catch (RuntimeException ignored) {
             throw new IOException("无法定位 TokenPro.jar，未安装 tokenpro-imagegen", ignored);
         }
+    }
+
+    static Optional<Path> nativeLauncher(Path codeSource) {
+        if (codeSource == null) return Optional.empty();
+        Path source = codeSource.toAbsolutePath().normalize();
+        Path parent = source.getParent();
+        if (parent == null) return Optional.empty();
+
+        if (Platform.OS_KIND == Platform.OS.MAC
+            && parent.getFileName() != null
+            && parent.getFileName().toString().equalsIgnoreCase("app")) {
+            Path contents = parent.getParent();
+            if (contents != null) {
+                Path launcher = contents.resolve("MacOS/TokenPro");
+                if (Files.isRegularFile(launcher) && Files.isExecutable(launcher)) return Optional.of(launcher);
+            }
+        }
+
+        if (Platform.OS_KIND == Platform.OS.WINDOWS
+            && parent.getFileName() != null
+            && parent.getFileName().toString().equalsIgnoreCase("app")) {
+            Path installRoot = parent.getParent();
+            if (installRoot != null) {
+                Path launcher = installRoot.resolve("TokenPro.exe");
+                if (Files.isRegularFile(launcher)) return Optional.of(launcher);
+            }
+        }
+
+        if (Platform.OS_KIND == Platform.OS.LINUX
+            && parent.getFileName() != null
+            && parent.getFileName().toString().equalsIgnoreCase("app")) {
+            Path installRoot = parent.getParent();
+            if (installRoot != null) {
+                Path launcher = installRoot.resolve("bin/TokenPro");
+                if (Files.isRegularFile(launcher) && Files.isExecutable(launcher)) return Optional.of(launcher);
+            }
+        }
+        return Optional.empty();
     }
 
     private static Optional<Path> codeSourceLocation() {
@@ -138,6 +188,7 @@ final class TokenProImageSkill {
                     if (contents != null && contents.getFileName() != null
                         && contents.getFileName().toString().equalsIgnoreCase("Contents"))
                         candidates.add(contents.resolve("runtime/bin").resolve(executable));
+                    candidates.add(contents.resolve("runtime/Contents/Home/bin").resolve(executable));
                 } else if (appDir.getFileName() != null
                     && appDir.getFileName().toString().equalsIgnoreCase("app")) {
                     Path installRoot = appDir.getParent();

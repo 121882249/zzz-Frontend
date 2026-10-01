@@ -17,6 +17,19 @@ final class TokenProImageSkillTest {
             Optional<Path> mac = TokenProImageSkill.findJavaExecutable(macJar, root.resolve("missing-java"), "", "", Platform.OS.MAC);
             check(mac.orElseThrow().equals(macJava.toAbsolutePath().normalize()), "macOS uses the bundled Contents/runtime Java"); passed++;
 
+            Path nestedMacJar = root.resolve("NestedTokenPro.app/Contents/app/TokenPro.jar");
+            Path nestedMacJava = root.resolve("NestedTokenPro.app/Contents/runtime/Contents/Home/bin/java");
+            executable(nestedMacJar, nestedMacJava);
+            Optional<Path> nestedMac = TokenProImageSkill.findJavaExecutable(nestedMacJar, root.resolve("missing-java"), "", "", Platform.OS.MAC);
+            check(nestedMac.orElseThrow().equals(nestedMacJava.toAbsolutePath().normalize()), "macOS accepts the nested jpackage runtime layout"); passed++;
+
+            Path macLauncher = root.resolve("TokenPro.app/Contents/MacOS/TokenPro");
+            executable(macLauncher);
+            if (Platform.OS_KIND == Platform.OS.MAC) {
+                Optional<Path> launcher = TokenProImageSkill.nativeLauncher(macJar);
+                check(launcher.orElseThrow().equals(macLauncher.toAbsolutePath().normalize()), "macOS prefers the native jpackage launcher"); passed++;
+            }
+
             Path windowsJar = root.resolve("Windows/TokenPro/app/TokenPro.jar");
             Path windowsJava = root.resolve("Windows/TokenPro/runtime/bin/java.exe");
             executable(windowsJar, windowsJava);
