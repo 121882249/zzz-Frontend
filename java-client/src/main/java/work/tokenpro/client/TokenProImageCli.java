@@ -68,8 +68,11 @@ final class TokenProImageCli {
             .POST(HttpRequest.BodyPublishers.ofString(Json.stringify(body)))
             .build();
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() < 200 || response.statusCode() >= 300)
-            throw new IOException("图片接口返回 HTTP " + response.statusCode());
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            String message = ApiClient.responseMessage(response.body());
+            String detail = message.isBlank() ? "" : ": " + message;
+            throw new IOException("图片接口返回 HTTP " + response.statusCode() + detail);
+        }
         Map<String,Object> result = Json.object(Json.parse(response.body()));
         Object rawData = result.get("data");
         if (!(rawData instanceof List<?> data) || data.isEmpty()) throw new IOException("图片接口没有返回图片数据");

@@ -17,6 +17,7 @@ final class TokenProImageCliTest {
         AtomicReference<String> expectedRoute = new AtomicReference<>("tp-g57-gpt-5.6-sol");
         AtomicReference<String> expectedBodyModel = new AtomicReference<>("gpt-image-2");
         AtomicReference<String> expectedPrompt = new AtomicReference<>("a fixture cat");
+        AtomicReference<String> rejection = new AtomicReference<>("");
         byte[] expected = new byte[]{1, 2, 3, 4};
         server.createContext("/v1/images/generations", exchange -> {
             try {
@@ -26,6 +27,13 @@ final class TokenProImageCliTest {
                 Map<String,Object> body = Json.object(Json.parse(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8)));
                 require(expectedBodyModel.get().equals(body.get("model")), "plugin must use the selected image model");
                 require(expectedPrompt.get().equals(body.get("prompt")), "prompt was changed");
+                if (!rejection.get().isBlank()) {
+                    byte[] response = rejection.get().getBytes(StandardCharsets.UTF_8);
+                    exchange.getResponseHeaders().set("Content-Type", "application/json");
+                    exchange.sendResponseHeaders(400, response.length);
+                    exchange.getResponseBody().write(response);
+                    return;
+                }
                 byte[] response = Json.stringify(Map.of("created", 1, "data", List.of(Map.of("b64_json", Base64.getEncoder().encodeToString(expected))))).getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().set("Content-Type", "application/json");
                 exchange.sendResponseHeaders(200, response.length);
@@ -60,7 +68,17 @@ final class TokenProImageCliTest {
                 "text group must use the native TokenPro image driver");
             require("gpt-image-2.5-sunburst".equals(TokenProImageCli.imageRequestModel("tp-g65-gpt-image-2.5-sunburst")),
                 "dedicated image group must preserve its selected public model");
-            return 5;
+            rejection.set("{\"error\":{\"code\":\"group_id_required\",\"message\":\"全局 Key 请求必须携带有效的分组 ID\"}}");
+            expectedPrompt.set("a rejected fixture");
+            try {
+                TokenProImageCli.generateForTest(new String[]{"generate", "--prompt", "a rejected fixture", "--out", root.resolve("rejected.png").toString()}, config);
+                throw new AssertionError("image API rejection was ignored");
+            } catch (java.io.IOException expectedError) {
+                require(expectedError.getMessage().contains("HTTP 400")
+                    && expectedError.getMessage().contains("全局 Key 请求必须携带有效的分组 ID"),
+                    "image API error detail is surfaced for global-key routing failures");
+            }
+            return 6;
         } finally { server.stop(0); }
     }
 
