@@ -111,7 +111,8 @@ final class CodexChannelState {
     }
 
     static void verify(Path config, CodexChannel target) throws IOException {
-        if (!Files.isRegularFile(config, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Codex 配置未写入");
+        if (!target.officialChannel() && !Files.isRegularFile(config, LinkOption.NOFOLLOW_LINKS))
+            throw new IOException("Codex 配置未写入");
         Detected detected = detect(config);
 
         List<String> problems = new ArrayList<>();

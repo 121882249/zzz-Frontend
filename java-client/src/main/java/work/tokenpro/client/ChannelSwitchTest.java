@@ -101,7 +101,17 @@ final class ChannelSwitchTest {
         try { OfficialConnectionCheck.proxy(Map.of("HTTPS_PROXY", "invalid")); throw new AssertionError("bad proxy accepted"); }
         catch (java.io.IOException expected) {}
         require(ClientReconnect.managedCliMatches("codex", "/bin/codex", List.of("-c", "tokenpro_profile=/scope/catalog.json"), "/scope/catalog.json"), "official CLI profile remains identifiable");
-        return 22;
+        steps.clear();
+        CodexChannelSwitch.run(store, config, CodexChannel.official(), List.of(), () -> steps.add("stop"), () -> {
+            steps.add("write");
+            CodexChannelState.restoreOfficialAuth(store, config);
+            Files.deleteIfExists(config);
+            CodexChannelState.markOfficialCacheStale(config);
+        }, () -> steps.add("start"));
+        require(steps.equals(List.of("stop", "write", "start")), "official switch accepts Codex regenerating config.toml after launch");
+        require(!Files.exists(config) && CodexChannelState.detect(config).channel().equals("official"),
+            "official mode is valid with restored auth and no config.toml");
+        return 23;
     }
     private static void writeTokenPro(Path config, String model) throws Exception {
         Files.writeString(config, "# >>> tokenpro-codex\nmodel=\"" + model + "\"\nmodel_provider=\"openai\"\n"
