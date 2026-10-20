@@ -65,8 +65,10 @@ final class CodexConfig {
         if (models.isEmpty()) throw new IllegalArgumentException("请至少选择一个 Codex 模型");
         List<PricedModel> chatModels = models.stream().filter(model -> !model.isImageGeneration()).toList();
         List<PricedModel> imageModels = models.stream().filter(PricedModel::isImageGeneration).toList();
-        if (chatModels.isEmpty()) throw new IllegalArgumentException("Codex 至少需要选择一款文本模型；生图组由 tokenpro-imagegen 单独调用");
-        PricedModel primaryModel = chatModels.getFirst();
+        // A pure image-group selection is the chat model. Mixed selections keep
+        // the first text model active so a static image-group header cannot
+        // bill unrelated text traffic.
+        PricedModel primaryModel = chatModels.isEmpty() ? imageModels.getFirst() : chatModels.getFirst();
         Path target = configPath;
         Files.createDirectories(target.getParent());
         String originalCurrent = Files.exists(target) ? Files.readString(target) : "";
@@ -78,10 +80,9 @@ final class CodexConfig {
         }
         String preserved = CodexSwitchConfig.clean(current);
         if (Platform.OS_KIND == Platform.OS.WINDOWS) preserved = CodexSwitchConfig.withoutAdministrator(preserved);
-        // Keep image models in Codex's visible catalog so the user can see and
-        // select the image group. The active/default model is still forced to a
-        // conversational model above; actual image requests use the local
-        // tokenpro-imagegen Skill route.
+        // Image-group models stay in the shared catalog and can be the active
+        // chat model. Codex's built-in imagegen extension then uses this same
+        // provider (base URL, API key, and the image group's routing header).
         Path catalog = writeModelCatalog(models);
         // TeamoRouter's global image skill otherwise wins before the active
         // TokenPro route. Preserve it in place, but hide only its discoverable
@@ -106,7 +107,8 @@ final class CodexConfig {
             writeAtomic(target, candidate);
         }
         CodexChannelState.writeChannelCache(target, catalog);
-        installTokenProImageSkill();
+        if (primaryModel.isImageGeneration()) deactivateTokenProImageSkill();
+        else installTokenProImageSkill();
         // Retire only our old generated catalogs after the new config is committed.
         // Failure is housekeeping, not a reason to restore a previous channel.
         try { pruneModelCatalogs(catalog); store.delete("codex-model-catalog.json"); }
@@ -180,71 +182,33 @@ final class CodexConfig {
     }
 
     /**
-     * Repair an already-active TokenPro route when the desktop login session is
-     * unavailable. Older client versions wrote dedicated image models into
-     * Codex's conversational catalog. Keep those models in codex-selected.json
-     * for tokenpro-imagegen, but remove them from the catalog Codex loads as its
-     * main model list.
+     * Image-group models are valid Codex chat models. Do not remove them from
+     * the shared catalog. When the active model is already one of those routes
+     * and the provider is missing its group header, add the header so the
+     * built-in imagegen extension bills that group.
      */
     boolean repairStaleImageCatalog() throws IOException {
         if (!tokenProActive(configPath)) return false;
         String current = Files.readString(configPath, StandardCharsets.UTF_8);
-        Matcher catalogMatcher = MODEL_CATALOG_ASSIGNMENT.matcher(current);
-        if (!catalogMatcher.find()) return false;
-        Path oldCatalog = Path.of(catalogMatcher.group(2));
-        if (!Files.isRegularFile(oldCatalog, LinkOption.NOFOLLOW_LINKS)) return false;
-
-        Map<String, Object> root;
-        try { root = Json.object(Json.parse(Files.readString(oldCatalog, StandardCharsets.UTF_8))); }
-        catch (RuntimeException malformed) { return false; }
-        Object rawModels = root.get("models");
-        if (!(rawModels instanceof List<?> models) || models.isEmpty()) return false;
-
-        List<Map<String, Object>> conversational = new ArrayList<>();
-        for (Object raw : models) {
-            Map<String, Object> model = Json.object(raw);
-            if (!isCatalogImageModel(model)) conversational.add(new LinkedHashMap<>(model));
-        }
-        if (conversational.isEmpty() || conversational.size() == models.size()) return false;
-
-        String active = ROOT_MODEL_VALUE.matcher(current).find()
-            ? ROOT_MODEL_VALUE.matcher(current).results().findFirst().map(match -> match.group(2)).orElse("")
-            : "";
-        String replacementModel = conversational.stream()
-            .map(model -> String.valueOf(model.getOrDefault("slug", "")))
-            .filter(slug -> !slug.isBlank())
-            .filter(slug -> !isImageSlug(slug))
-            .findFirst().orElseThrow();
-        if (!conversational.stream().map(model -> String.valueOf(model.getOrDefault("slug", ""))).anyMatch(active::equals)) {
-            active = replacementModel;
-        }
-
-        Path target = store.root().resolve("codex-models").resolve(UUID.randomUUID() + ".json");
-        Map<String, Object> repairedRoot = new LinkedHashMap<>(root);
-        repairedRoot.put("models", conversational);
-        CodexChannelState.writeAtomic(target, Json.stringify(repairedRoot));
-        String candidate = MODEL_CATALOG_ASSIGNMENT.matcher(current)
-            .replaceFirst(Matcher.quoteReplacement("model_catalog_json = " + toml(target.toAbsolutePath().toString())));
-        candidate = ROOT_MODEL_ASSIGNMENT.matcher(candidate)
-            .replaceFirst(Matcher.quoteReplacement("model = " + toml(active)));
-        if (!current.equals(Files.readString(configPath, StandardCharsets.UTF_8))) {
-            Files.deleteIfExists(target);
-            throw new IOException("Codex 配置在生图目录修复期间已被其他程序修改；请重试");
-        }
+        if (current.contains("\"X-TokenPro-Group-Id\"")) return false;
+        Optional<Long> group = imageGroupOfActiveModel(current);
+        if (group.isEmpty()) return false;
+        String candidate = replaceImagegenProvider(current, group.get());
+        if (candidate.equals(current)) return false;
+        if (!current.equals(Files.readString(configPath, StandardCharsets.UTF_8)))
+            throw new IOException("Codex 配置在生图路由修复期间已被其他程序修改；请重试");
         writeAtomic(configPath, candidate);
-        CodexChannelState.writeChannelCache(configPath, target);
-        deactivateForeignImageSkill();
-        installTokenProImageSkill();
-        try { pruneModelCatalogs(target); } catch (IOException ignored) { }
+        deactivateTokenProImageSkill();
         return true;
     }
 
-    private static boolean isCatalogImageModel(Map<String, Object> model) {
-        String slug = String.valueOf(model.getOrDefault("slug", ""));
-        String display = String.valueOf(model.getOrDefault("display_name", ""));
-        String description = String.valueOf(model.getOrDefault("description", ""));
-        return isImageSlug(slug) || isImageSlug(display) || isImageSlug(description)
-            || display.contains("生图") || description.contains("生图");
+    /** The active chat model is an image-group route with its billing header. */
+    boolean nativeImageGroupConfigured() {
+        try {
+            if (!Files.isRegularFile(configPath, LinkOption.NOFOLLOW_LINKS)) return false;
+            String config = Files.readString(configPath, StandardCharsets.UTF_8);
+            return config.contains("\"X-TokenPro-Group-Id\"") && imageGroupOfActiveModel(config).isPresent();
+        } catch (IOException ignored) { return false; }
     }
 
     private static boolean isImageSlug(String value) {
@@ -257,7 +221,7 @@ final class CodexConfig {
     void refreshModelCatalog(List<PricedModel> models) throws Exception {
         models = ModelPickerDialog.orderedModels(models, "Codex");
         List<PricedModel> chatModels = models.stream().filter(model -> !model.isImageGeneration()).toList();
-        if (models.isEmpty() || chatModels.isEmpty() || !Files.exists(configPath)) return;
+        if (models.isEmpty() || !Files.exists(configPath)) return;
         String current = Files.readString(configPath);
         if (!CodexSwitchConfig.markerOwners(current).contains("tokenpro")
             || !MODEL_CATALOG_ASSIGNMENT.matcher(current).find()) return;
@@ -265,19 +229,21 @@ final class CodexConfig {
         try {
             Path catalog = writeModelCatalog(models);
             deactivateForeignImageSkill();
-            // Preserve the active conversational model. Image models remain
-            // visible in the catalog, but never become Codex's default model.
+            // Keep the active model when it is still selected, including an
+            // image-group chat model. Otherwise fall back to the first text
+            // model, or the only remaining image model.
             Matcher activeMatcher = ROOT_MODEL_VALUE.matcher(current);
             String activeRoute = activeMatcher.find() ? activeMatcher.group(2) : "";
-            PricedModel primary = chatModels.stream()
+            PricedModel fallback = chatModels.isEmpty() ? models.getFirst() : chatModels.getFirst();
+            PricedModel primary = models.stream()
                 .filter(model -> routedModelId(model).equals(activeRoute))
                 .findFirst()
-                .orElse(null);
-            if (primary == null) primary = chatModels.getFirst();
+                .orElse(fallback);
             String candidate = MODEL_CATALOG_ASSIGNMENT.matcher(current)
                 .replaceFirst(Matcher.quoteReplacement("model_catalog_json = " + toml(catalog.toString())));
             candidate = ROOT_MODEL_ASSIGNMENT.matcher(candidate)
                 .replaceFirst(Matcher.quoteReplacement("model = " + toml(routedModelId(primary))));
+            candidate = replaceImagegenProvider(candidate, primary.isImageGeneration() ? primary.groupId() : null);
             // Do not pin Codex background work (for example automatic thread
             // titles/reviews) to the model that happened to be primary when
             // TokenPro was connected. When the user changes the active model
@@ -288,6 +254,8 @@ final class CodexConfig {
                 throw new IOException("Codex 配置在模型刷新期间已被其他程序修改；已取消刷新");
             writeAtomic(configPath, candidate);
             CodexChannelState.writeChannelCache(configPath, catalog);
+            if (primary.isImageGeneration()) deactivateTokenProImageSkill();
+            else installTokenProImageSkill();
             pruneModelCatalogs(catalog);
             CodexChannelState.verify(configPath, CodexChannel.tokenPro());
         } catch (Exception failure) {
@@ -316,16 +284,74 @@ final class CodexConfig {
         out.append("model_provider = \"openai\"\n");
         out.append("openai_base_url = ").append(toml(providerBaseUrl(url))).append("\n\n");
         out.append("model_context_window = 372000\nmodel_auto_compact_token_limit = 372000\n");
-        // Keep the exact group-qualified slug. The TokenPro backend resolves the
-        // global key's request group from this slug (and native image turn ID);
-        // the client must not guess or pin billing with static headers.
+        // Text requests keep the group-qualified slug and do not pin a group
+        // header. Image-group chat models add X-TokenPro-Group-Id below because
+        // Codex imagegen cannot put tp-g{group}-{model} in the Images body.
         Map<String, Object> catalogRoot = Json.object(Json.parse(Files.readString(catalog)));
         Map<String, Object> profile = ((List<?>) catalogRoot.get("models")).stream().map(Json::object)
             .filter(entry -> routedModel.equals(entry.get("slug"))).findFirst().orElseThrow();
         out.append(CodexPreferences.retainedLines(current, profile));
         out.append("model_catalog_json = ").append(toml(catalog.toAbsolutePath().toString())).append("\n");
+        // Codex imagegen posts to this provider (base URL + API key) and always
+        // sends model gpt-image-2. native-v2 lets the backend bind that call to
+        // this turn. An image-group chat model also sends X-TokenPro-Group-Id so
+        // the global key bills tp-g{group}-{model}'s group. Text chats omit the
+        // group header; their slug already selects the group.
+        out.append('\n').append(imagegenProviderTable(model.isImageGeneration() ? model.groupId() : null));
         out.append(END).append('\n');
         return out.toString();
+    }
+
+    static String imagegenProviderTable(Long groupId) {
+        StringBuilder headers = new StringBuilder();
+        headers.append("[model_providers.openai]\n");
+        headers.append("http_headers = { \"X-TokenPro-Image-Mode\" = \"native-v2\"");
+        if (groupId != null) headers.append(", \"X-TokenPro-Group-Id\" = ").append(toml(Long.toString(groupId)));
+        headers.append(" }\n");
+        return headers.toString();
+    }
+
+    /** Replace only the TokenPro-managed imagegen header table. */
+    static String replaceImagegenProvider(String config, Long groupId) {
+        String stripped = removeManagedImagegenBlock(config);
+        if (!stripped.isEmpty() && !stripped.endsWith("\n")) stripped += "\n";
+        return stripped + "# >>> TokenPro managed >>>\n" + imagegenProviderTable(groupId) + "# <<< TokenPro managed <<<\n";
+    }
+
+    private static String removeManagedImagegenBlock(String config) {
+        String start = START + "\n";
+        String end = END + "\n";
+        int from = 0;
+        StringBuilder out = new StringBuilder();
+        while (true) {
+            int blockStart = config.indexOf(start, from);
+            if (blockStart < 0) {
+                out.append(config.substring(from));
+                break;
+            }
+            int blockEnd = config.indexOf(end, blockStart);
+            if (blockEnd < 0) {
+                out.append(config.substring(from));
+                break;
+            }
+            int next = blockEnd + end.length();
+            String block = config.substring(blockStart, next);
+            out.append(config, from, blockStart);
+            boolean imagegenTable = block.contains("X-TokenPro-Image-Mode") || block.contains("X-TokenPro-Group-Id");
+            boolean rootRoute = block.contains("openai_base_url") || block.contains("\nmodel ") || block.contains("\nmodel=");
+            if (!(imagegenTable && !rootRoute)) out.append(block);
+            from = next;
+        }
+        return out.toString();
+    }
+
+    private static Optional<Long> imageGroupOfActiveModel(String config) {
+        Matcher active = ROOT_MODEL_VALUE.matcher(config);
+        if (!active.find()) return Optional.empty();
+        Matcher route = Pattern.compile("^tp-g(\\d+)-(.+)$").matcher(active.group(2));
+        if (!route.matches() || !isImageSlug(route.group(2))) return Optional.empty();
+        try { return Optional.of(Long.parseLong(route.group(1))); }
+        catch (NumberFormatException ignored) { return Optional.empty(); }
     }
 
     static String providerBaseUrl(String url) {
@@ -388,9 +414,9 @@ final class CodexConfig {
             entry.put("priority", priority++);
             entry.put("availability_nux", null);
             entry.put("upgrade", null);
-            // Keep Responses Lite disabled for the TokenPro Skill route; image
-            // requests are handled by the bundled local CLI, not Codex native
-            // image_generation.
+            // Keep Responses Lite disabled. Image-group chat models still use
+            // the Responses API; Codex's local imagegen extension performs the
+            // Images call against this same provider.
             disableResponsesLite(entry);
             applyNativeCapabilities(entry, model, exact);
             entries.add(entry);

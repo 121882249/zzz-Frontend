@@ -324,8 +324,8 @@ final class SelfTest {
         check(claudeOrdered.equals(List.of("claude-sonnet-5", "gpt-5.6-sol", "gpt-5.6-terra", "grok-4.5", "gemini-3")), "Claude export keeps vendors together in picker order"); passed++;
         check(!ModelPickerDialog.supportsClient(imagePriced, "Claude")
             && ModelPickerDialog.supportsClient(imagePriced, "Codex")
-            && !ModelPickerDialog.supportsClient(imagePriced, "Codex", true),
-            "only the Codex desktop picker accepts dedicated image groups"); passed++;
+            && ModelPickerDialog.supportsClient(imagePriced, "Codex", true),
+            "Codex desktop and CLI share dedicated image groups; Claude does not"); passed++;
         List<PricedModel> cliModels = new ArrayList<>(scattered);
         cliModels.add(imagePriced); cliModels.add(richSubscription); cliModels.add(lowSubscription);
         Map<String, Object> cliSettings = ClaudeCliConfig.settings(cliModels, "http://127.0.0.1:23179", "helper --claude-token");
@@ -346,7 +346,7 @@ final class SelfTest {
         List<String> codexOrdered = ModelPickerDialog.orderedModels(scattered, "Codex").stream().map(PricedModel::name).toList();
         check(codexOrdered.equals(List.of("gpt-5.6-sol", "gpt-5.6-terra", "claude-sonnet-5", "grok-4.5", "gemini-3")), "Codex shared ordering keeps GPT before other regular vendors"); passed++;
         List<String> codexCliOrdered = ModelPickerDialog.orderedModels(cliModels, "Codex", true).stream().map(PricedModel::name).toList();
-        check(!codexCliOrdered.contains(imagePriced.name()), "Codex CLI never exports dedicated image groups"); passed++;
+        check(codexCliOrdered.contains(imagePriced.name()), "Codex CLI keeps dedicated image groups in the shared model list"); passed++;
         PricedModel datedSubscription = new PricedModel("gpt-sub", "openai", "Monthly", 10, "token", 1d, 2d, List.of(), true, 30d, "2026-10-31T08:00:00Z");
         check(datedSubscription.subscriptionExpiryLabel().matches("到期 \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}"), "subscription expiry label includes minutes"); passed++;
         check(ModelPickerDialog.groupRank(new PricedModel("gpt-5.6", "openai", "GPT", 1))

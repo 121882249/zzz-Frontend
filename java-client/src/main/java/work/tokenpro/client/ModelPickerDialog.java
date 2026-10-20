@@ -65,8 +65,8 @@ final class ModelPickerDialog extends JDialog {
         title.setForeground(TEXT);
         titleLine.add(title, BorderLayout.WEST);
         boolean codex = "Codex".equals(client);
-        boolean supportsImages = codex && !cli;
-        JLabel detail = new JLabel(supportsImages ? "文本模型用于 Codex 对话；生图组仅作为 tokenpro-imagegen 的图片路由" : "LLM Model 至少选择 1 个，可同时选择多个");
+        boolean supportsImages = codex;
+        JLabel detail = new JLabel(supportsImages ? "生图组可以直接作为 Codex 对话模型；本机 imagegen 会调用 TokenPro 并按该分组计费" : "LLM Model 至少选择 1 个，可同时选择多个");
         detail.setFont(font(12, Font.PLAIN));
         detail.setForeground(MUTED);
         header.add(titleLine);
@@ -202,11 +202,6 @@ final class ModelPickerDialog extends JDialog {
                     "请至少选择 1 款模型。");
                 return;
             }
-            if (supportsImages && selected.stream().noneMatch(model -> !model.isImageGeneration())) {
-                TokenProDialogs.warning(this, "请先选择文本模型",
-                    "Codex 当前对话必须使用文本模型；生图组会保存给 tokenpro-imagegen 单独调用。");
-                return;
-            }
             dispose();
             onApply.accept(selected);
         });
@@ -282,7 +277,7 @@ final class ModelPickerDialog extends JDialog {
     }
 
     static boolean supportsClient(PricedModel model, String client, boolean cli) {
-        return !model.isImageGeneration() || ("Codex".equals(client) && !cli);
+        return !model.isImageGeneration() || "Codex".equals(client);
     }
 
     static List<PricedModel> orderedModels(List<PricedModel> models, String client) {
@@ -297,7 +292,7 @@ final class ModelPickerDialog extends JDialog {
         }
         List<List<PricedModel>> orderedGroups = grouped.values().stream()
             .sorted((left, right) -> compareGroups(left, right, client)).toList();
-        List<PricedModel> images = cli ? List.of() : orderedImageModels(models);
+        List<PricedModel> images = orderedImageModels(models);
         List<PricedModel> result = new ArrayList<>();
         boolean imagesAdded = false;
         for (List<PricedModel> group : orderedGroups) {

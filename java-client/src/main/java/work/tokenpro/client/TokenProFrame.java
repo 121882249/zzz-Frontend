@@ -190,9 +190,11 @@ final class TokenProFrame extends JFrame {
                     // config.toml. Repair that local catalog even when the user
                     // is not currently logged into the TokenPro dashboard.
                     codex.repairStaleImageCatalog();
-                    // Upgrades must refresh the CLI Skill path and contents even
-                    // when the user has not clicked Apply Model again.
-                    codex.installTokenProImageSkill();
+                    // An image-group chat model uses Codex's built-in imagegen
+                    // extension. The TokenPro Skill would tell the model not to
+                    // call that tool, so it stays disabled for this route.
+                    if (codex.nativeImageGroupConfigured()) codex.deactivateTokenProImageSkill();
+                    else codex.installTokenProImageSkill();
                 } else if ("official".equals(detected.channel())) {
                     // Official Codex owns native image generation; a stale
                     // TokenPro compatibility Skill must not intercept requests.
@@ -2304,8 +2306,8 @@ final class TokenProFrame extends JFrame {
                 // is decided on invocation by the gateway, not by a second catalog fetch.
                 List<PricedModel> selected = app.equals("Codex") ? ModelPickerDialog.orderedModels(saved, app, false)
                     : ModelSelectionReconciler.currentModels(saved, api.pricedModels(token), app);
-                if (app.equals("Codex") && cli)
-                    selected = selected.stream().filter(model -> !model.isImageGeneration()).toList();
+                // Desktop and CLI share one Codex config. Image-group models stay in
+                // that file so they can be the chat model; do not strip them here.
                 if(!Objects.equals(token, accessToken)) throw new IllegalStateException("账户已变化，连接已取消");
                 if (selected.isEmpty()) throw new IllegalStateException("之前选择的模型已不可用，请重新选择模型；原程序未关闭");
                 List<PricedModel> selectedForConnect = List.copyOf(selected);

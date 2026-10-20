@@ -89,7 +89,8 @@ public final class Main {
         if (store.read("java-session.json").isEmpty()) {
             boolean repaired = local.repairStaleImageCatalog();
             if (CodexConfig.tokenProActive(Platform.codexConfig())) {
-                local.installTokenProImageSkill();
+                if (local.nativeImageGroupConfigured()) local.deactivateTokenProImageSkill();
+                else local.installTokenProImageSkill();
                 System.out.println(repaired
                     ? "Codex TokenPro route repaired from the saved local catalog."
                     : "Codex TokenPro route is already current; image Skill refreshed.");

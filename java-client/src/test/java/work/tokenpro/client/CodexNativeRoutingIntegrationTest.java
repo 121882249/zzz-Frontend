@@ -39,7 +39,10 @@ public final class CodexNativeRoutingIntegrationTest {
                 require("native-v2".equals(exchange.getRequestHeaders().getFirst("x-tokenpro-image-mode")), "native image mode missing");
                 require(exchange.getRequestHeaders().getFirst("x-openai-actor-authorization") == null, "actor billing header must be absent");
                 imageTurn.set(Objects.toString(Json.object(body.get("client_metadata")).get("turn_id")));
-                require(exchange.getRequestHeaders().getFirst("x-tokenpro-group-id") == null, "text and image groups must not share a static group header");
+                if (imageOnly) require("65".equals(exchange.getRequestHeaders().getFirst("x-tokenpro-group-id")),
+                    "image-group chat model must send X-TokenPro-Group-Id");
+                else require(exchange.getRequestHeaders().getFirst("x-tokenpro-group-id") == null,
+                    "text and image groups must not share a static group header");
                 text.countDown();
                 int n = requests.incrementAndGet();
                 if (n > 1) {

@@ -86,7 +86,41 @@ final class CodexSwitchConfigTest {
         String profileMode = CodexSwitchConfig.withoutAdministrator(cleanProfile);
         check(profileMode.contains("[profiles.work.windows]\nsandbox = \"unelevated\"") && !profileMode.contains("sandbox='elevated'"), "active profile cannot override no-admin mode"); passed++;
         passed += actualSwitch();
+        passed += imageGroupChatRoute();
         return passed;
+    }
+
+    private static int imageGroupChatRoute() throws Exception {
+        Path root = Files.createTempDirectory("tokenpro-image-chat-");
+        int passed = 0;
+        try {
+            SecureStore store = new SecureStore(root.resolve("store"));
+            Path configPath = root.resolve("home/config.toml");
+            Files.createDirectories(configPath.getParent());
+            PricedModel image = new PricedModel("gpt-image-2.5-flare", "openai", "openai", "Images", 65,
+                "image", null, null, List.of(), false, 0d, "", "生图");
+            CodexConfig config = new CodexConfig(store, configPath);
+            config.apply("https://tokenpro.work/v1", List.of(image), "fixture-route-key", "fixture@example.test");
+            String applied = Files.readString(configPath);
+            String slug = CodexConfig.routedModelId(image);
+            check(applied.contains("model = \"" + slug + "\""), "image group is the Codex chat model"); passed++;
+            check(applied.contains("openai_base_url = \"https://tokenpro.work/v1\""), "imagegen uses the TokenPro API base"); passed++;
+            check(applied.contains("\"X-TokenPro-Image-Mode\" = \"native-v2\""), "imagegen uses native turn routing"); passed++;
+            check(applied.contains("\"X-TokenPro-Group-Id\" = \"65\""), "imagegen bills the selected image group"); passed++;
+            check(Files.readString(configPath.resolveSibling("auth.json")).contains("fixture-route-key"), "imagegen uses the account API key"); passed++;
+            check(Files.readString(configPath.resolveSibling("models_cache.json")).contains(slug), "shared catalog keeps the image model"); passed++;
+            check(!Files.exists(configPath.getParent().resolve("skills/tokenpro-imagegen/SKILL.md")),
+                "image chat model leaves Codex imagegen active"); passed++;
+            check(config.nativeImageGroupConfigured(), "image chat route is recognized"); passed++;
+            Files.writeString(configPath, applied.replace(", \"X-TokenPro-Group-Id\" = \"65\"", ""));
+            check(config.repairStaleImageCatalog(), "missing image group header is repaired"); passed++;
+            check(Files.readString(configPath).contains("\"X-TokenPro-Group-Id\" = \"65\""), "repair restores the image group header"); passed++;
+            return passed;
+        } finally {
+            try (var paths = Files.walk(root)) {
+                for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path);
+            }
+        }
     }
 
     private static int actualSwitch() throws Exception {
@@ -103,13 +137,12 @@ final class CodexSwitchConfigTest {
             String applied = Files.readString(configPath);
             check(applied.contains("model_provider = \"openai\"")
                 && applied.contains("openai_base_url = \"https://tokenpro.work/v1\"")
+                && applied.contains("X-TokenPro-Image-Mode\" = \"native-v2\"")
                 && !applied.contains("[model_providers.custom]")
                 && !applied.contains("experimental_bearer_token")
-                && !applied.contains("x-tokenpro-group-id")
-                && !applied.contains("x-openai-actor-authorization")
-                && !applied.contains("x-tokenpro-image-mode")
-                && !applied.contains("x-tokenpro-group-id"),
-                "TokenPro OpenAI-compatible provider leaves group and billing resolution to the backend");
+                && !applied.contains("X-TokenPro-Group-Id")
+                && !applied.contains("x-openai-actor-authorization"),
+                "text chats use native-v2 imagegen without pinning a static group header");
             check(Files.exists(configPath.getParent().resolve("skills/tokenpro-imagegen/SKILL.md"))
                 && Files.exists(configPath.getParent().resolve("skills/imagegen/SKILL.md")),
                 "TokenPro activation installs the image Skill route");
