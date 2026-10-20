@@ -120,7 +120,8 @@ final class CodexChannelState {
             if (!detected.modelProvider().isBlank()) problems.add("官方渠道仍存在 model_provider=" + detected.modelProvider());
             if (!detected.openAiBaseUrl().isBlank()) problems.add("官方渠道仍存在 openai_base_url");
         } else {
-            if (!target.modelProvider().equals(detected.modelProvider()))
+            boolean imageProvider = "tokenpro".equals(target.id()) && tokenProImageProvider(detected.modelProvider());
+            if (!target.modelProvider().equals(detected.modelProvider()) && !imageProvider)
                 problems.add("model_provider 应为 " + target.modelProvider() + "，实际为 " + label(detected.modelProvider()));
             String activeUrl = detected.providerBaseUrl().isBlank()
                 ? detected.openAiBaseUrl() : detected.providerBaseUrl();
@@ -150,6 +151,15 @@ final class CodexChannelState {
         if (!Files.isRegularFile(auth, LinkOption.NOFOLLOW_LINKS)) return "";
         try { return Objects.toString(Json.object(Json.parse(Files.readString(auth, StandardCharsets.UTF_8))).get("auth_mode"), ""); }
         catch (Exception ignored) { return ""; }
+    }
+
+    /** A per-image-model provider written by TokenPro, not an arbitrary named relay. */
+    static boolean tokenProImageProvider(String provider) {
+        if (provider == null || !provider.startsWith("tokenpro-img-")) return false;
+        String rest = provider.substring("tokenpro-img-".length());
+        return !rest.isEmpty() && rest.chars().allMatch(c ->
+            (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
+                || c == '.' || c == '_' || c == '-');
     }
 
     private static String label(String value) { return value == null || value.isBlank() ? "<缺失>" : value; }

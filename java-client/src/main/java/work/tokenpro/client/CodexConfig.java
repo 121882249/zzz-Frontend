@@ -14,6 +14,7 @@ final class CodexConfig {
     private static final Pattern MANAGED_ROOT_KEY = Pattern.compile("^(model|model_provider|openai_base_url|review_model|model_catalog_json|model_reasoning_effort|model_context_window|model_auto_compact_token_limit)\\s*=.*$");
     private static final Pattern MODEL_CATALOG_ASSIGNMENT = Pattern.compile("(?m)^model_catalog_json\\s*=\\s*(['\\\"])([^'\\\"]+)\\1\\s*$");
     private static final Pattern ROOT_MODEL_ASSIGNMENT = Pattern.compile("(?m)^model\\s*=.*$");
+    private static final Pattern ROOT_PROVIDER_ASSIGNMENT = Pattern.compile("(?m)^model_provider\\s*=.*$");
     private static final Pattern ROOT_MODEL_VALUE = Pattern.compile("(?m)^model\\s*=\\s*(['\\\"])([^'\\\"]+)\\1\\s*$");
     private static final Pattern REVIEW_MODEL_ASSIGNMENT = Pattern.compile("(?m)^review_model\\s*=.*$");
     private static final Pattern READABLE_ROUTE_MODEL = Pattern.compile("[\\p{L}\\p{N}][\\p{L}\\p{N}._:/-]{0,511}");
@@ -43,8 +44,11 @@ final class CodexConfig {
             if (!catalog.find()) return false;
             Path path = Path.of(catalog.group(2));
             CodexChannelState.Detected detected = CodexChannelState.detect(configPath);
-            boolean routed = ("custom".equals(detected.modelProvider()) && "https://tokenpro.work/v1".equals(detected.providerBaseUrl().replaceAll("/+$", "")))
-                || ("openai".equals(detected.modelProvider()) && "https://tokenpro.work/v1".equals(detected.openAiBaseUrl().replaceAll("/+$", "")));
+            String providerBase = detected.providerBaseUrl().replaceAll("/+$", "");
+            String openAiBase = detected.openAiBaseUrl().replaceAll("/+$", "");
+            boolean routed = ("custom".equals(detected.modelProvider()) && "https://tokenpro.work/v1".equals(providerBase))
+                || ("openai".equals(detected.modelProvider()) && "https://tokenpro.work/v1".equals(openAiBase))
+                || (CodexChannelState.tokenProImageProvider(detected.modelProvider()) && "https://tokenpro.work/v1".equals(providerBase));
             return Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
                 && routed
                 && detected.markerOwners().contains("tokenpro")
@@ -90,7 +94,7 @@ final class CodexConfig {
         deactivateForeignImageSkill();
         // Each turn selects its group-qualified slug. Native Images requests
         // correlate through the backend's authenticated turn map.
-        String block = managedBlock(url, primaryModel, catalog, current);
+        String block = managedBlock(url, primaryModel, models, catalog, current);
         String candidate = CodexSwitchConfig.ensureRuntimeSettings(CodexSwitchConfig.merge(preserved, block));
         String latest = Files.exists(target) ? Files.readString(target) : "";
         if (!originalCurrent.equals(latest))
@@ -183,18 +187,27 @@ final class CodexConfig {
 
     /**
      * Image-group models are valid Codex chat models. Do not remove them from
-     * the shared catalog. When the active model is already one of those routes
-     * and the provider is missing its group or selected-model header, add the
-     * headers so the built-in imagegen extension bills that model.
+     * the shared catalog. When the active model is one of those routes, bind
+     * Codex to that model's own provider so a later chat cannot inherit another
+     * image model's static headers.
      */
     boolean repairStaleImageCatalog() throws IOException {
         if (!tokenProActive(configPath)) return false;
         String current = Files.readString(configPath, StandardCharsets.UTF_8);
         Optional<ImageChatRoute> route = imageRouteOfActiveModel(current);
         if (route.isEmpty()) return false;
-        boolean complete = current.contains("\"X-TokenPro-Group-Id\"") && current.contains("\"X-TokenPro-Image-Model\"");
-        if (complete) return false;
-        String candidate = replaceImagegenProvider(current, route.get().groupId(), route.get().modelName());
+        String base = CodexSwitchConfig.rootValue(current, "openai_base_url")
+            .filter(value -> !value.isBlank())
+            .orElse("https://tokenpro.work/v1");
+        List<PricedModel> images = new ArrayList<>(imageModelsInConfig(current));
+        PricedModel active = imageSelection(route.get().groupId(), route.get().modelName());
+        if (images.stream().noneMatch(model -> sameImage(model, active))) images.add(active);
+        String provider = activeProviderId(active);
+        if (provider.equals(CodexSwitchConfig.rootValue(current, "model_provider").orElse(""))
+            && imageProviderBound(current, active)) return false;
+        String candidate = ROOT_PROVIDER_ASSIGNMENT.matcher(current).replaceFirst(
+            Matcher.quoteReplacement("model_provider = " + toml(provider)));
+        candidate = replaceImagegenProvider(candidate, base, images);
         if (candidate.equals(current)) return false;
         if (!current.equals(Files.readString(configPath, StandardCharsets.UTF_8)))
             throw new IOException("Codex 配置在生图路由修复期间已被其他程序修改；请重试");
@@ -203,14 +216,14 @@ final class CodexConfig {
         return true;
     }
 
-    /** The active chat model is an image-group route with its billing header. */
+    /** The active chat model is bound to its own image provider and headers. */
     boolean nativeImageGroupConfigured() {
         try {
             if (!Files.isRegularFile(configPath, LinkOption.NOFOLLOW_LINKS)) return false;
             String config = Files.readString(configPath, StandardCharsets.UTF_8);
-            return config.contains("\"X-TokenPro-Group-Id\"")
-                && config.contains("\"X-TokenPro-Image-Model\"")
-                && imageRouteOfActiveModel(config).isPresent();
+            return imageRouteOfActiveModel(config)
+                .filter(route -> imageProviderBound(config, imageSelection(route.groupId(), route.modelName())))
+                .isPresent();
         } catch (IOException ignored) { return false; }
     }
 
@@ -246,9 +259,10 @@ final class CodexConfig {
                 .replaceFirst(Matcher.quoteReplacement("model_catalog_json = " + toml(catalog.toString())));
             candidate = ROOT_MODEL_ASSIGNMENT.matcher(candidate)
                 .replaceFirst(Matcher.quoteReplacement("model = " + toml(routedModelId(primary))));
-            candidate = replaceImagegenProvider(candidate,
-                primary.isImageGeneration() ? primary.groupId() : null,
-                primary.isImageGeneration() ? primary.name() : null);
+            String base = CodexSwitchConfig.rootValue(current, "openai_base_url").orElse("https://tokenpro.work/v1");
+            candidate = ROOT_PROVIDER_ASSIGNMENT.matcher(candidate).replaceFirst(
+                Matcher.quoteReplacement("model_provider = " + toml(activeProviderId(primary))));
+            candidate = replaceImagegenProvider(candidate, base, models);
             // Do not pin Codex background work (for example automatic thread
             // titles/reviews) to the model that happened to be primary when
             // TokenPro was connected. When the user changes the active model
@@ -278,15 +292,16 @@ final class CodexConfig {
         }
     }
 
-    private String managedBlock(String url, PricedModel model, Path catalog, String current) throws IOException {
+    private String managedBlock(String url, PricedModel model, List<PricedModel> models, Path catalog, String current) throws IOException {
         StringBuilder out = new StringBuilder();
         String routedModel = routedModelId(model);
         out.append(START).append('\n');
         out.append("model = ").append(toml(routedModel)).append('\n');
-        // TokenPro is an OpenAI-compatible endpoint. Keep the provider name
-        // aligned with Codex's native OpenAI transport so the desktop client
-        // and the bundled image CLI use the same base URL and auth file.
-        out.append("model_provider = \"openai\"\n");
+        // Text chats stay on Codex's built-in OpenAI provider. An image-group
+        // chat model binds to its own provider id. Codex copies that provider,
+        // including its static headers, into the thread at start and does not
+        // replace it when config.toml is later rewritten.
+        out.append("model_provider = ").append(toml(activeProviderId(model))).append('\n');
         out.append("openai_base_url = ").append(toml(providerBaseUrl(url))).append("\n\n");
         out.append("model_context_window = 372000\nmodel_auto_compact_token_limit = 372000\n");
         // Text requests keep the group-qualified slug and do not pin a group
@@ -297,36 +312,76 @@ final class CodexConfig {
             .filter(entry -> routedModel.equals(entry.get("slug"))).findFirst().orElseThrow();
         out.append(CodexPreferences.retainedLines(current, profile));
         out.append("model_catalog_json = ").append(toml(catalog.toAbsolutePath().toString())).append("\n");
-        // Codex imagegen posts to this provider (base URL + API key) and always
-        // sends model gpt-image-2. native-v2 lets the backend bind that call to
-        // this turn. An image-group chat model also sends X-TokenPro-Group-Id and
-        // X-TokenPro-Image-Model so the Images call is rewritten to the selected
-        // model before scheduling and billing. Text chats omit both headers.
-        out.append('\n').append(imagegenProviderTable(
-            model.isImageGeneration() ? model.groupId() : null,
-            model.isImageGeneration() ? model.name() : null));
+        // Codex imagegen posts to the thread's provider and always sends model
+        // gpt-image-2. Each selected image model therefore gets its own provider
+        // with static group and model headers. Headers on the built-in openai
+        // provider are ignored by Codex, so they cannot isolate concurrent chats.
+        out.append('\n').append(imagegenProviderTables(providerBaseUrl(url), models));
         out.append(END).append('\n');
         return out.toString();
     }
 
-    static String imagegenProviderTable(Long groupId, String imageModel) {
-        StringBuilder headers = new StringBuilder();
-        headers.append("[model_providers.openai]\n");
-        headers.append("http_headers = { \"X-TokenPro-Image-Mode\" = \"native-v2\"");
-        if (groupId != null) {
-            headers.append(", \"X-TokenPro-Group-Id\" = ").append(toml(Long.toString(groupId)));
-            String model = imageModel == null ? "" : imageModel.trim();
-            if (!model.isEmpty()) headers.append(", \"X-TokenPro-Image-Model\" = ").append(toml(model));
-        }
-        headers.append(" }\n");
-        return headers.toString();
+    static String activeProviderId(PricedModel model) {
+        if (model != null && model.isImageGeneration()) return imageProviderId(model.groupId(), model.name());
+        return "openai";
     }
 
-    /** Replace only the TokenPro-managed imagegen header table. */
-    static String replaceImagegenProvider(String config, Long groupId, String imageModel) {
+    /** Provider id Codex can store and that conversation repair accepts. */
+    static String imageProviderId(long groupId, String modelName) {
+        String model = modelName == null ? "" : modelName.trim();
+        if (!model.matches("[A-Za-z0-9._-]{1,200}")) {
+            model = Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(model.getBytes(StandardCharsets.UTF_8));
+        }
+        return "tokenpro-img-" + groupId + "-" + model;
+    }
+
+    static String imagegenProviderTables(String baseUrl, List<PricedModel> models) {
+        StringBuilder tables = new StringBuilder();
+        // Keep a header-free built-in table so a text session cannot inherit an
+        // image model's group. Codex does not apply this table onto the built-in
+        // openai provider; image sessions use the dedicated tables below.
+        tables.append("[model_providers.openai]\n");
+        tables.append("http_headers = { \"X-TokenPro-Image-Mode\" = \"native-v2\" }\n");
+        for (PricedModel model : distinctImageModels(models)) {
+            tables.append('\n').append(imageProviderTable(baseUrl, model.groupId(), model.name()));
+        }
+        return tables.toString();
+    }
+
+    static String imageProviderTable(String baseUrl, long groupId, String modelName) {
+        String id = imageProviderId(groupId, modelName);
+        String model = modelName == null ? "" : modelName.trim();
+        return "[model_providers." + toml(id) + "]\n"
+            + "name = \"TokenPro\"\n"
+            + "base_url = " + toml(baseUrl) + "\n"
+            + "wire_api = \"responses\"\n"
+            + "requires_openai_auth = true\n"
+            + "supports_websockets = false\n"
+            + "http_headers = { \"X-TokenPro-Image-Mode\" = \"native-v2\", \"X-TokenPro-Group-Id\" = "
+            + toml(Long.toString(groupId)) + ", \"X-TokenPro-Image-Model\" = " + toml(model) + " }\n";
+    }
+
+    /** Replace only the TokenPro-managed imagegen provider tables. */
+    static String replaceImagegenProvider(String config, String baseUrl, List<PricedModel> models) {
         String stripped = removeManagedImagegenBlock(config);
         if (!stripped.isEmpty() && !stripped.endsWith("\n")) stripped += "\n";
-        return stripped + "# >>> TokenPro managed >>>\n" + imagegenProviderTable(groupId, imageModel) + "# <<< TokenPro managed <<<\n";
+        return stripped + "# >>> TokenPro managed >>>\n" + imagegenProviderTables(baseUrl, models) + "# <<< TokenPro managed <<<\n";
+    }
+
+    /** The provider table a thread would snapshot if it started against this id. */
+    static String providerTable(String config, String id) {
+        if (config == null || id == null || id.isBlank()) return "";
+        String header = "[model_providers." + toml(id) + "]";
+        int start = config.indexOf(header);
+        if (start < 0 && id.matches("[A-Za-z0-9_-]+")) start = config.indexOf("[model_providers." + id + "]");
+        if (start < 0) return "";
+        int next = config.indexOf("\n[", start + header.length());
+        int marker = config.indexOf("\n# <<<", start + header.length());
+        int end = config.length();
+        if (next >= 0) end = Math.min(end, next);
+        if (marker >= 0) end = Math.min(end, marker);
+        return config.substring(start, end);
     }
 
     private static String removeManagedImagegenBlock(String config) {
@@ -355,6 +410,65 @@ final class CodexConfig {
             from = next;
         }
         return out.toString();
+    }
+
+    private static List<PricedModel> distinctImageModels(List<PricedModel> models) {
+        Map<String, PricedModel> ordered = new LinkedHashMap<>();
+        if (models == null) return List.of();
+        for (PricedModel model : models) {
+            if (model == null || !model.isImageGeneration() || model.name() == null || model.name().isBlank()) continue;
+            ordered.putIfAbsent(imageProviderId(model.groupId(), model.name()), model);
+        }
+        return List.copyOf(ordered.values());
+    }
+
+    private static PricedModel imageSelection(long groupId, String name) {
+        return new PricedModel(name, "openai", "openai", "Images", groupId,
+            "image", null, null, List.of(), false, 0d, "", "生图");
+    }
+
+    private static boolean sameImage(PricedModel left, PricedModel right) {
+        return left.groupId() == right.groupId() && left.name().equals(right.name());
+    }
+
+    private static boolean imageProviderBound(String config, PricedModel model) {
+        String id = imageProviderId(model.groupId(), model.name());
+        if (!id.equals(CodexSwitchConfig.rootValue(config, "model_provider").orElse(""))) return false;
+        String table = providerTable(config, id);
+        return table.contains("\"X-TokenPro-Group-Id\" = " + toml(Long.toString(model.groupId())))
+            && table.contains("\"X-TokenPro-Image-Model\" = " + toml(model.name().trim()));
+    }
+
+    /** Image providers already written, so a repair can keep sibling models. */
+    private static List<PricedModel> imageModelsInConfig(String config) {
+        List<PricedModel> found = new ArrayList<>();
+        int from = 0;
+        while (from < config.length()) {
+            int start = config.indexOf("[model_providers.", from);
+            if (start < 0) break;
+            int lineEnd = config.indexOf('\n', start);
+            if (lineEnd < 0) break;
+            String header = config.substring(start, lineEnd);
+            int next = config.indexOf("\n[", lineEnd);
+            String body = config.substring(lineEnd, next < 0 ? config.length() : next);
+            from = next < 0 ? config.length() : next;
+            if (!header.contains("tokenpro-img-")) continue;
+            String group = inlineHeader(body, "X-TokenPro-Group-Id");
+            String model = inlineHeader(body, "X-TokenPro-Image-Model");
+            if (group == null || model == null || model.isBlank()) continue;
+            try { found.add(imageSelection(Long.parseLong(group), model)); }
+            catch (NumberFormatException ignored) { }
+        }
+        return found;
+    }
+
+    private static String inlineHeader(String body, String name) {
+        String needle = "\"" + name + "\" = \"";
+        int at = body.indexOf(needle);
+        if (at < 0) return null;
+        int end = body.indexOf('"', at + needle.length());
+        if (end < 0) return null;
+        return body.substring(at + needle.length(), end);
     }
 
     private record ImageChatRoute(long groupId, String modelName) {}

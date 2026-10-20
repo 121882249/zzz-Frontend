@@ -87,6 +87,7 @@ final class CodexSwitchConfigTest {
         check(profileMode.contains("[profiles.work.windows]\nsandbox = \"unelevated\"") && !profileMode.contains("sandbox='elevated'"), "active profile cannot override no-admin mode"); passed++;
         passed += actualSwitch();
         passed += imageGroupChatRoute();
+        passed += concurrentImageSessions();
         return passed;
     }
 
@@ -103,11 +104,17 @@ final class CodexSwitchConfigTest {
             config.apply("https://tokenpro.work/v1", List.of(image), "fixture-route-key", "fixture@example.test");
             String applied = Files.readString(configPath);
             String slug = CodexConfig.routedModelId(image);
+            String provider = CodexConfig.imageProviderId(65, "gpt-image-2.5-flare");
             check(applied.contains("model = \"" + slug + "\""), "image group is the Codex chat model"); passed++;
+            check(applied.contains("model_provider = \"" + provider + "\""), "image chat binds its own provider"); passed++;
             check(applied.contains("openai_base_url = \"https://tokenpro.work/v1\""), "imagegen uses the TokenPro API base"); passed++;
-            check(applied.contains("\"X-TokenPro-Image-Mode\" = \"native-v2\""), "imagegen uses native turn routing"); passed++;
-            check(applied.contains("\"X-TokenPro-Group-Id\" = \"65\""), "imagegen bills the selected image group"); passed++;
-            check(applied.contains("\"X-TokenPro-Image-Model\" = \"gpt-image-2.5-flare\""), "imagegen names the selected image model"); passed++;
+            check(applied.contains("[model_providers.\"" + provider + "\"]"), "image provider table is addressable"); passed++;
+            String table = CodexConfig.providerTable(applied, provider);
+            check(table.contains("base_url = \"https://tokenpro.work/v1\""), "image provider uses the TokenPro API base"); passed++;
+            check(table.contains("requires_openai_auth = true"), "image provider uses the account API key"); passed++;
+            check(table.contains("\"X-TokenPro-Image-Mode\" = \"native-v2\""), "imagegen uses native turn routing"); passed++;
+            check(table.contains("\"X-TokenPro-Group-Id\" = \"65\""), "imagegen bills the selected image group"); passed++;
+            check(table.contains("\"X-TokenPro-Image-Model\" = \"gpt-image-2.5-flare\""), "imagegen names the selected image model"); passed++;
             check(Files.readString(configPath.resolveSibling("auth.json")).contains("fixture-route-key"), "imagegen uses the account API key"); passed++;
             check(Files.readString(configPath.resolveSibling("models_cache.json")).contains(slug), "shared catalog keeps the image model"); passed++;
             check(!Files.exists(configPath.getParent().resolve("skills/tokenpro-imagegen/SKILL.md")),
@@ -121,6 +128,89 @@ final class CodexSwitchConfigTest {
             Files.writeString(configPath, repaired.replace(", \"X-TokenPro-Image-Model\" = \"gpt-image-2.5-flare\"", ""));
             check(config.repairStaleImageCatalog(), "missing image model header is repaired"); passed++;
             check(Files.readString(configPath).contains("\"X-TokenPro-Image-Model\" = \"gpt-image-2.5-flare\""), "repair restores only the image model header"); passed++;
+            String legacy = applied.replace("model_provider = \"" + provider + "\"", "model_provider = \"openai\"")
+                .replace(table, "[model_providers.openai]\nhttp_headers = { \"X-TokenPro-Image-Mode\" = \"native-v2\", \"X-TokenPro-Group-Id\" = \"65\", \"X-TokenPro-Image-Model\" = \"gpt-image-2.5-flare\" }\n");
+            Files.writeString(configPath, legacy);
+            check(config.repairStaleImageCatalog(), "shared image header migrates to a per-model provider"); passed++;
+            String migrated = Files.readString(configPath);
+            check(migrated.contains("model_provider = \"" + provider + "\""), "repair binds the active image provider"); passed++;
+            check(CodexConfig.providerTable(migrated, provider).contains("\"X-TokenPro-Image-Model\" = \"gpt-image-2.5-flare\""),
+                "repair moves the image model off the shared provider"); passed++;
+            check(!CodexConfig.providerTable(migrated, "openai").contains("X-TokenPro-Image-Model"),
+                "repair leaves the built-in provider without an image model"); passed++;
+            return passed;
+        } finally {
+            try (var paths = Files.walk(root)) {
+                for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path);
+            }
+        }
+    }
+
+    /** Two sessions snapshot different providers; rewriting the active provider does not cross their headers. */
+    private static int concurrentImageSessions() throws Exception {
+        Path root = Files.createTempDirectory("tokenpro-image-sessions-");
+        int passed = 0;
+        try {
+            SecureStore store = new SecureStore(root.resolve("store"));
+            Path configPath = root.resolve("home/config.toml");
+            Files.createDirectories(configPath.getParent());
+            PricedModel flare = new PricedModel("gpt-image-2.5-flare", "openai", "openai", "Images", 65,
+                "image", null, null, List.of(), false, 0d, "", "生图");
+            PricedModel sunburst = new PricedModel("gpt-image-2.5-sunburst", "openai", "openai", "Images", 65,
+                "image", null, null, List.of(), false, 0d, "", "生图");
+            PricedModel otherGroup = new PricedModel("gpt-image-1.5", "openai", "openai", "Other", 77,
+                "image", null, null, List.of(), false, 0d, "", "生图");
+            CodexConfig config = new CodexConfig(store, configPath);
+            config.apply("https://tokenpro.work/v1", List.of(flare, sunburst, otherGroup), "fixture-route-key", "fixture@example.test");
+            String applied = Files.readString(configPath);
+            String flareId = CodexConfig.imageProviderId(65, flare.name());
+            String sunId = CodexConfig.imageProviderId(65, sunburst.name());
+            String otherId = CodexConfig.imageProviderId(77, otherGroup.name());
+            String active = CodexSwitchConfig.rootValue(applied, "model_provider").orElse("");
+            check(Set.of(flareId, sunId, otherId).contains(active), "first image session starts on its own provider"); passed++;
+            String next = active.equals(sunId) ? flareId : sunId;
+            String sessionA = CodexConfig.providerTable(applied, active);
+            String sessionBTable = CodexConfig.providerTable(applied, sunId);
+            String sessionCTable = CodexConfig.providerTable(applied, otherId);
+            check(sessionA.contains("\"X-TokenPro-Image-Model\" = ") && sessionA.contains("\"X-TokenPro-Group-Id\" = ")
+                && (active.equals(flareId) || !sessionA.contains("flare"))
+                && (active.equals(sunId) || !sessionA.contains("sunburst"))
+                && (active.equals(otherId) || !sessionA.contains("gpt-image-1.5")),
+                "active session headers do not include the other models"); passed++;
+            check(sessionBTable.contains("\"X-TokenPro-Image-Model\" = \"gpt-image-2.5-sunburst\"")
+                && sessionBTable.contains("\"X-TokenPro-Group-Id\" = \"65\"")
+                && !sessionBTable.contains("flare"),
+                "sunburst session headers do not include flare"); passed++;
+            check(sessionCTable.contains("\"X-TokenPro-Image-Model\" = \"gpt-image-1.5\"")
+                && sessionCTable.contains("\"X-TokenPro-Group-Id\" = \"77\""),
+                "a second image group keeps its own group header"); passed++;
+            String switched = applied.replace("model_provider = \"" + active + "\"", "model_provider = \"" + next + "\"");
+            String sessionB = CodexConfig.providerTable(switched, CodexSwitchConfig.rootValue(switched, "model_provider").orElse(""));
+            check(sessionA.equals(CodexConfig.providerTable(switched, active)),
+                "rewriting the active provider does not change the session that already started"); passed++;
+            check(sessionB.contains("\"X-TokenPro-Image-Model\" = ")
+                && !sessionA.equals(sessionB)
+                && !sessionA.contains(sessionB.substring(sessionB.indexOf("\"X-TokenPro-Image-Model\""))),
+                "the next session snapshots the provider named at its start"); passed++;
+            check(CodexSwitchConfig.foreignRelayCleanup(applied).isEmpty(), "image providers are not treated as a foreign relay"); passed++;
+            PricedModel text = new PricedModel("gpt-5.4", "openai", "fixture", 1);
+            config.apply("https://tokenpro.work/v1", List.of(text, flare, sunburst), "fixture-route-key", "fixture@example.test");
+            String mixed = Files.readString(configPath);
+            check(mixed.contains("model_provider = \"openai\""), "mixed selection keeps text on the built-in provider"); passed++;
+            String textProvider = CodexConfig.providerTable(mixed, "openai");
+            check(textProvider.contains("\"X-TokenPro-Image-Mode\" = \"native-v2\"")
+                && !textProvider.contains("X-TokenPro-Image-Model")
+                && !textProvider.contains("X-TokenPro-Group-Id"),
+                "text provider does not pin an image model"); passed++;
+            check(CodexConfig.providerTable(mixed, flareId).contains("\"X-TokenPro-Image-Model\" = \"gpt-image-2.5-flare\"")
+                && CodexConfig.providerTable(mixed, sunId).contains("\"X-TokenPro-Image-Model\" = \"gpt-image-2.5-sunburst\""),
+                "mixed selection still publishes a provider for each image model"); passed++;
+            config.refreshModelCatalog(List.of(flare, sunburst));
+            String refreshed = Files.readString(configPath);
+            String refreshedProvider = CodexSwitchConfig.rootValue(refreshed, "model_provider").orElse("");
+            check(refreshedProvider.equals(flareId) || refreshedProvider.equals(sunId), "catalog refresh rebinds the active image provider"); passed++;
+            check(CodexConfig.providerTable(refreshed, sunId).contains("gpt-image-2.5-sunburst"),
+                "catalog refresh keeps the other image provider"); passed++;
             return passed;
         } finally {
             try (var paths = Files.walk(root)) {
