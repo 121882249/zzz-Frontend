@@ -39,10 +39,17 @@ public final class CodexNativeRoutingIntegrationTest {
                 require("native-v2".equals(exchange.getRequestHeaders().getFirst("x-tokenpro-image-mode")), "native image mode missing");
                 require(exchange.getRequestHeaders().getFirst("x-openai-actor-authorization") == null, "actor billing header must be absent");
                 imageTurn.set(Objects.toString(Json.object(body.get("client_metadata")).get("turn_id")));
-                if (imageOnly) require("65".equals(exchange.getRequestHeaders().getFirst("x-tokenpro-group-id")),
-                    "image-group chat model must send X-TokenPro-Group-Id");
-                else require(exchange.getRequestHeaders().getFirst("x-tokenpro-group-id") == null,
-                    "text and image groups must not share a static group header");
+                if (imageOnly) {
+                    require("65".equals(exchange.getRequestHeaders().getFirst("x-tokenpro-group-id")),
+                        "image-group chat model must send X-TokenPro-Group-Id");
+                    require("gpt-image-2.5-flare".equals(exchange.getRequestHeaders().getFirst("x-tokenpro-image-model")),
+                        "image-group chat model must send X-TokenPro-Image-Model");
+                } else {
+                    require(exchange.getRequestHeaders().getFirst("x-tokenpro-group-id") == null,
+                        "text and image groups must not share a static group header");
+                    require(exchange.getRequestHeaders().getFirst("x-tokenpro-image-model") == null,
+                        "text chats must not pin an image model header");
+                }
                 text.countDown();
                 int n = requests.incrementAndGet();
                 if (n > 1) {
@@ -72,6 +79,10 @@ public final class CodexNativeRoutingIntegrationTest {
             try {
                 Map<String,Object> body = Json.object(Json.parse(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8)));
                 require("gpt-image-2".equals(body.get("model")), "unexpected native image model");
+                if (imageOnly) require("gpt-image-2.5-flare".equals(exchange.getRequestHeaders().getFirst("x-tokenpro-image-model")),
+                    "native image request lost the selected image model");
+                else require(exchange.getRequestHeaders().getFirst("x-tokenpro-image-model") == null,
+                    "mixed selection must not pin an image model header");
                 require(imageTurn.get().equals(exchange.getRequestHeaders().getFirst("x-codex-image-turn-id")), "native image request lost exact turn");
                 require(exchange.getRequestHeaders().getFirst("x-tokenpro-image-route") == null, "static image route survived");
                 require("Bearer fixture-key".equals(exchange.getRequestHeaders().getFirst("Authorization")), "native image request lost Bearer");

@@ -107,14 +107,20 @@ final class CodexSwitchConfigTest {
             check(applied.contains("openai_base_url = \"https://tokenpro.work/v1\""), "imagegen uses the TokenPro API base"); passed++;
             check(applied.contains("\"X-TokenPro-Image-Mode\" = \"native-v2\""), "imagegen uses native turn routing"); passed++;
             check(applied.contains("\"X-TokenPro-Group-Id\" = \"65\""), "imagegen bills the selected image group"); passed++;
+            check(applied.contains("\"X-TokenPro-Image-Model\" = \"gpt-image-2.5-flare\""), "imagegen names the selected image model"); passed++;
             check(Files.readString(configPath.resolveSibling("auth.json")).contains("fixture-route-key"), "imagegen uses the account API key"); passed++;
             check(Files.readString(configPath.resolveSibling("models_cache.json")).contains(slug), "shared catalog keeps the image model"); passed++;
             check(!Files.exists(configPath.getParent().resolve("skills/tokenpro-imagegen/SKILL.md")),
                 "image chat model leaves Codex imagegen active"); passed++;
             check(config.nativeImageGroupConfigured(), "image chat route is recognized"); passed++;
-            Files.writeString(configPath, applied.replace(", \"X-TokenPro-Group-Id\" = \"65\"", ""));
+            Files.writeString(configPath, applied.replace(", \"X-TokenPro-Group-Id\" = \"65\"", "").replace(", \"X-TokenPro-Image-Model\" = \"gpt-image-2.5-flare\"", ""));
             check(config.repairStaleImageCatalog(), "missing image group header is repaired"); passed++;
-            check(Files.readString(configPath).contains("\"X-TokenPro-Group-Id\" = \"65\""), "repair restores the image group header"); passed++;
+            String repaired = Files.readString(configPath);
+            check(repaired.contains("\"X-TokenPro-Group-Id\" = \"65\""), "repair restores the image group header"); passed++;
+            check(repaired.contains("\"X-TokenPro-Image-Model\" = \"gpt-image-2.5-flare\""), "repair restores the selected image model"); passed++;
+            Files.writeString(configPath, repaired.replace(", \"X-TokenPro-Image-Model\" = \"gpt-image-2.5-flare\"", ""));
+            check(config.repairStaleImageCatalog(), "missing image model header is repaired"); passed++;
+            check(Files.readString(configPath).contains("\"X-TokenPro-Image-Model\" = \"gpt-image-2.5-flare\""), "repair restores only the image model header"); passed++;
             return passed;
         } finally {
             try (var paths = Files.walk(root)) {
@@ -141,6 +147,7 @@ final class CodexSwitchConfigTest {
                 && !applied.contains("[model_providers.custom]")
                 && !applied.contains("experimental_bearer_token")
                 && !applied.contains("X-TokenPro-Group-Id")
+                && !applied.contains("X-TokenPro-Image-Model")
                 && !applied.contains("x-openai-actor-authorization"),
                 "text chats use native-v2 imagegen without pinning a static group header");
             check(Files.exists(configPath.getParent().resolve("skills/tokenpro-imagegen/SKILL.md"))
@@ -166,7 +173,8 @@ final class CodexSwitchConfigTest {
             config.refreshModelCatalog(List.of(refreshedModel));
             String refreshed = Files.readString(configPath);
             check(refreshed.contains("model = \"" + CodexConfig.routedModelId(refreshedModel) + "\"")
-                && !refreshed.contains("review_model"),
+                && !refreshed.contains("review_model")
+                && !refreshed.contains("X-TokenPro-Image-Model"),
                 "catalog refresh updates the active model without pinning background work to a stale model");
             try (var catalogs = Files.list(store.root().resolve("codex-models"))) {
                 check(catalogs.filter(Files::isRegularFile).count() == 1, "catalog refresh retires the stale TokenPro catalog");
