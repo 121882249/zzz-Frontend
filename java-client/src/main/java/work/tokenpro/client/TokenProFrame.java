@@ -690,11 +690,14 @@ final class TokenProFrame extends JFrame {
             if (choice == null) return;
             String targetProvider;
             if ("OpenAI".equals(choice)) {
-                if (!"openai".equals(activeProvider) && !CodexChannelState.tokenProImageProvider(activeProvider))
+                boolean tokenProProvider = "tokenpro".equals(activeProvider)
+                    || CodexChannelState.tokenProImageProvider(activeProvider);
+                if (!"openai".equals(activeProvider) && !tokenProProvider)
                     throw new IllegalStateException("请先切换到 TokenPro 或 OpenAI 官方渠道");
-                // Keep the image provider the active chat already bound. Rewriting
-                // every thread back to openai would drop that model's static headers.
-                targetProvider = activeProvider;
+                // Threads share one TokenPro provider. The backend binds each
+                // thread to its latest image model, so old per-model providers
+                // are rewritten to that single provider.
+                targetProvider = tokenProProvider ? "tokenpro" : activeProvider;
             } else {
                 if ("openai".equals(activeProvider)
                     || CodexSwitchConfig.providerValue(current, activeProvider, "base_url").isEmpty())
