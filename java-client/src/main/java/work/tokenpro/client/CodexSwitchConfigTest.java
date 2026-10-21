@@ -86,7 +86,114 @@ final class CodexSwitchConfigTest {
         String profileMode = CodexSwitchConfig.withoutAdministrator(cleanProfile);
         check(profileMode.contains("[profiles.work.windows]\nsandbox = \"unelevated\"") && !profileMode.contains("sandbox='elevated'"), "active profile cannot override no-admin mode"); passed++;
         passed += actualSwitch();
+        passed += imageGroupChatRoute();
+        passed += concurrentImageSessions();
         return passed;
+    }
+
+    private static int imageGroupChatRoute() throws Exception {
+        Path root = Files.createTempDirectory("tokenpro-image-chat-");
+        int passed = 0;
+        try {
+            SecureStore store = new SecureStore(root.resolve("store"));
+            Path configPath = root.resolve("home/config.toml");
+            Files.createDirectories(configPath.getParent());
+            PricedModel image = new PricedModel("gpt-image-2.5-flare", "openai", "openai", "Images", 65,
+                "image", null, null, List.of(), false, 0d, "", "生图");
+            CodexConfig config = new CodexConfig(store, configPath);
+            config.apply("https://tokenpro.work/v1", List.of(image), "fixture-route-key", "fixture@example.test");
+            String applied = Files.readString(configPath);
+            String slug = CodexConfig.routedModelId(image);
+            check(applied.contains("model = \"" + slug + "\""), "image group is the Codex chat model"); passed++;
+            check(applied.contains("model_provider = \"tokenpro\""), "image chat uses the shared TokenPro provider"); passed++;
+            check(applied.contains("openai_base_url = \"https://tokenpro.work/v1\""), "imagegen uses the TokenPro API base"); passed++;
+            check(applied.contains("[model_providers.tokenpro]"), "shared provider table is addressable"); passed++;
+            String table = CodexConfig.providerTable(applied, "tokenpro");
+            check(table.contains("base_url = \"https://tokenpro.work/v1\""), "shared provider uses the TokenPro API base"); passed++;
+            check(table.contains("requires_openai_auth = true"), "shared provider uses the account API key"); passed++;
+            check(table.contains("\"X-TokenPro-Image-Mode\" = \"native-v2\""), "imagegen uses native turn routing"); passed++;
+            check(!applied.contains("X-TokenPro-Group-Id") && !applied.contains("X-TokenPro-Image-Model"),
+                "image model and group are not pinned in static headers"); passed++;
+            check(Files.readString(configPath.resolveSibling("auth.json")).contains("fixture-route-key"), "imagegen uses the account API key"); passed++;
+            check(Files.readString(configPath.resolveSibling("models_cache.json")).contains(slug), "shared catalog keeps the image model"); passed++;
+            check(!Files.exists(configPath.getParent().resolve("skills/tokenpro-imagegen/SKILL.md")),
+                "image chat model leaves Codex imagegen active"); passed++;
+            check(config.nativeImageGroupConfigured(), "image chat route is recognized"); passed++;
+            String legacy = applied.replace("model_provider = \"tokenpro\"", "model_provider = \"tokenpro-img-65-gpt-image-2.5-flare\"")
+                .replace(table, "[model_providers.\"tokenpro-img-65-gpt-image-2.5-flare\"]\nname = \"TokenPro\"\nbase_url = \"https://tokenpro.work/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true\nhttp_headers = { \"X-TokenPro-Image-Mode\" = \"native-v2\", \"X-TokenPro-Group-Id\" = \"65\", \"X-TokenPro-Image-Model\" = \"gpt-image-2.5-flare\" }\n");
+            Files.writeString(configPath, legacy);
+            check(config.repairStaleImageCatalog(), "per-model image headers migrate to the shared provider"); passed++;
+            String migrated = Files.readString(configPath);
+            check(migrated.contains("model_provider = \"tokenpro\""), "repair binds the shared provider"); passed++;
+            check(!migrated.contains("X-TokenPro-Image-Model") && !migrated.contains("X-TokenPro-Group-Id")
+                && !migrated.contains("tokenpro-img-"), "repair removes static image model headers"); passed++;
+            check(CodexConfig.providerTable(migrated, "tokenpro").contains("\"X-TokenPro-Image-Mode\" = \"native-v2\""),
+                "repair keeps native turn routing"); passed++;
+            check(!config.repairStaleImageCatalog(), "a shared provider is not rewritten again"); passed++;
+            return passed;
+        } finally {
+            try (var paths = Files.walk(root)) {
+                for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path);
+            }
+        }
+    }
+
+    /** Two sessions snapshot different providers; rewriting the active provider does not cross their headers. */
+    private static int concurrentImageSessions() throws Exception {
+        Path root = Files.createTempDirectory("tokenpro-image-sessions-");
+        int passed = 0;
+        try {
+            SecureStore store = new SecureStore(root.resolve("store"));
+            Path configPath = root.resolve("home/config.toml");
+            Files.createDirectories(configPath.getParent());
+            PricedModel flare = new PricedModel("gpt-image-2.5-flare", "openai", "openai", "Images", 65,
+                "image", null, null, List.of(), false, 0d, "", "生图");
+            PricedModel sunburst = new PricedModel("gpt-image-2.5-sunburst", "openai", "openai", "Images", 65,
+                "image", null, null, List.of(), false, 0d, "", "生图");
+            PricedModel otherGroup = new PricedModel("gpt-image-1.5", "openai", "openai", "Other", 77,
+                "image", null, null, List.of(), false, 0d, "", "生图");
+            CodexConfig config = new CodexConfig(store, configPath);
+            config.apply("https://tokenpro.work/v1", List.of(flare, sunburst, otherGroup), "fixture-route-key", "fixture@example.test");
+            String applied = Files.readString(configPath);
+            String provider = CodexConfig.providerTable(applied, "tokenpro");
+            check("tokenpro".equals(CodexSwitchConfig.rootValue(applied, "model_provider").orElse("")),
+                "every image model shares one provider"); passed++;
+            check(!provider.contains("X-TokenPro-Image-Model") && !provider.contains("X-TokenPro-Group-Id")
+                && !provider.contains("flare") && !provider.contains("sunburst") && !provider.contains("gpt-image-1.5"),
+                "the shared provider does not pin a model or group"); passed++;
+            String switched = applied.replace("model = \"" + CodexConfig.routedModelId(flare) + "\"",
+                "model = \"" + CodexConfig.routedModelId(sunburst) + "\"");
+            if (!applied.contains(CodexConfig.routedModelId(flare)))
+                switched = applied.replace("model = \"" + CodexConfig.routedModelId(sunburst) + "\"",
+                    "model = \"" + CodexConfig.routedModelId(flare) + "\"");
+            check(provider.equals(CodexConfig.providerTable(switched, "tokenpro")),
+                "a mid-thread model switch does not change provider headers"); passed++;
+            check(switched.contains("model = \"" + CodexConfig.routedModelId(flare) + "\"")
+                || switched.contains("model = \"" + CodexConfig.routedModelId(sunburst) + "\""),
+                "the picker model remains a group-qualified slug"); passed++;
+            check(CodexSwitchConfig.foreignRelayCleanup(applied).isEmpty(), "the shared provider is not a foreign relay"); passed++;
+            PricedModel text = new PricedModel("gpt-5.4", "openai", "fixture", 1);
+            config.apply("https://tokenpro.work/v1", List.of(text, flare, sunburst), "fixture-route-key", "fixture@example.test");
+            String mixed = Files.readString(configPath);
+            check(mixed.contains("model_provider = \"tokenpro\""), "text and image chats share the TokenPro provider"); passed++;
+            check(mixed.contains("model = \"" + CodexConfig.routedModelId(text) + "\""), "mixed selection keeps the text slug active"); passed++;
+            String textProvider = CodexConfig.providerTable(mixed, "tokenpro");
+            check(textProvider.contains("\"X-TokenPro-Image-Mode\" = \"native-v2\"")
+                && !textProvider.contains("X-TokenPro-Image-Model")
+                && !textProvider.contains("X-TokenPro-Group-Id"),
+                "the shared provider does not pin an image model"); passed++;
+            config.refreshModelCatalog(List.of(flare, sunburst));
+            String refreshed = Files.readString(configPath);
+            check("tokenpro".equals(CodexSwitchConfig.rootValue(refreshed, "model_provider").orElse("")),
+                "catalog refresh keeps the shared provider"); passed++;
+            check(!refreshed.contains("X-TokenPro-Image-Model") && !refreshed.contains("tokenpro-img-"),
+                "catalog refresh does not restore per-model providers"); passed++;
+            return passed;
+        } finally {
+            try (var paths = Files.walk(root)) {
+                for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path);
+            }
+        }
     }
 
     private static int actualSwitch() throws Exception {
@@ -101,15 +208,16 @@ final class CodexSwitchConfigTest {
             CodexConfig config = new CodexConfig(store, configPath);
             config.apply("https://tokenpro.work/v1", List.of(new PricedModel("gpt-5.4", "openai", "fixture", 1)), "fixture-route-key", "fixture@example.test");
             String applied = Files.readString(configPath);
-            check(applied.contains("model_provider = \"openai\"")
+            check(applied.contains("model_provider = \"tokenpro\"")
                 && applied.contains("openai_base_url = \"https://tokenpro.work/v1\"")
+                && applied.contains("[model_providers.tokenpro]")
+                && applied.contains("X-TokenPro-Image-Mode\" = \"native-v2\"")
                 && !applied.contains("[model_providers.custom]")
                 && !applied.contains("experimental_bearer_token")
-                && !applied.contains("x-tokenpro-group-id")
-                && !applied.contains("x-openai-actor-authorization")
-                && !applied.contains("x-tokenpro-image-mode")
-                && !applied.contains("x-tokenpro-group-id"),
-                "TokenPro OpenAI-compatible provider leaves group and billing resolution to the backend");
+                && !applied.contains("X-TokenPro-Group-Id")
+                && !applied.contains("X-TokenPro-Image-Model")
+                && !applied.contains("x-openai-actor-authorization"),
+                "text chats use the shared TokenPro provider without pinning an image model");
             check(Files.exists(configPath.getParent().resolve("skills/tokenpro-imagegen/SKILL.md"))
                 && Files.exists(configPath.getParent().resolve("skills/imagegen/SKILL.md")),
                 "TokenPro activation installs the image Skill route");
@@ -133,7 +241,8 @@ final class CodexSwitchConfigTest {
             config.refreshModelCatalog(List.of(refreshedModel));
             String refreshed = Files.readString(configPath);
             check(refreshed.contains("model = \"" + CodexConfig.routedModelId(refreshedModel) + "\"")
-                && !refreshed.contains("review_model"),
+                && !refreshed.contains("review_model")
+                && !refreshed.contains("X-TokenPro-Image-Model"),
                 "catalog refresh updates the active model without pinning background work to a stale model");
             try (var catalogs = Files.list(store.root().resolve("codex-models"))) {
                 check(catalogs.filter(Files::isRegularFile).count() == 1, "catalog refresh retires the stale TokenPro catalog");
