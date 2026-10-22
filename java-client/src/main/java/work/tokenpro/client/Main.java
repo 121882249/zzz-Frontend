@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 public final class Main {
-    public static final String VERSION = "1.3.69";
+    public static final String VERSION = "1.3.70";
     private Main() {}
 
     public static void main(String[] args) throws Exception {
@@ -89,8 +89,10 @@ public final class Main {
         if (store.read("java-session.json").isEmpty()) {
             boolean repaired = local.repairStaleImageCatalog();
             if (CodexConfig.tokenProActive(Platform.codexConfig())) {
-                if (local.nativeImageGroupConfigured()) local.deactivateTokenProImageSkill();
-                else local.installTokenProImageSkill();
+                // API-key Codex does not advertise image_gen.imagegen. Refresh
+                // the TokenPro Skill even when an image group is the chat
+                // model, so a text model keeps the image CLI after repair.
+                local.installTokenProImageSkill();
                 System.out.println(repaired
                     ? "Codex TokenPro route repaired from the saved local catalog."
                     : "Codex TokenPro route is already current; image Skill refreshed.");

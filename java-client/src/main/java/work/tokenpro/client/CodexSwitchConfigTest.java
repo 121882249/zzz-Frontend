@@ -98,6 +98,13 @@ final class CodexSwitchConfigTest {
             SecureStore store = new SecureStore(root.resolve("store"));
             Path configPath = root.resolve("home/config.toml");
             Files.createDirectories(configPath.getParent());
+            Path skills = configPath.getParent().resolve("skills");
+            Path systemSkill = skills.resolve(".system/imagegen/SKILL.md");
+            Path foreignSkill = skills.resolve("teamorouter-imagegen/SKILL.md");
+            Files.createDirectories(systemSkill.getParent());
+            Files.createDirectories(foreignSkill.getParent());
+            Files.writeString(systemSkill, "codex system imagegen");
+            Files.writeString(foreignSkill, "foreign image skill");
             PricedModel image = new PricedModel("gpt-image-2.5-flare", "openai", "openai", "Images", 65,
                 "image", null, null, List.of(), false, 0d, "", "生图");
             CodexConfig config = new CodexConfig(store, configPath);
@@ -116,8 +123,14 @@ final class CodexSwitchConfigTest {
                 "image model and group are not pinned in static headers"); passed++;
             check(Files.readString(configPath.resolveSibling("auth.json")).contains("fixture-route-key"), "imagegen uses the account API key"); passed++;
             check(Files.readString(configPath.resolveSibling("models_cache.json")).contains(slug), "shared catalog keeps the image model"); passed++;
-            check(!Files.exists(configPath.getParent().resolve("skills/tokenpro-imagegen/SKILL.md")),
-                "image chat model leaves Codex imagegen active"); passed++;
+            check(imageSkillInstalled(skills),
+                "image-group chat keeps the TokenPro image Skill for text models"); passed++;
+            check(!Files.exists(systemSkill)
+                && Files.readString(systemSkill.resolveSibling("SKILL.md.disabled-by-tokenpro")).equals("codex system imagegen"),
+                "TokenPro hides Codex's system imagegen skill"); passed++;
+            check(!Files.exists(foreignSkill)
+                && Files.readString(foreignSkill.resolveSibling("SKILL.md.disabled-by-tokenpro")).equals("foreign image skill"),
+                "TokenPro still hides the foreign image skill"); passed++;
             check(config.nativeImageGroupConfigured(), "image chat route is recognized"); passed++;
             String legacy = applied.replace("model_provider = \"tokenpro\"", "model_provider = \"tokenpro-img-65-gpt-image-2.5-flare\"")
                 .replace(table, "[model_providers.\"tokenpro-img-65-gpt-image-2.5-flare\"]\nname = \"TokenPro\"\nbase_url = \"https://tokenpro.work/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true\nhttp_headers = { \"X-TokenPro-Image-Mode\" = \"native-v2\", \"X-TokenPro-Group-Id\" = \"65\", \"X-TokenPro-Image-Model\" = \"gpt-image-2.5-flare\" }\n");
@@ -130,6 +143,24 @@ final class CodexSwitchConfigTest {
             check(CodexConfig.providerTable(migrated, "tokenpro").contains("\"X-TokenPro-Image-Mode\" = \"native-v2\""),
                 "repair keeps native turn routing"); passed++;
             check(!config.repairStaleImageCatalog(), "a shared provider is not rewritten again"); passed++;
+            check(imageSkillInstalled(skills) && !Files.exists(systemSkill),
+                "stale image-route repair keeps the TokenPro image Skill installed"); passed++;
+            config.deactivateTokenProImageSkill();
+            check(!Files.exists(skills.resolve("tokenpro-imagegen/SKILL.md"))
+                && !Files.exists(skills.resolve("imagegen/SKILL.md"))
+                && Files.readString(systemSkill).equals("codex system imagegen"),
+                "deactivation removes both TokenPro skills and restores Codex imagegen"); passed++;
+            check(config.nativeImageGroupConfigured(), "image group stays configured after the Skill is removed"); passed++;
+            config.installTokenProImageSkill();
+            check(imageSkillInstalled(skills)
+                && !Files.exists(systemSkill)
+                && Files.exists(systemSkill.resolveSibling("SKILL.md.disabled-by-tokenpro")),
+                "TokenPro reinstalls the image Skill while an image group is the chat model"); passed++;
+            String textRoute = migrated.replaceFirst("model = \"tp-g\\d+-[^\"]+\"", "model = \"tp-g16-gpt-6-sol\"");
+            check(!textRoute.equals(migrated), "fixture can switch the active slug to gpt-6-sol"); passed++;
+            Files.writeString(configPath, textRoute);
+            check(!config.nativeImageGroupConfigured() && imageSkillInstalled(skills),
+                "gpt-6-sol keeps the TokenPro image CLI after an image-group route"); passed++;
             return passed;
         } finally {
             try (var paths = Files.walk(root)) {
@@ -188,6 +219,8 @@ final class CodexSwitchConfigTest {
                 "catalog refresh keeps the shared provider"); passed++;
             check(!refreshed.contains("X-TokenPro-Image-Model") && !refreshed.contains("tokenpro-img-"),
                 "catalog refresh does not restore per-model providers"); passed++;
+            check(imageSkillInstalled(configPath.getParent().resolve("skills")),
+                "refreshing an image-group catalog keeps the TokenPro image Skill"); passed++;
             return passed;
         } finally {
             try (var paths = Files.walk(root)) {
@@ -331,5 +364,14 @@ final class CodexSwitchConfigTest {
             try (var paths = Files.walk(root)) { for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path); }
         }
     }
+    private static boolean imageSkillInstalled(Path skills) {
+        Path named = skills.resolve("tokenpro-imagegen");
+        Path compatibility = skills.resolve("imagegen");
+        return Files.exists(named.resolve("SKILL.md"))
+            && Files.exists(named.resolve("scripts/tokenpro-imagegen"))
+            && Files.exists(compatibility.resolve("SKILL.md"))
+            && Files.exists(compatibility.resolve("scripts/tokenpro-imagegen"));
+    }
+
     private static void check(boolean ok, String detail) { if (!ok) throw new AssertionError(detail); }
 }

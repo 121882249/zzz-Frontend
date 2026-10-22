@@ -190,11 +190,13 @@ final class TokenProFrame extends JFrame {
                     // config.toml. Repair that local catalog even when the user
                     // is not currently logged into the TokenPro dashboard.
                     codex.repairStaleImageCatalog();
-                    // An image-group chat model uses Codex's built-in imagegen
-                    // extension. The TokenPro Skill would tell the model not to
-                    // call that tool, so it stays disabled for this route.
-                    if (codex.nativeImageGroupConfigured()) codex.deactivateTokenProImageSkill();
-                    else codex.installTokenProImageSkill();
+                    // API-key Codex does not advertise image_gen.imagegen.
+                    // Keep the TokenPro image Skill installed for every active
+                    // route, including an image-group chat model. The backend
+                    // dispatches that slug itself, so the Skill does not
+                    // conflict with it, and a later text model such as
+                    // gpt-6-sol still has the TokenPro image CLI.
+                    codex.installTokenProImageSkill();
                 } else if ("official".equals(detected.channel())) {
                     // Official Codex owns native image generation; a stale
                     // TokenPro compatibility Skill must not intercept requests.
