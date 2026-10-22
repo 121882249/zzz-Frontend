@@ -86,8 +86,8 @@ final class CodexConfig {
         String preserved = CodexSwitchConfig.clean(current);
         if (Platform.OS_KIND == Platform.OS.WINDOWS) preserved = CodexSwitchConfig.withoutAdministrator(preserved);
         // Image-group models stay in the shared catalog and can be the active
-        // chat model. Codex's built-in imagegen extension then uses this same
-        // provider (base URL, API key, and the image group's routing header).
+        // chat model. The backend dispatches those slugs directly. The
+        // TokenPro image Skill stays installed so text models keep the CLI.
         Path catalog = writeModelCatalog(models);
         // TeamoRouter's global image skill otherwise wins before the active
         // TokenPro route. Preserve it in place, but hide only its discoverable
@@ -112,8 +112,11 @@ final class CodexConfig {
             writeAtomic(target, candidate);
         }
         CodexChannelState.writeChannelCache(target, catalog);
-        if (primaryModel.isImageGeneration()) deactivateTokenProImageSkill();
-        else installTokenProImageSkill();
+        // API-key auth never advertises image_gen.imagegen, so an image-group
+        // primary must not remove the Skill. Installation still disables
+        // Codex's .system/imagegen skill; the foreign TeamoRouter skill was
+        // hidden above. Official-channel switching deactivates separately.
+        installTokenProImageSkill();
         // Retire only our old generated catalogs after the new config is committed.
         // Failure is housekeeping, not a reason to restore a previous channel.
         try { pruneModelCatalogs(catalog); store.delete("codex-model-catalog.json"); }
@@ -210,7 +213,10 @@ final class CodexConfig {
         if (!current.equals(Files.readString(configPath, StandardCharsets.UTF_8)))
             throw new IOException("Codex 配置在生图路由修复期间已被其他程序修改；请重试");
         writeAtomic(configPath, candidate);
-        if (imageChat) deactivateTokenProImageSkill();
+        // The repaired route is still TokenPro. Reinstall the Skill even when
+        // the active model is an image group; otherwise this migration would
+        // remove the CLI that text models use.
+        installTokenProImageSkill();
         return true;
     }
 
@@ -269,8 +275,10 @@ final class CodexConfig {
                 throw new IOException("Codex 配置在模型刷新期间已被其他程序修改；已取消刷新");
             writeAtomic(configPath, candidate);
             CodexChannelState.writeChannelCache(configPath, catalog);
-            if (primary.isImageGeneration()) deactivateTokenProImageSkill();
-            else installTokenProImageSkill();
+            // Refreshing onto an image-group primary must keep the Skill.
+            // Text models selected later in Codex still need the CLI, and the
+            // backend dispatches the image-group slug without it.
+            installTokenProImageSkill();
             pruneModelCatalogs(catalog);
             CodexChannelState.verify(configPath, CodexChannel.tokenPro());
         } catch (Exception failure) {
