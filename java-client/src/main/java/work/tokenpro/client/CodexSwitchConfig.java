@@ -20,43 +20,69 @@ final class CodexSwitchConfig {
     static String clean(String current) {
         List<Statement> statements = parse(stripChannelMarkerBlocks(current));
         String profile = activeProfile(statements);
-        Set<List<String>> owned = new HashSet<>();
-        List<String> section = List.of();
-        String closing = null;
-        for (Statement statement : statements) {
-            String line = statement.raw().strip();
-            if (MARKERS.containsKey(line)) {
-                if (closing != null) throw malformed();
-                closing = MARKERS.get(line);
-            } else if (MARKERS.containsValue(line)) {
-                if (!line.equals(closing)) throw malformed();
-                closing = null;
-            } else if (statement.header()) {
-                section = statement.path();
-                if (closing != null && section.size() >= 2 && section.getFirst().equals("model_providers"))
-                    owned.add(section.subList(0, 2));
-            } else if (section.size() == 2 && section.getFirst().equals("model_providers")
-                && statement.path().equals(List.of("base_url"))) {
-                // Migrate older unmarked TokenPro provider tables without deleting third-party providers.
-                String value = scalar(statement.raw());
-                try {
-                    if ("tokenpro.work".equalsIgnoreCase(java.net.URI.create(value).getHost())) owned.add(section);
-                } catch (IllegalArgumentException ignored) { }
-            }
-        }
-        if (closing != null) throw malformed();
+        boolean[] insideManaged = managedInterior(statements);
+        Set<List<String>> owned = ownedProviders(statements, insideManaged);
         StringBuilder result = new StringBuilder();
-        section = List.of();
+        List<String> section = List.of();
         for (Statement statement : statements) {
-            String line = statement.raw().strip();
-            if (MARKERS.containsKey(line) || MARKERS.containsValue(line)) continue;
+            Marker managed = managedMarker(statement.raw());
+            String raw = statement.raw();
+            if (managed != null) {
+                if (!managed.inline()) continue;
+                raw = stripTrailingMarker(raw);
+            }
             if (statement.header()) section = statement.path();
             boolean ownTable = section.size() >= 2 && owned.contains(section.subList(0, 2));
             if (ownTable) continue;
             if ((section.isEmpty() || section.equals(List.of("profiles", profile)))
                 && statement.path().size() == 1 && ROUTE_KEYS.contains(statement.path().getFirst())) continue;
-            result.append(statement.raw());
+            result.append(raw);
         }
+        return result.toString();
+    }
+
+    /**
+     * Marker problems that a later rewrite can repair without guessing through
+     * broken quotes or brackets. Empty when the file has no TokenPro marker damage.
+     * Unparseable TOML throws instead of being reported as marker damage.
+     */
+    static Optional<String> markerDamage(String current) {
+        List<Statement> statements = parse(current);
+        List<String> problems = new ArrayList<>();
+        problems.addAll(familyDamage(statements, "channel"));
+        problems.addAll(familyDamage(statements, "managed"));
+        return problems.isEmpty() ? Optional.empty() : Optional.of(String.join("；", problems));
+    }
+
+    /** Rebuild a balanced TokenPro route around the current route keys. User tables stay put. */
+    static String ensureMarkerBalance(String current) {
+        if (markerDamage(current).isEmpty()) return current;
+        String preserved = clean(current);
+        String fragment = routeFragment(current);
+        if (fragment.isBlank()) return preserved;
+        return merge(preserved, fragment);
+    }
+
+    /** Restore path: drop complete managed regions, and only the marker line when a pair is broken. */
+    static String stripManagedRegions(String text) {
+        List<Statement> statements = parse(text);
+        boolean[] drop = new boolean[statements.size()];
+        Deque<Integer> stack = new ArrayDeque<>();
+        Marker[] markers = managedMarkers(statements);
+        for (int i = 0; i < markers.length; i++) {
+            Marker marker = markers[i];
+            if (marker == null) continue;
+            if (marker.start()) stack.push(i);
+            else if (!stack.isEmpty() && markers[stack.peek()].id().equals(marker.id())) {
+                int start = stack.pop();
+                drop[start] = true;
+                for (int j = start + 1; j < i; j++) drop[j] = true;
+                if (!marker.inline()) drop[i] = true;
+            } else if (!marker.inline()) drop[i] = true;
+        }
+        while (!stack.isEmpty()) drop[stack.pop()] = true;
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; i < statements.size(); i++) if (!drop[i]) result.append(withoutInlineMarker(statements.get(i).raw()));
         return result.toString();
     }
 
@@ -113,32 +139,47 @@ final class CodexSwitchConfig {
     static Set<String> markerOwners(String current) {
         LinkedHashSet<String> owners = new LinkedHashSet<>();
         for (Statement statement : parse(current)) {
-            Matcher marker = CHANNEL_MARKER.matcher(statement.raw().strip());
-            if (marker.matches() && ">>>".equals(marker.group(1))) owners.add(marker.group(2).toLowerCase(Locale.ROOT));
+            Marker marker = markerOf(statement.raw());
+            if (marker != null && "channel".equals(marker.family()) && marker.start()) owners.add(marker.id());
         }
         return Set.copyOf(owners);
     }
 
     private static String stripChannelMarkerBlocks(String current) {
-        StringBuilder result = new StringBuilder();
-        String active = null;
-        for (Statement statement : parse(current)) {
-            Matcher marker = CHANNEL_MARKER.matcher(statement.raw().strip());
-            if (marker.matches()) {
-                String owner = marker.group(2).toLowerCase(Locale.ROOT);
-                if (">>>".equals(marker.group(1))) {
-                    if (active != null) throw malformed();
-                    active = owner;
-                } else {
-                    if (active == null || !active.equals(owner)) throw malformed();
-                    active = null;
-                }
-                continue;
-            }
-            if (active == null) result.append(statement.raw());
+        List<Statement> statements = parse(current);
+        boolean[] drop = new boolean[statements.size()];
+        Deque<Integer> stack = new ArrayDeque<>();
+        Marker[] markers = channelMarkers(statements);
+        for (int i = 0; i < markers.length; i++) {
+            Marker marker = markers[i];
+            if (marker == null) continue;
+            if (marker.start()) stack.push(i);
+            else if (!stack.isEmpty() && markers[stack.peek()].id().equals(marker.id())) {
+                // A matched pair owns everything between its markers, including route keys.
+                // A suffix closer stays with its key so a user setting Codex attached it to is not deleted.
+                int start = stack.pop();
+                drop[start] = true;
+                for (int j = start + 1; j < i; j++) drop[j] = true;
+                if (!marker.inline()) drop[i] = true;
+            } else if (!marker.inline()) drop[i] = true;
         }
-        if (active != null) throw malformed();
+        // An orphan start owns only its own line. Swallowing through EOF would delete
+        // plugins, MCP servers and desktop settings that Codex left outside the block
+        // after it dropped the closing marker.
+        while (!stack.isEmpty()) drop[stack.pop()] = true;
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; i < statements.size(); i++) if (!drop[i]) result.append(withoutChannelSuffix(statements.get(i).raw()));
         return result.toString();
+    }
+
+    private static String withoutInlineMarker(String raw) {
+        Marker marker = markerOf(raw);
+        return marker != null && marker.inline() ? stripTrailingMarker(raw) : raw;
+    }
+
+    private static String withoutChannelSuffix(String raw) {
+        Marker marker = markerOf(raw);
+        return marker != null && marker.inline() && "channel".equals(marker.family()) ? stripTrailingMarker(raw) : raw;
     }
 
     static Optional<String> rootValue(String current, String key) {
@@ -198,13 +239,23 @@ final class CodexSwitchConfig {
         String rootEnd = "# <<< tokenpro-codex\n";
         String body = generated.replace("# >>> TokenPro managed >>>\n", "").replace("# <<< TokenPro managed <<<\n", "");
         int generatedTables = firstTable(body);
-        String root = body.substring(0, generatedTables);
-        String tables = body.substring(generatedTables);
+        String root = sealTrailing(newline(body.substring(0, generatedTables)), "# <<< tokenpro-codex");
+        String tables = sealTrailing(newline(body.substring(generatedTables)), "# <<< TokenPro managed <<<");
         int preservedTables = firstTable(preserved);
-        String result = newline(preserved.substring(0, preservedTables)) + rootStart + newline(root) + rootEnd
+        String result = newline(preserved.substring(0, preservedTables)) + rootStart + root + rootEnd
             + newline(preserved.substring(preservedTables));
-        if (!tables.isBlank()) result += "# >>> TokenPro managed >>>\n" + newline(tables) + "# <<< TokenPro managed <<<\n";
+        if (!tables.isBlank()) result += "# >>> TokenPro managed >>>\n" + tables + "# <<< TokenPro managed <<<\n";
+        // Both channel markers are part of this one string, then written with a temp-file rename.
+        // A later Codex rewrite may still drop the freestanding closing comment; the next switch repairs it.
+        requireBalanced(result);
         return result;
+    }
+
+    static void requireBalanced(String config) {
+        Optional<String> damage = markerDamage(config);
+        if (damage.isPresent())
+            throw new IllegalStateException("TokenPro 未能写回成对的 Codex 标记（" + damage.get()
+                + "），原配置未修改。可从同目录 config.toml.tokenpro-backup-* 恢复，或移走 config.toml 后重新选择模型以重建路由。");
     }
 
     /**
@@ -274,6 +325,266 @@ final class CodexSwitchConfig {
         return result.toString();
     }
 
+    private record Marker(String family, String id, boolean start, boolean inline) {}
+
+    private static Marker markerOf(String raw) {
+        Marker pure = pureMarker(logical(raw));
+        if (pure != null) return pure;
+        int hash = trailingMarkerIndex(raw);
+        if (hash < 0) return null;
+        String comment = raw.substring(hash, raw.indexOf('\n', hash) < 0 ? raw.length() : raw.indexOf('\n', hash)).strip();
+        Marker trailing = pureMarker(comment);
+        // Only a closing marker is meaningful as a suffix. Codex keeps suffixes attached to a key
+        // and drops a freestanding comment that sits between that key and the next table.
+        if (trailing == null || trailing.start()) return null;
+        return new Marker(trailing.family(), trailing.id(), false, true);
+    }
+
+    private static Marker pureMarker(String line) {
+        Matcher channel = CHANNEL_MARKER.matcher(line);
+        if (channel.matches())
+            return new Marker("channel", channel.group(2).toLowerCase(Locale.ROOT), ">>>".equals(channel.group(1)), false);
+        if (MARKERS.containsKey(line)) return new Marker("managed", line, true, false);
+        for (var entry : MARKERS.entrySet())
+            if (entry.getValue().equals(line)) return new Marker("managed", entry.getKey(), false, false);
+        return null;
+    }
+
+    /** Index of a trailing `# ...` comment that is the last token of the statement, outside quotes. */
+    private static int trailingMarkerIndex(String raw) {
+        String quote = "";
+        boolean escape = false;
+        for (int i = 0; i < raw.length(); i++) {
+            char c = raw.charAt(i);
+            if (!quote.isEmpty()) {
+                if (escape) { escape = false; continue; }
+                if (quote.charAt(0) == '"' && c == '\\') { escape = true; continue; }
+                if (raw.startsWith(quote, i)) {
+                    if (quote.length() == 3) {
+                        char q = quote.charAt(0);
+                        i += 2;
+                        for (int extra = 0; extra < 2 && i + 1 < raw.length() && raw.charAt(i + 1) == q; extra++) i++;
+                    }
+                    quote = "";
+                }
+                continue;
+            }
+            if (c == '#') {
+                int end = raw.indexOf('\n', i);
+                String rest = end < 0 ? "" : raw.substring(end + 1);
+                return rest.isBlank() ? i : -1;
+            }
+            if (c == '"' || c == '\'') {
+                quote = String.valueOf(c);
+                if (raw.startsWith(quote.repeat(3), i)) { quote = quote.repeat(3); i += 2; }
+            }
+        }
+        return -1;
+    }
+
+    private static String stripTrailingMarker(String raw) {
+        int hash = trailingMarkerIndex(raw);
+        if (hash < 0) return raw;
+        int lineEnd = raw.indexOf('\n', hash);
+        String head = raw.substring(0, hash).stripTrailing();
+        String tail = lineEnd < 0 ? "" : raw.substring(lineEnd);
+        if (head.isEmpty()) return tail.startsWith("\n") || tail.startsWith("\r") ? tail.substring(tail.indexOf('\n') + 1) : "";
+        return head + (tail.isEmpty() ? "\n" : tail);
+    }
+
+    /** Keep a closing marker on the last route line so a Codex rewrite is less likely to drop it. */
+    private static String sealTrailing(String body, String marker) {
+        if (body.isBlank() || body.contains(marker)) return body;
+        int end = body.length();
+        while (end > 0 && (body.charAt(end - 1) == '\n' || body.charAt(end - 1) == '\r')) end--;
+        if (end == 0) return body;
+        int line = body.lastIndexOf('\n', end - 1);
+        String last = body.substring(line + 1, end).strip();
+        if (last.isEmpty() || last.startsWith("#")) return body;
+        return body.substring(0, end) + " " + marker + body.substring(end);
+    }
+
+    private static Marker managedMarker(String raw) {
+        Marker marker = markerOf(raw);
+        return marker != null && "managed".equals(marker.family()) ? marker : null;
+    }
+
+    private static String logical(String raw) {
+        String line = raw.strip();
+        if (line.startsWith("\uFEFF")) line = line.substring(1).stripLeading();
+        return line;
+    }
+
+    private static Marker[] channelMarkers(List<Statement> statements) {
+        Marker[] markers = new Marker[statements.size()];
+        for (int i = 0; i < statements.size(); i++) {
+            Marker marker = markerOf(statements.get(i).raw());
+            if (marker != null && "channel".equals(marker.family())) markers[i] = marker;
+        }
+        return markers;
+    }
+
+    private static Marker[] managedMarkers(List<Statement> statements) {
+        Marker[] markers = new Marker[statements.size()];
+        for (int i = 0; i < statements.size(); i++) {
+            Marker marker = markerOf(statements.get(i).raw());
+            if (marker != null && "managed".equals(marker.family())) markers[i] = marker;
+        }
+        return markers;
+    }
+
+    /** Interior of a matched non-TokenPro channel block. TokenPro's own route keys stay readable. */
+    private static boolean[] foreignChannelInterior(List<Statement> statements) {
+        boolean[] inside = new boolean[statements.size()];
+        Deque<Integer> stack = new ArrayDeque<>();
+        Marker[] markers = channelMarkers(statements);
+        for (int i = 0; i < markers.length; i++) {
+            Marker marker = markers[i];
+            if (marker == null) continue;
+            if (marker.start()) stack.push(i);
+            else if (!stack.isEmpty() && markers[stack.peek()].id().equals(marker.id())) {
+                int start = stack.pop();
+                if (!"tokenpro".equals(marker.id())) {
+                    for (int j = start + 1; j < i; j++) inside[j] = true;
+                }
+            }
+        }
+        return inside;
+    }
+
+    /** Statements strictly inside a matched managed pair. Orphan markers do not claim the rest of the file. */
+    private static boolean[] managedInterior(List<Statement> statements) {
+        boolean[] inside = new boolean[statements.size()];
+        Deque<Integer> stack = new ArrayDeque<>();
+        Marker[] markers = managedMarkers(statements);
+        for (int i = 0; i < markers.length; i++) {
+            Marker marker = markers[i];
+            if (marker == null) continue;
+            if (marker.start()) stack.push(i);
+            else if (!stack.isEmpty() && markers[stack.peek()].id().equals(marker.id())) {
+                int start = stack.pop();
+                for (int j = start + 1; j < i; j++) inside[j] = true;
+            }
+        }
+        return inside;
+    }
+
+    private static Set<List<String>> ownedProviders(List<Statement> statements, boolean[] insideManaged) {
+        Set<List<String>> owned = new HashSet<>();
+        List<String> section = List.of();
+        for (int i = 0; i < statements.size(); i++) {
+            Statement statement = statements.get(i);
+            if (statement.header()) {
+                section = statement.path();
+                if (insideManaged[i] && section.size() >= 2 && section.getFirst().equals("model_providers"))
+                    owned.add(List.copyOf(section.subList(0, 2)));
+            } else if (section.size() == 2 && section.getFirst().equals("model_providers")
+                && statement.path().equals(List.of("base_url"))) {
+                // Migrate older unmarked TokenPro provider tables without deleting third-party providers.
+                String value = scalar(statement.raw());
+                try {
+                    if ("tokenpro.work".equalsIgnoreCase(java.net.URI.create(value).getHost()))
+                        owned.add(List.copyOf(section));
+                } catch (IllegalArgumentException ignored) { }
+            }
+        }
+        return owned;
+    }
+
+    private static List<String> familyDamage(List<Statement> statements, String family) {
+        List<String> problems = new ArrayList<>();
+        Deque<Marker> stack = new ArrayDeque<>();
+        int pairs = 0;
+        boolean legacy = false;
+        Marker lastClose = null;
+        boolean contentSinceClose = false;
+        for (Statement statement : statements) {
+            Marker marker = markerOf(statement.raw());
+            if (marker == null || !marker.family().equals(family)) {
+                String line = logical(statement.raw());
+                if (!line.isEmpty() && !line.startsWith("#")) contentSinceClose = true;
+                continue;
+            }
+            if ("managed".equals(family) && (marker.id().contains("model selection") || marker.id().contains("history provider")))
+                legacy = true;
+            if (marker.start()) {
+                if (!stack.isEmpty()) problems.add(markerLabel(marker) + "起始标记重复或嵌套");
+                stack.push(marker);
+                lastClose = null;
+                contentSinceClose = false;
+            } else if (stack.isEmpty()) {
+                // The writer emits the closer twice: once as a key suffix Codex tends to keep,
+                // and once as its own line. The second one is a seal, not a second block.
+                if (lastClose != null && lastClose.id().equals(marker.id()) && !contentSinceClose) continue;
+                problems.add(markerLabel(marker) + "结束标记没有对应的起始标记");
+            } else if (!stack.peek().id().equals(marker.id())) {
+                problems.add(markerLabel(marker) + "结束标记与起始标记不匹配");
+            } else {
+                stack.pop();
+                pairs++;
+                lastClose = marker;
+                contentSinceClose = false;
+            }
+        }
+        for (Marker open : stack) problems.add(markerLabel(open) + "起始标记没有对应的结束标记");
+        if (pairs > 1) problems.add("channel".equals(family) ? "渠道标记区块重复" : "TokenPro 管理区块重复");
+        if (legacy) problems.add("存在旧版 TokenPro 标记");
+        return problems;
+    }
+
+    private static String markerLabel(Marker marker) {
+        if ("channel".equals(marker.family())) return marker.id() + "-codex ";
+        if (marker.id().contains("model selection")) return "TokenPro model selection ";
+        if (marker.id().contains("history provider")) return "TokenPro history provider ";
+        return "TokenPro managed ";
+    }
+
+    /** Route keys and TokenPro provider tables worth re-wrapping after an orphan marker is removed. */
+    private static String routeFragment(String current) {
+        List<Statement> statements = parse(current);
+        boolean[] inside = managedInterior(statements);
+        Set<List<String>> owned = ownedProviders(statements, inside);
+        boolean[] foreign = foreignChannelInterior(statements);
+        String profile = activeProfile(statements);
+        Map<String, String> roots = new LinkedHashMap<>();
+        StringBuilder tables = new StringBuilder();
+        List<String> section = List.of();
+        List<String> copying = List.of();
+        for (int i = 0; i < statements.size(); i++) {
+            if (foreign[i]) continue;
+            Statement statement = statements.get(i);
+            Marker marker = markerOf(statement.raw());
+            String raw = statement.raw();
+            if (marker != null) {
+                if (!marker.inline()) continue;
+                raw = stripTrailingMarker(raw);
+            }
+            if (statement.header()) {
+                section = statement.path();
+                boolean copy = section.size() >= 2 && owned.contains(section.subList(0, 2));
+                copying = copy ? List.copyOf(section.subList(0, 2)) : List.of();
+                if (copy) tables.append(raw);
+                continue;
+            }
+            if (!copying.isEmpty() && section.size() >= 2 && section.subList(0, 2).equals(copying)) {
+                tables.append(raw);
+                continue;
+            }
+            boolean routeScope = section.isEmpty() || section.equals(List.of("profiles", profile));
+            if (routeScope && statement.path().size() == 1 && ROUTE_KEYS.contains(statement.path().getFirst())) {
+                roots.remove(statement.path().getFirst());
+                roots.put(statement.path().getFirst(), raw);
+            }
+        }
+        if (roots.isEmpty() && tables.isEmpty()) return "";
+        StringBuilder body = new StringBuilder("# >>> TokenPro managed >>>\n");
+        for (String raw : roots.values()) body.append(newline(raw));
+        if (!tables.isEmpty()) body.append('\n').append(tables);
+        if (!body.toString().endsWith("\n")) body.append('\n');
+        body.append("# <<< TokenPro managed <<<\n");
+        return body.toString();
+    }
+
     private static String activeProfile(List<Statement> statements) {
         for (Statement statement : statements) {
             if (statement.header()) break;
@@ -308,7 +619,11 @@ final class CodexSwitchConfig {
     }
 
     private static String newline(String value) { return value.isEmpty() || value.endsWith("\n") ? value : value + "\n"; }
-    private static IllegalStateException malformed() { return new IllegalStateException("Codex 配置格式或 TokenPro 标记不完整；原配置未修改"); }
+    private static IllegalStateException unparseable() {
+        return new IllegalStateException("Codex 配置无法解析（引号、括号或表名不完整），原配置未修改。"
+            + "请检查 config.toml 的引号和括号是否成对；可从同目录的 config.toml.tokenpro-backup-* 恢复，"
+            + "或把损坏的 config.toml 移走后在 TokenPro 中重新选择模型以重建路由。");
+    }
     private record Statement(String raw, boolean header, List<String> path) {}
 
     /** Lexical boundaries only: values are kept verbatim, including multiline strings, arrays and comments. */
@@ -338,10 +653,10 @@ final class CodexSwitchConfig {
                 if (text.startsWith(quote.repeat(3),i)) { quote=quote.repeat(3); i+=2; }
                 continue;
             } else if (c=='[' || c=='{') depth++;
-            else if (c==']' || c=='}') { if (--depth<0) throw malformed(); }
+            else if (c==']' || c=='}') { if (--depth<0) throw unparseable(); }
             if (c=='\n' && depth==0) { result.add(statement(text.substring(start,i+1))); start=i+1; }
         }
-        if (!quote.isEmpty() || depth!=0) throw malformed();
+        if (!quote.isEmpty() || depth!=0) throw unparseable();
         if (start<text.length()) result.add(statement(text.substring(start)));
         return result;
     }
@@ -369,18 +684,18 @@ final class CodexSwitchConfig {
                 }
                 String token=line.substring(begin,offset);
                 try { path.add(c=='"' ? (String)Json.parse(token) : token.substring(1,token.length()-1)); }
-                catch (RuntimeException error) { throw malformed(); }
+                catch (RuntimeException error) { throw unparseable(); }
             } else {
                 while (offset<line.length() && (Character.isLetterOrDigit(line.charAt(offset)) || "_-".indexOf(line.charAt(offset))>=0)) offset++;
-                if (offset==begin) throw malformed();
+                if (offset==begin) throw unparseable();
                 path.add(line.substring(begin,offset));
             }
             while (offset<line.length() && Character.isWhitespace(line.charAt(offset))) offset++;
             if (offset<line.length() && line.charAt(offset)=='.') offset++;
             else if (offset<line.length() && (line.charAt(offset)=='=' || header && line.charAt(offset)==']'))
                 return new Statement(raw,header,List.copyOf(path));
-            else throw malformed();
+            else throw unparseable();
         }
-        throw malformed();
+        throw unparseable();
     }
 }

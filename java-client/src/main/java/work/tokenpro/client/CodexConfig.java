@@ -12,10 +12,10 @@ final class CodexConfig {
     private static final String START = "# >>> TokenPro managed >>>";
     private static final String END = "# <<< TokenPro managed <<<";
     private static final Pattern MANAGED_ROOT_KEY = Pattern.compile("^(model|model_provider|openai_base_url|review_model|model_catalog_json|model_reasoning_effort|model_context_window|model_auto_compact_token_limit)\\s*=.*$");
-    private static final Pattern MODEL_CATALOG_ASSIGNMENT = Pattern.compile("(?m)^model_catalog_json\\s*=\\s*(['\\\"])([^'\\\"]+)\\1\\s*$");
+    private static final Pattern MODEL_CATALOG_ASSIGNMENT = Pattern.compile("(?m)^model_catalog_json\\s*=\\s*(['\\\"])([^'\\\"]+)\\1\\s*(?:#.*)?$");
     private static final Pattern ROOT_MODEL_ASSIGNMENT = Pattern.compile("(?m)^model\\s*=.*$");
     private static final Pattern ROOT_PROVIDER_ASSIGNMENT = Pattern.compile("(?m)^model_provider\\s*=.*$");
-    private static final Pattern ROOT_MODEL_VALUE = Pattern.compile("(?m)^model\\s*=\\s*(['\\\"])([^'\\\"]+)\\1\\s*$");
+    private static final Pattern ROOT_MODEL_VALUE = Pattern.compile("(?m)^model\\s*=\\s*(['\\\"])([^'\\\"]+)\\1\\s*(?:#.*)?$");
     private static final Pattern REVIEW_MODEL_ASSIGNMENT = Pattern.compile("(?m)^review_model\\s*=.*$");
     private static final Pattern READABLE_ROUTE_MODEL = Pattern.compile("[\\p{L}\\p{N}][\\p{L}\\p{N}._:/-]{0,511}");
     private static final String TEAMO_IMAGE_SKILL = "teamorouter-imagegen";
@@ -109,7 +109,7 @@ final class CodexConfig {
                 store.delete("codex-foreign-relay-backup.toml");
                 store.delete("codex-last-switch-config.toml");
             }
-            writeAtomic(target, candidate);
+            writeSwitch(target, originalCurrent, candidate);
         }
         CodexChannelState.writeChannelCache(target, catalog);
         // API-key auth never advertises image_gen.imagegen, so an image-group
@@ -212,7 +212,7 @@ final class CodexConfig {
         if (candidate.equals(current)) return false;
         if (!current.equals(Files.readString(configPath, StandardCharsets.UTF_8)))
             throw new IOException("Codex 配置在生图路由修复期间已被其他程序修改；请重试");
-        writeAtomic(configPath, candidate);
+        writeSwitch(configPath, current, candidate);
         // The repaired route is still TokenPro. Reinstall the Skill even when
         // the active model is an image group; otherwise this migration would
         // remove the CLI that text models use.
@@ -273,7 +273,7 @@ final class CodexConfig {
             candidate = REVIEW_MODEL_ASSIGNMENT.matcher(candidate).replaceFirst("");
             if (!current.equals(Files.readString(configPath)))
                 throw new IOException("Codex 配置在模型刷新期间已被其他程序修改；已取消刷新");
-            writeAtomic(configPath, candidate);
+            writeSwitch(configPath, current, candidate);
             CodexChannelState.writeChannelCache(configPath, catalog);
             // Refreshing onto an image-group primary must keep the Skill.
             // Text models selected later in Codex still need the CLI, and the
@@ -345,9 +345,9 @@ final class CodexConfig {
 
     private static String replaceManagedProviderTables(String config, String tables) {
         String start = START + "\n";
-        int blockStart = config.indexOf(start);
+        int blockStart = lineMarker(config, START, 0);
         if (blockStart < 0) return config;
-        int blockEnd = config.indexOf(END, blockStart);
+        int blockEnd = lineMarker(config, END, blockStart + START.length());
         if (blockEnd < 0) return config;
         String block = config.substring(blockStart, blockEnd);
         int providers = block.indexOf("\n[model_providers.");
@@ -385,17 +385,16 @@ final class CodexConfig {
     }
 
     private static String removeManagedImagegenBlock(String config) {
-        String start = START + "\n";
         String end = END + "\n";
         int from = 0;
         StringBuilder out = new StringBuilder();
         while (true) {
-            int blockStart = config.indexOf(start, from);
+            int blockStart = lineMarker(config, START, from);
             if (blockStart < 0) {
                 out.append(config.substring(from));
                 break;
             }
-            int blockEnd = config.indexOf(end, blockStart);
+            int blockEnd = lineMarker(config, END, blockStart + START.length());
             if (blockEnd < 0) {
                 out.append(config.substring(from));
                 break;
@@ -429,6 +428,8 @@ final class CodexConfig {
 
     static String routedModelId(PricedModel model) {
         String name = model.name().trim();
+        // Vendor model ids such as deepseek/deepseek-v4.1-flash keep the slash.
+        // The slug is one quoted TOML string; it is not a filesystem path.
         if (READABLE_ROUTE_MODEL.matcher(name).matches()) return "tp-g" + model.groupId() + "-" + name;
         String encoded = Base64.getUrlEncoder().withoutPadding()
             .encodeToString(name.getBytes(StandardCharsets.UTF_8));
@@ -606,16 +607,70 @@ final class CodexConfig {
     }
 
     static String stripManaged(String text) {
-        if (text.contains("# >>> TokenPro model selection >>>") || text.contains("# >>> tokenpro-codex"))
+        if (text.contains("# >>> TokenPro model selection >>>") || text.contains("# >>> tokenpro-codex")
+            || text.contains("# <<< tokenpro-codex") || text.contains("# >>> TokenPro history provider >>>")
+            || text.contains("# <<< TokenPro history provider <<<")
+            || text.contains("# <<< TokenPro model selection <<<"))
             return CodexSwitchConfig.clean(text);
-        int start = text.indexOf(START);
+        try {
+            return CodexSwitchConfig.stripManagedRegions(text);
+        } catch (IllegalStateException invalid) {
+            return stripManagedByIndex(text);
+        }
+    }
+
+    /** A marker only counts when it occupies the whole line. A key suffix is not a block boundary. */
+    private static int lineMarker(String text, String marker, int from) {
+        int i = Math.max(0, from);
+        while (i < text.length()) {
+            int found = text.indexOf(marker, i);
+            if (found < 0) return -1;
+            boolean lineStart = found == 0 || text.charAt(found - 1) == '\n';
+            int after = found + marker.length();
+            boolean lineEnd = after >= text.length() || text.charAt(after) == '\n' || text.charAt(after) == '\r';
+            if (lineStart && lineEnd) return found;
+            i = found + marker.length();
+        }
+        return -1;
+    }
+
+    private static String stripManagedByIndex(String text) {
+        int start = lineMarker(text, START, 0);
         if (start < 0) return text;
-        int end = text.indexOf(END, start);
-        if (end < 0) throw new IllegalStateException("Codex 配置中的 TokenPro 标记不完整，已停止修改");
+        int end = lineMarker(text, END, start + START.length());
+        if (end < 0) throw new IllegalStateException("Codex 配置无法解析，且 TokenPro 标记不完整，原配置未修改。"
+            + "请检查 config.toml 的引号和括号；可从同目录 config.toml.tokenpro-backup-* 恢复，"
+            + "或移走该文件后在 TokenPro 中重新选择模型以重建路由。");
         end += END.length();
         if (end < text.length() && text.charAt(end) == '\r') end++;
         if (end < text.length() && text.charAt(end) == '\n') end++;
         return text.substring(0, start) + text.substring(end);
+    }
+
+    /**
+     * Marker repair rewrites config.toml. Copy the original beside it first so a
+     * broken TokenPro block can be restored by hand. The name is
+     * config.toml.tokenpro-backup-&lt;timestamp&gt;.
+     */
+    private void writeSwitch(Path target, String original, String candidate) throws IOException {
+        boolean repair = CodexSwitchConfig.markerDamage(original).isPresent()
+            || CodexSwitchConfig.markerDamage(candidate).isPresent();
+        if (repair && original != null && !original.isEmpty()) backupBeside(target, original);
+        String sealed = CodexSwitchConfig.markerDamage(candidate).isPresent()
+            ? CodexSwitchConfig.ensureMarkerBalance(candidate) : candidate;
+        CodexSwitchConfig.requireBalanced(sealed);
+        writeAtomic(target, sealed);
+    }
+
+    private static void backupBeside(Path target, String content) throws IOException {
+        String stamp = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS")
+            .withZone(java.time.ZoneOffset.UTC).format(java.time.Instant.now());
+        String prefix = target.getFileName() + ".tokenpro-backup-" + stamp;
+        Path backup = target.resolveSibling(prefix);
+        int extra = 2;
+        while (Files.exists(backup)) backup = target.resolveSibling(prefix + "-" + extra++);
+        Files.writeString(backup, content, StandardCharsets.UTF_8);
+        Platform.privateFile(backup);
     }
 
     static String stripRootOverrides(String text) {

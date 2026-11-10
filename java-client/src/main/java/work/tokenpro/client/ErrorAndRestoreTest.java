@@ -48,8 +48,12 @@ final class ErrorAndRestoreTest {
             check(!codex.restore(), "repeated restore is idempotent"); passed++;
             String corrupt = "# >>> TokenPro managed >>>\nmodel_provider = 'custom'\n" + unrelated;
             Files.writeString(config, corrupt);
-            try { codex.restore(); throw new AssertionError("corrupt managed block silently erased"); }
-            catch (IllegalStateException expected) { check(Files.readString(config).equals(corrupt), "corrupt config is preserved for manual repair"); passed++; }
+            check(codex.restore(), "orphan managed marker is repaired");
+            String repaired = Files.readString(config);
+            check(!repaired.contains("TokenPro managed") && repaired.contains("model = 'my-own-model'")
+                && repaired.contains("model_provider = 'custom'") && repaired.contains("[features]\napps = true"),
+                "orphan managed marker is removed without discarding user settings"); passed++;
+            check(!codex.restore() && Files.readString(config).equals(repaired), "repaired config is left untouched on the next restore"); passed++;
             store.write("codex-original.toml", unrelated); Files.writeString(config, "temporary-config");
             check(codex.restore() && Files.readString(config).equals(unrelated), "real backup still restores exact original"); passed++;
             SecureStore cli = store.cli("codex");
