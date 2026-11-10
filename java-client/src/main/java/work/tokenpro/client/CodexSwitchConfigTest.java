@@ -74,10 +74,13 @@ final class CodexSwitchConfigTest {
         check(teamoCleanup.cleaned().equals("[projects.demo]\ntrust_level='trusted'\n")
             && teamoCleanup.changes().contains("渠道标记 teamorouter"), "foreign owner block is removed while L0 project settings survive"); passed++;
         check(CodexSwitchConfig.markerOwners(teamo).equals(Set.of("teamorouter")), "active marker owners are detected from disk"); passed++;
-        for (String invalid : List.of("# >>> TokenPro managed >>>\nmodel='x'\n", "# >>> teamorouter-codex\nmodel='x'\n",
-                "note = \"\"\"unfinished\n", "args = [1,2\n")) {
-            try { CodexSwitchConfig.clean(invalid); throw new AssertionError("malformed config accepted"); }
-            catch (IllegalStateException expected) { passed++; }
+        for (String invalid : List.of("note = \"\"\"unfinished\n", "args = [1,2\n")) {
+            try { CodexSwitchConfig.clean(invalid); throw new AssertionError("malformed config accepted: " + invalid); }
+            catch (IllegalStateException expected) {
+                check(expected.getMessage().contains("无法解析") && expected.getMessage().contains("tokenpro-backup")
+                    && expected.getMessage().contains("重新选择模型"), "unparseable TOML names a repair path");
+                passed++;
+            }
         }
         String profile = "profile='work'\n[profiles.work]\nmodel_provider='old'\napproval_policy='on-request'\n[profiles.work.windows]\nsandbox='elevated'\n[profiles.other]\nmodel='keep-this'\n";
         String cleanProfile = CodexSwitchConfig.clean(profile);
@@ -88,7 +91,190 @@ final class CodexSwitchConfigTest {
         passed += actualSwitch();
         passed += imageGroupChatRoute();
         passed += concurrentImageSessions();
+        passed += markerRepair();
         return passed;
+    }
+
+    /** Orphan, duplicate, legacy and slash-id cases must repair without discarding user settings. */
+    private static int markerRepair() throws Exception {
+        int passed = 0;
+        String user = """
+            notify = ["bash", "-lc", "echo ok"]
+
+            # >>> tokenpro-codex
+            model = "tp-g80-deepseek/deepseek-v4.1-flash"
+            model_provider = "tokenpro"
+            openai_base_url = "https://tokenpro.work/v1"
+            model_context_window = 372000
+            model_auto_compact_token_limit = 372000
+            model_reasoning_effort = "low"
+            model_catalog_json = "/Users/example/Library/Application Support/TokenPro/codex-models/11111111-1111-1111-1111-111111111111.json"
+
+            [marketplaces.example]
+            url = "https://example.test/marketplace"
+
+            [plugins."browser@openai-bundled"]
+            enabled = true
+
+            [mcp_servers.example]
+            command = "fixture"
+            args = ["--name", "[windows]"]
+
+            [desktop]
+            localeOverride = "zh-CN"
+
+            # >>> TokenPro managed >>>
+            [model_providers.tokenpro]
+            name = "TokenPro"
+            base_url = "https://tokenpro.work/v1"
+            wire_api = "responses"
+            requires_openai_auth = true
+            supports_websockets = false
+            http_headers = { "X-TokenPro-Image-Mode" = "native-v2" }
+            # <<< TokenPro managed <<<
+            """;
+        check(CodexSwitchConfig.markerDamage(user).orElse("").contains("tokenpro-codex")
+            && CodexSwitchConfig.markerDamage(user).orElse("").contains("起始标记"),
+            "orphan channel start is reported without rejecting the file"); passed++;
+        String cleaned = CodexSwitchConfig.clean(user);
+        check(cleaned.contains("notify = ") && cleaned.contains("[marketplaces.example]")
+            && cleaned.contains("[plugins.\"browser@openai-bundled\"]") && cleaned.contains("enabled = true")
+            && cleaned.contains("[mcp_servers.example]") && cleaned.contains("command = \"fixture\"")
+            && cleaned.contains("args = [") && cleaned.contains("[desktop]") && cleaned.contains("zh-CN"),
+            "orphan start keeps plugins, MCP, desktop, notify and marketplaces"); passed++;
+        check(!cleaned.contains("model_provider") && !cleaned.contains("model_catalog_json")
+            && !cleaned.contains("[model_providers.tokenpro]") && !cleaned.contains("tokenpro-codex")
+            && !cleaned.contains("TokenPro managed"),
+            "orphan start still removes the TokenPro route and provider table"); passed++;
+        check(CodexSwitchConfig.foreignRelayCleanup(user).isEmpty(), "a broken TokenPro block is not a foreign relay"); passed++;
+        String healed = CodexSwitchConfig.ensureMarkerBalance(user);
+        check(CodexSwitchConfig.markerDamage(healed).isEmpty()
+            && healed.contains("# >>> tokenpro-codex\n") && healed.contains("# <<< tokenpro-codex\n")
+            && healed.contains("# >>> TokenPro managed >>>\n") && healed.contains("# <<< TokenPro managed <<<\n")
+            && healed.contains("[plugins.\"browser@openai-bundled\"]")
+            && healed.contains("model = \"tp-g80-deepseek/deepseek-v4.1-flash\""),
+            "repair rewrites a matched marker pair around the slash model id"); passed++;
+        check(healed.equals(CodexSwitchConfig.ensureMarkerBalance(healed)), "repairing a balanced file does not rewrite it again"); passed++;
+
+        String orphanEnd = "approval_policy = \"on-request\"\n# <<< tokenpro-codex\n[mcp_servers.example]\ncommand = \"keep\"\n";
+        check(CodexSwitchConfig.markerDamage(orphanEnd).orElse("").contains("结束标记"), "orphan end marker is detected"); passed++;
+        String cleanedEnd = CodexSwitchConfig.clean(orphanEnd);
+        check(cleanedEnd.contains("approval_policy = \"on-request\"") && cleanedEnd.contains("command = \"keep\"")
+            && !cleanedEnd.contains("tokenpro-codex"), "orphan end marker is dropped without deleting user settings"); passed++;
+
+        String duplicated = "# >>> tokenpro-codex\nmodel = \"a\"\n# <<< tokenpro-codex\n"
+            + "# >>> tokenpro-codex\nmodel = \"b\"\nmodel_provider = \"tokenpro\"\n# <<< tokenpro-codex\n"
+            + "[desktop]\nlocaleOverride = \"zh-CN\"\n";
+        check(CodexSwitchConfig.markerDamage(duplicated).orElse("").contains("重复"), "duplicated channel blocks are detected"); passed++;
+        String cleanedDup = CodexSwitchConfig.clean(duplicated);
+        check(!cleanedDup.contains("model =") && !cleanedDup.contains("tokenpro-codex")
+            && cleanedDup.contains("[desktop]\nlocaleOverride = \"zh-CN\""),
+            "duplicated channel blocks are removed and desktop settings stay"); passed++;
+
+        String legacy = "# >>> TokenPro model selection >>>\nmodel = \"legacy-model\"\n# <<< TokenPro model selection <<<\n"
+            + "[plugins.\"browser@openai-bundled\"]\nenabled = true\n";
+        check(CodexSwitchConfig.markerDamage(legacy).orElse("").contains("旧版"), "legacy model-selection markers are detected"); passed++;
+        String cleanedLegacy = CodexSwitchConfig.clean(legacy);
+        check(!cleanedLegacy.contains("legacy-model") && !cleanedLegacy.contains("model selection")
+            && cleanedLegacy.contains("enabled = true"), "legacy model-selection block is migrated off the route"); passed++;
+        String history = "# >>> TokenPro history provider >>>\nmodel_provider = \"custom\"\n# <<< TokenPro history provider <<<\n"
+            + "notify = [\"keep\"]\n";
+        String cleanedHistory = CodexSwitchConfig.clean(history);
+        check(cleanedHistory.contains("notify = [\"keep\"]") && !cleanedHistory.contains("history provider")
+            && !cleanedHistory.contains("model_provider"), "legacy history-provider markers are removed"); passed++;
+
+        String unmarked = "model = \"tp-g1-old\"\nmodel_provider = \"tokenpro\"\nopenai_base_url = \"https://tokenpro.work/v1\"\n"
+            + "approval_policy = \"on-request\"\n[model_providers.tokenpro]\nbase_url = \"https://tokenpro.work/v1\"\n"
+            + "[mcp_servers.keep]\ncommand = \"keep\"\n";
+        check(CodexSwitchConfig.markerDamage(unmarked).isEmpty(), "missing markers are not a parse failure"); passed++;
+        String cleanedUnmarked = CodexSwitchConfig.clean(unmarked);
+        check(!cleanedUnmarked.contains("model_provider") && !cleanedUnmarked.contains("tokenpro.work")
+            && cleanedUnmarked.contains("approval_policy = \"on-request\"") && cleanedUnmarked.contains("command = \"keep\""),
+            "unmarked TokenPro keys are removed while user policy and MCP stay"); passed++;
+
+        String mismatch = "# >>> tokenpro-codex\nmodel = \"x\"\n# <<< teamorouter-codex\n[desktop]\nlocaleOverride = \"zh-CN\"\n";
+        check(CodexSwitchConfig.markerDamage(mismatch).orElse("").contains("不匹配"), "mismatched marker names are detected"); passed++;
+        String cleanedMismatch = CodexSwitchConfig.clean(mismatch);
+        check(cleanedMismatch.contains("localeOverride = \"zh-CN\"") && !cleanedMismatch.contains("model =")
+            && !cleanedMismatch.contains("-codex"), "mismatched markers do not swallow the rest of the file"); passed++;
+
+        PricedModel deepseek = new PricedModel("deepseek/deepseek-v4.1-flash", "deepseek", "DeepSeek", 80);
+        String slug = CodexConfig.routedModelId(deepseek);
+        check("tp-g80-deepseek/deepseek-v4.1-flash".equals(slug), "model ids containing / stay readable"); passed++;
+        String generated = "# >>> TokenPro managed >>>\nmodel = \"" + slug + "\"\nmodel_provider = \"tokenpro\"\n"
+            + "openai_base_url = \"https://tokenpro.work/v1\"\n[model_providers.tokenpro]\nbase_url = \"https://tokenpro.work/v1\"\n"
+            + "# <<< TokenPro managed <<<\n";
+        String merged = CodexSwitchConfig.merge("notify = [\"keep\"]\n[plugins.\"demo\"]\nenabled = true\n", generated);
+        check(merged.contains("\n# >>> tokenpro-codex\n") && merged.contains(" # <<< tokenpro-codex\n")
+            && merged.contains("\n# <<< tokenpro-codex\n")
+            && merged.contains("\n# >>> TokenPro managed >>>\n") && merged.contains("\n# <<< TokenPro managed <<<\n")
+            && merged.contains(" # <<< TokenPro managed <<<\n")
+            && CodexSwitchConfig.markerDamage(merged).isEmpty(),
+            "writer emits both channel markers and both managed markers, including key suffixes"); passed++;
+        check(countOf(merged, "\n# >>> tokenpro-codex\n") == 1,
+            "writer emits one channel start"); passed++;
+        String suffixOnly = "notify = [\"keep\"]\n# >>> tokenpro-codex\nmodel = \"" + slug + "\" # <<< tokenpro-codex\n"
+            + "[plugins.\"demo\"]\nenabled = true\n";
+        check(CodexSwitchConfig.markerDamage(suffixOnly).isEmpty(),
+            "a closing marker kept as a key suffix still closes the block"); passed++;
+        String cleanedSuffix = CodexSwitchConfig.clean(suffixOnly);
+        check(cleanedSuffix.contains("notify = [\"keep\"]") && cleanedSuffix.contains("enabled = true")
+            && !cleanedSuffix.contains("model =") && !cleanedSuffix.contains("tokenpro-codex"),
+            "suffix-only channel block is removed without deleting plugins"); passed++;
+        check(slug.equals(CodexSwitchConfig.rootValue(merged, "model").orElse("")) && merged.contains("model = \"" + slug + "\""),
+            "slash model id round-trips as one quoted value"); passed++;
+        check(CodexSwitchConfig.merge(CodexSwitchConfig.clean(merged), generated).equals(merged),
+            "slash model route stays idempotent"); passed++;
+
+        Path root = Files.createTempDirectory("tokenpro-marker-repair-");
+        try {
+            SecureStore store = new SecureStore(root.resolve("store"));
+            Path configPath = root.resolve("home/config.toml");
+            Files.createDirectories(configPath.getParent());
+            Files.writeString(configPath, user);
+            CodexConfig config = new CodexConfig(store, configPath);
+            config.apply("https://tokenpro.work/v1", List.of(deepseek), "fixture-route-key", "fixture@example.test");
+            String applied = Files.readString(configPath);
+            check(applied.contains("model = \"" + slug + "\"") && applied.contains("# >>> tokenpro-codex\n")
+                && applied.contains("# <<< tokenpro-codex\n") && applied.contains("# >>> TokenPro managed >>>\n")
+                && applied.contains("# <<< TokenPro managed <<<\n"),
+                "switching a slash model rewrites a complete marker pair"); passed++;
+            check(applied.contains("[plugins.\"browser@openai-bundled\"]") && applied.contains("[mcp_servers.example]")
+                && applied.contains("[marketplaces.example]") && applied.contains("notify = [")
+                && applied.contains("[desktop]"),
+                "switching from an orphan marker preserves non-TokenPro settings"); passed++;
+            check(CodexSwitchConfig.markerDamage(applied).isEmpty(), "switched config has no marker damage"); passed++;
+            Path backup;
+            try (var files = Files.list(configPath.getParent())) {
+                backup = files.filter(path -> path.getFileName().toString().startsWith("config.toml.tokenpro-backup-")).findFirst().orElseThrow();
+            }
+            check(Files.readString(backup).equals(user), "the broken config is backed up before it is rewritten"); passed++;
+            try (var files = Files.list(configPath.getParent())) {
+                check(files.noneMatch(path -> path.getFileName().toString().startsWith(".tokenpro-switch-")),
+                    "atomic replace does not leave a temporary config behind"); passed++;
+            }
+            config.apply("https://tokenpro.work/v1", List.of(deepseek), "fixture-route-key", "fixture@example.test");
+            try (var files = Files.list(configPath.getParent())) {
+                check(files.filter(path -> path.getFileName().toString().startsWith("config.toml.tokenpro-backup-")).count() == 1,
+                    "a later switch of an already balanced file does not take another backup"); passed++;
+            }
+            return passed;
+        } finally {
+            try (var paths = Files.walk(root)) {
+                for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path);
+            }
+        }
+    }
+
+    private static int countOf(String text, String needle) {
+        int count = 0, from = 0;
+        while (from <= text.length() - needle.length()) {
+            int found = text.indexOf(needle, from);
+            if (found < 0) break;
+            count++;
+            from = found + needle.length();
+        }
+        return count;
     }
 
     private static int imageGroupChatRoute() throws Exception {
