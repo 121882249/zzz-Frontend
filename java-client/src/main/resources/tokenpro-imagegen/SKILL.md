@@ -23,10 +23,11 @@ directly.
 ```
 
 Optional arguments are `--model`, `--size`, `--quality`, and `--background`.
-If `--model` is omitted, the command uses the saved TokenPro image selection
-(`image_model` plus its `group_id`) when one exists; otherwise it falls back to
-the active Codex text route. This keeps ordinary Codex text on its text group
-while direct Skill image requests can use the dedicated GPT image group.
+If `--model` is omitted, the command follows the active Codex model. A
+text-group route generates images in that same group with body model
+`gpt-image-2`, even when a saved image selection (`image_model` plus
+`group_id`) exists. Only when the active Codex model itself is a dedicated
+image-group route does the command use that image group and image model.
 
 Always use an absolute output path, preserve the user's requested subject and
 style, and return the generated file exactly once using an absolute Markdown
