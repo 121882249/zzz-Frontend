@@ -3,14 +3,18 @@ name: TokenPro Server Deployment
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: 'New unique backend version (empty means read-only inspection)'
-        required: false
-        type: string
-      expected:
-        description: 'Expected currently deployed version'
-        default: 'TokenPro-R53-v0.2.4'
+      target:
+        description: 'Select the TokenPro environment'
+        default: inspect
         required: true
+        type: choice
+        options:
+          - inspect
+          - stage
+          - production
+      digest:
+        description: 'Verified GHCR manifest digest for 0.2.24-tp.1'
+        required: false
         type: string
 
 permissions:
@@ -42,14 +46,21 @@ jobs:
           ssh -o BatchMode=yes -o ConnectTimeout=15 -i ~/.ssh/tokenpro-deploy "$DEPLOY_USER@$DEPLOY_HOST" \
             'sudo -n bash -s' < scripts/inspect-tokenpro-upgrade.sh
       - name: Deploy explicitly selected backend version
-        if: ${{ inputs.version != '' }}
+        if: ${{ inputs.target != 'inspect' }}
         env:
           DEPLOY_HOST: ${{ secrets.TOKENPRO_DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.TOKENPRO_DEPLOY_USER }}
-          VERSION: ${{ inputs.version }}
-          EXPECTED: ${{ inputs.expected }}
+          TARGET: ${{ inputs.target }}
+          IMAGE_DIGEST: ${{ inputs.digest }}
         run: |
-          [[ "$VERSION" =~ ^TokenPro-R[0-9]+-v[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          [[ "$EXPECTED" =~ ^TokenPro-R[0-9]+-v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          set -euo pipefail
+          [[ "$TARGET" == stage || "$TARGET" == production ]]
+          [[ "$IMAGE_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
           ssh -o BatchMode=yes -o ConnectTimeout=15 -i ~/.ssh/tokenpro-deploy "$DEPLOY_USER@$DEPLOY_HOST" \
-            "sudo -n bash -s -- '$VERSION' '$EXPECTED'" < scripts/deploy-server.sh
+            "sudo -n bash -s -- '$TARGET' '$IMAGE_DIGEST'" < scripts/deploy-tokenpro-0.2.24.sh
+
+      - name: Verify public production health
+        if: ${{ inputs.target == 'production' }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 8 --retry 3 --retry-delay 2 https://tokenpro.work/health | jq -e '.status == "ok"'
