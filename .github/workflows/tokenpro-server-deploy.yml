@@ -13,7 +13,7 @@ on:
           - stage
           - production
       digest:
-        description: 'Verified GHCR manifest digest for 0.2.24-tp.1'
+        description: 'Verified GHCR manifest digest for 0.2.24-tp.2'
         required: false
         type: string
 
