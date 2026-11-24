@@ -5,10 +5,10 @@ umask 077
 target="${1:?target required}"
 digest="${2:?image digest required}"
 [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
-old_image=tokenpro-local/zzz-backend:0.2.24-tp.2
-old_revision=e0e9ab6116d4349b9e4954306816e0fc8fd3dcf9
-new_image=tokenpro-local/zzz-backend:0.2.24-tp.3
-new_revision=3f7020f57edc8ee43081b50c79825094e2868cf8
+old_image=tokenpro-local/zzz-backend:0.2.24-tp.3
+old_revision=3f7020f57edc8ee43081b50c79825094e2868cf8
+new_image=tokenpro-local/zzz-backend:0.2.25-tp.1
+new_revision=45dff7b19d674b63b4521e3417814f800ddcf787
 registry_image="ghcr.io/121882249/zzz-backend@$digest"
 
 case "$target" in
@@ -44,7 +44,7 @@ old_container="$(inspect "$container" '{{.Id}}')"
 old_image_id="$(inspect "$container" '{{.Image}}')"
 [[ "$(inspect "$container" '{{.Config.Image}}')" == "$old_image" ]]
 [[ "$(docker image inspect --format '{{.Id}}' "$old_image")" == "$old_image_id" ]]
-[[ "$(running_version "$container")" == *"Sub2API 0.2.24-tp.2 (commit: $old_revision,"* ]]
+[[ "$(running_version "$container")" == *"Sub2API 0.2.24-tp.3 (commit: $old_revision,"* ]]
 [[ "$(inspect "$container" '{{index .Config.Labels "com.docker.compose.project"}}')" == "$project" ]]
 [[ "$(inspect "$container" '{{index .Config.Labels "com.docker.compose.service"}}')" == "$service" ]]
 directory="$(inspect "$container" '{{index .Config.Labels "com.docker.compose.project.working_dir"}}')"
@@ -59,7 +59,7 @@ healthy "$container"
 docker pull "$registry_image"
 new_image_id="$(docker image inspect --format '{{.Id}}' "$registry_image")"
 candidate="$(docker run --rm --entrypoint /app/sub2api "$registry_image" -version 2>&1)"
-[[ "$candidate" == *"Sub2API 0.2.24-tp.3 (commit: $new_revision,"* ]]
+[[ "$candidate" == *"Sub2API 0.2.25-tp.1 (commit: $new_revision,"* ]]
 if existing="$(docker image inspect --format '{{.Id}}' "$new_image" 2>/dev/null)"; then
   [[ "$existing" == "$new_image_id" ]]
 else
@@ -69,7 +69,7 @@ fi
 if [[ "$target" == production ]]; then
   healthy pr7stage-app-1
   [[ "$(inspect pr7stage-app-1 '{{.Image}}')" == "$new_image_id" ]]
-  [[ "$(running_version pr7stage-app-1)" == *"Sub2API 0.2.24-tp.3 (commit: $new_revision,"* ]]
+  [[ "$(running_version pr7stage-app-1)" == *"Sub2API 0.2.25-tp.1 (commit: $new_revision,"* ]]
 fi
 
 db_before="$(db_count)"
@@ -77,7 +77,7 @@ db_before="$(db_count)"
 deps_before="$(dependency_state)"
 backup_root="$(dirname "$directory")/sub2api-backups"
 mkdir -p "$backup_root"
-backup="$(mktemp -d "$backup_root/$(date -u +%Y%m%dT%H%M%SZ)-$target-0.2.24-tp.3-XXXXXX")"
+backup="$(mktemp -d "$backup_root/$(date -u +%Y%m%dT%H%M%SZ)-$target-0.2.25-tp.1-XXXXXX")"
 cp -p "$compose_file" "$backup/docker-compose.yml"
 backup_files=(docker-compose.yml versions.txt)
 if [[ -f "$directory/.env" ]]; then
@@ -140,7 +140,7 @@ PY
 wait_healthy
 [[ "$(inspect "$container" '{{.Image}}')" == "$new_image_id" ]]
 actual="$(running_version "$container")"
-[[ "$actual" == *"Sub2API 0.2.24-tp.3 (commit: $new_revision,"* ]]
+[[ "$actual" == *"Sub2API 0.2.25-tp.1 (commit: $new_revision,"* ]]
 health="$(curl --noproxy '*' --fail --silent --show-error --max-time 8 "http://127.0.0.1:$port/health")"
 python3 -c 'import json,sys; assert json.load(sys.stdin)["status"] == "ok"' <<< "$health"
 [[ "$(curl --noproxy '*' --silent --show-error --max-time 8 -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/v1/models")" == 401 ]]
